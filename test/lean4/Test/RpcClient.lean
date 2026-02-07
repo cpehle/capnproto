@@ -26,6 +26,25 @@ def mkUnixTestAddress : IO (String × String) := do
   let path := s!"/tmp/capnp-lean4-rpc-{n}.sock"
   pure (s!"unix:{path}", path)
 
+def connectRuntimeTargetWithRetry (runtime : Capnp.Rpc.Runtime) (address : String)
+    (attempts : Nat := 20) (delayMillis : UInt32 := UInt32.ofNat 10) : IO Capnp.Rpc.Client := do
+  let mut target? : Option Capnp.Rpc.Client := none
+  let mut attempt := 0
+  while target?.isNone && attempt < attempts do
+    let nextTarget? ←
+      try
+        let c ← runtime.connect address
+        pure (some (Capnp.Rpc.Client.ofCapability c))
+      catch _ =>
+        pure none
+    target? := nextTarget?
+    if target?.isNone then
+      IO.sleep delayMillis
+    attempt := attempt + 1
+  match target? with
+  | some target => pure target
+  | none => throw (IO.userError s!"failed to connect Lean runtime target to {address}")
+
 @[test]
 def testGeneratedMethodMetadata : IO Unit := do
   assertEqual Echo.fooMethodId (UInt16.ofNat 0)
@@ -929,6 +948,175 @@ def testInteropLeanClientCallsCppServer : IO Unit := do
       pure ()
 
 @[test]
+def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeEchoOnce address Echo.fooMethod)
+    IO.sleep (UInt32.ofNat 20)
+
+    let target ← connectRuntimeTargetWithRetry runtime address
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+    match serveTask.get with
+    | .ok observed =>
+        assertEqual observed.capTable.caps.size 0
+    | .error err =>
+        throw err
+
+    let reconnectFailed ←
+      try
+        let target2 ← runtime.connect address
+        runtime.releaseTarget target2
+        pure false
+      catch _ =>
+        pure true
+    assertEqual reconnectFailed true
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropLeanClientCancelsPendingCallToCppDelayedServer : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let serveTask ← IO.asTask (
+      Capnp.Rpc.Interop.cppServeDelayedEchoOnce address Echo.fooMethod (UInt32.ofNat 150))
+    IO.sleep (UInt32.ofNat 20)
+
+    let target ← connectRuntimeTargetWithRetry runtime address
+    let pending ← runtime.startCall target Echo.fooMethod payload
+    IO.sleep (UInt32.ofNat 10)
+    pending.release
+
+    let doubleReleaseFailed ←
+      try
+        pending.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual doubleReleaseFailed true
+
+    -- If cancellation drops the in-flight request before send, force a request on
+    -- the same connection so the one-shot C++ server task can complete deterministically.
+    let _rescueOverSameConnection ←
+      try
+        let rescueResponse ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        assertEqual rescueResponse.capTable.caps.size 0
+        pure true
+      catch _ =>
+        pure false
+
+    runtime.releaseTarget target
+
+    match serveTask.get with
+    | .ok observed =>
+        assertEqual observed.capTable.caps.size 0
+    | .error err =>
+        throw err
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropLeanClientReceivesCppExceptionDetail : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeThrowOnce address Echo.fooMethod true)
+    IO.sleep (UInt32.ofNat 20)
+
+    let target ← connectRuntimeTargetWithRetry runtime address
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "remote exception: test exception") then
+      throw (IO.userError s!"missing remote exception text: {errMsg}")
+    if !(errMsg.containsSubstr "remote detail[1]: cpp-detail-1") then
+      throw (IO.userError s!"missing remote detail text: {errMsg}")
+
+    runtime.releaseTarget target
+    match serveTask.get with
+    | .ok observed =>
+        assertEqual observed.capTable.caps.size 0
+    | .error err =>
+        throw err
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropCppClientPipeliningThroughLeanTailCallForwarder : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let returnPayload := mkCapabilityPayload sink
+    let returnCapTarget ← runtime.registerHandlerTarget (fun _ _ _ => do
+      IO.sleep (UInt32.ofNat 30)
+      pure returnPayload)
+    let forwarder ← runtime.registerTailCallTarget returnCapTarget
+    let server ← runtime.newServer forwarder
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallPipelinedWithAccept
+      runtime server listener address Echo.fooMethod payload payload
+    assertEqual response.capTable.caps.size 0
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget returnCapTarget
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimePendingCallPipeline : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -990,6 +1178,58 @@ def testRuntimeTargetWhenResolvedPipeline : IO Unit := do
     runtime.releaseListener listener
     runtime.releaseTarget bootstrap
     runtime.releaseTarget localCap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimePipelinedCallBeforeResolveOrdering : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let returnPayload := mkCapabilityPayload sink
+    let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => do
+      IO.sleep (UInt32.ofNat 50)
+      pure returnPayload)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let pending ← runtime.startCall remoteTarget Echo.fooMethod payload
+    let pipelinedCap ← pending.getPipelinedCap
+    let pipelinedCallTask ← IO.asTask (Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload)
+
+    IO.sleep (UInt32.ofNat 10)
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    match pipelinedCallTask.get with
+    | .ok pipelinedResponse =>
+        assertEqual pipelinedResponse.capTable.caps.size 0
+    | .error err =>
+        throw err
+
+    runtime.releaseTarget pipelinedCap
+    runtime.releaseTarget remoteTarget
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget sink
   finally
     runtime.shutdown
     try
@@ -1087,6 +1327,72 @@ def testRuntimeTraceEncoderToggle : IO Unit := do
       throw (IO.userError s!"enabled call did not include encoded remote trace: {enabledMessage}")
   finally
     runtime.shutdown
+
+@[test]
+def testRuntimeSetTraceEncoderOnExistingConnection : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerHandlerTarget (fun _ method _ => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        throw (IO.userError "dynamic trace test exception")
+      pure mkNullPayload)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let target ← client.bootstrap
+
+    runtime.disableTraceEncoder
+    let disabledErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if disabledErr.containsSubstr "remote trace:" then
+      throw (IO.userError s!"trace unexpectedly present before enabling callback: {disabledErr}")
+
+    runtime.setTraceEncoder (fun description => pure s!"custom-trace<{description}>")
+    let enabledErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(enabledErr.containsSubstr "remote trace: custom-trace<") then
+      throw (IO.userError s!"missing callback trace on existing connection: {enabledErr}")
+
+    runtime.disableTraceEncoder
+    let disabledAgainErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if disabledAgainErr.containsSubstr "remote trace:" then
+      throw (IO.userError s!"trace unexpectedly present after disabling callback: {disabledAgainErr}")
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
 
 @[test]
 def testRuntimeTargetGetFdOption : IO Unit := do
