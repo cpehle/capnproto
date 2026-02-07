@@ -258,3 +258,53 @@ def testRpcReleaseMessageRoundtrip : IO Unit := do
     assertEqual rel.getId (UInt32.ofNat 9)
     assertEqual rel.getReferenceCount (UInt32.ofNat 3)
   | _ => assertEqual true false
+
+@[test]
+def testRpcCallSendResultsToYourself : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let call ← Message.Builder.initCall m
+    Call.Builder.setQuestionId call (UInt32.ofNat 2)
+    Call.Builder.setInterfaceId call (UInt64.ofNat 7)
+    Call.Builder.setMethodId call (UInt16.ofNat 1)
+    let sendResultsTo := Call.Builder.getSendResultsTo call
+    Call.SendResultsToGroup.Builder.setYourself sendResultsTo)
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.call call => do
+    match call.getSendResultsTo.which with
+    | Call.SendResultsToGroup.Which.yourself _ => pure ()
+    | _ => assertEqual true false
+  | _ => assertEqual true false
+
+@[test]
+def testRpcReturnCanceled : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let ret ← Message.Builder.initReturn m
+    Return.Builder.setAnswerId ret (UInt32.ofNat 77)
+    Return.Builder.setCanceled ret)
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.return ret => do
+    assertEqual ret.getAnswerId (UInt32.ofNat 77)
+    match ret.which with
+    | Return.Which.canceled _ => pure ()
+    | _ => assertEqual true false
+  | _ => assertEqual true false
+
+@[test]
+def testRpcReturnResultsSentElsewhere : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let ret ← Message.Builder.initReturn m
+    Return.Builder.setAnswerId ret (UInt32.ofNat 91)
+    Return.Builder.setResultsSentElsewhere ret)
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.return ret => do
+    assertEqual ret.getAnswerId (UInt32.ofNat 91)
+    match ret.which with
+    | Return.Which.resultsSentElsewhere _ => pure ()
+    | _ => assertEqual true false
+  | _ => assertEqual true false
