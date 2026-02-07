@@ -103,6 +103,25 @@ def testGeneratedServerBackendDispatch : IO Unit := do
   assertEqual (← seenBar.get) true
 
 @[test]
+def testGeneratedTypedServerBackendDispatch : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let server : Echo.TypedServer := {
+    foo := fun _ req reqCaps => do
+      seenFoo.set true
+      assertEqual reqCaps.caps.size 0
+      assertEqual req.hasPayload false
+      pure payload
+    bar := fun _ _ _ =>
+      throw (IO.userError "unexpected typed bar handler invocation")
+  }
+  let backend := Echo.typedBackend server
+  let (response, responseCaps) ← Echo.callFooTyped backend (UInt32.ofNat 7) payload
+  assertEqual responseCaps.caps.size 0
+  assertEqual response.hasPayload false
+  assertEqual (← seenFoo.get) true
+
+@[test]
 def testGeneratedRegisterTargetNetwork : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let seenFoo ← IO.mkRef false
@@ -135,6 +154,51 @@ def testGeneratedRegisterTargetNetwork : IO Unit := do
     assertEqual response.capTable.caps.size 0
     assertEqual (← seenFoo.get) true
     assertEqual (← seenBar.get) false
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testGeneratedRegisterTypedTargetNetwork : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let handler : Echo.TypedServer := {
+      foo := fun _ req reqCaps => do
+        seenFoo.set true
+        assertEqual reqCaps.caps.size 0
+        assertEqual req.hasPayload false
+        pure payload
+      bar := fun _ _ _ =>
+        throw (IO.userError "unexpected typed bar handler invocation")
+    }
+    let bootstrap ← Echo.registerTypedTarget runtime handler
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let (response, responseCaps) ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooTypedM remoteTarget payload
+    assertEqual responseCaps.caps.size 0
+    assertEqual response.hasPayload false
+    assertEqual (← seenFoo.get) true
 
     client.release
     server.release
