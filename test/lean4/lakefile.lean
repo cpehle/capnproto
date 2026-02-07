@@ -65,6 +65,11 @@ lean_lib CapnpLeanTests where
   roots := #[`Test]
   globs := #[.submodules `Test]
 
+lean_exe test_full where
+  root := `TestDriver
+  supportInterpreter := true
+
 @[test_driver]
 lean_exe test where
-  root := `TestDriver
+  root := `TestDriverRpc
+  supportInterpreter := true
