@@ -188,6 +188,22 @@ namespace Runtime
 @[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
   return { runtime := runtime, handle := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) }
 
+@[inline] def withClient (runtime : Runtime) (address : String)
+    (action : RuntimeClientRef -> IO α) (portHint : UInt32 := 0) : IO α := do
+  let client ← runtime.newClient address portHint
+  try
+    action client
+  finally
+    ffiRuntimeReleaseClientImpl runtime.handle client.handle
+
+@[inline] def withServer (runtime : Runtime) (bootstrap : Client)
+    (action : RuntimeServerRef -> IO α) : IO α := do
+  let server ← runtime.newServer bootstrap
+  try
+    action server
+  finally
+    ffiRuntimeReleaseServerImpl runtime.handle server.handle
+
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
     ffiRawCallOnRuntimeImpl runtime.handle target method.interfaceId method.methodId request
@@ -248,6 +264,14 @@ namespace RuntimeServerRef
 
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
   ffiRuntimeServerDrainImpl server.runtime.handle server.handle
+
+@[inline] def withListener (server : RuntimeServerRef) (address : String)
+    (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
+  let listener ← server.listen address portHint
+  try
+    action listener
+  finally
+    server.runtime.releaseListener listener
 
 end RuntimeServerRef
 
@@ -326,6 +350,30 @@ namespace RuntimeM
 
 @[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
   server.drain
+
+@[inline] def withClient (address : String)
+    (action : RuntimeClientRef -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
+  let client ← newClient address portHint
+  try
+    action client
+  finally
+    client.release
+
+@[inline] def withServer (bootstrap : Client)
+    (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
+  let server ← newServer bootstrap
+  try
+    action server
+  finally
+    server.release
+
+@[inline] def withServerListener (server : RuntimeServerRef) (address : String)
+    (action : Listener -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
+  let listener ← serverListen server address portHint
+  try
+    action listener
+  finally
+    releaseListener listener
 
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do

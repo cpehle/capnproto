@@ -520,3 +520,74 @@ def testRuntimeClientOnDisconnectAfterServerRelease : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimeMScopedResources : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      let bootstrap ← Capnp.Rpc.RuntimeM.registerEchoTarget
+      Capnp.Rpc.RuntimeM.withServer bootstrap fun server => do
+        Capnp.Rpc.RuntimeM.withServerListener server address (fun listener => do
+          Capnp.Rpc.RuntimeM.withClient address (fun client => do
+            Capnp.Rpc.RuntimeM.serverAccept server listener
+            let target ← Capnp.Rpc.RuntimeM.clientBootstrap client
+            Echo.callFooM target payload))
+
+    assertEqual response.capTable.caps.size 0
+
+    let failedConnectAfterScope ←
+      try
+        let _ ← runtime.connect address
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedConnectAfterScope true
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeScopedResources : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let response ← runtime.withServer bootstrap fun server => do
+      server.withListener address (fun listener => do
+        runtime.withClient address (fun client => do
+          server.accept listener
+          let target ← client.bootstrap
+          Capnp.Rpc.RuntimeM.run runtime do
+            Echo.callFooM target payload))
+    assertEqual response.capTable.caps.size 0
+
+    let failedConnectAfterScope ←
+      try
+        let _ ← runtime.connect address
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedConnectAfterScope true
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
