@@ -23,6 +23,20 @@ structure Backend where
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO Payload :=
   backend.call target method payload
 
+abbrev RawCall := Client -> Method -> ByteArray -> IO ByteArray
+
+@[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
+  Capnp.writeMessage payload.msg
+
+@[inline] def Payload.ofBytes (bytes : ByteArray) : Payload :=
+  { msg := Capnp.readMessage bytes, capTable := Capnp.emptyCapTable }
+
+def Backend.ofRawCall (rawCall : RawCall) : Backend where
+  call := fun target method payload => do
+    let requestBytes := payload.toBytes
+    let responseBytes ← rawCall target method requestBytes
+    return Payload.ofBytes responseBytes
+
 abbrev Handler := Client -> Payload -> IO Payload
 
 structure Route where

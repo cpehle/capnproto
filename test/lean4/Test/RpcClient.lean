@@ -42,3 +42,17 @@ def testDispatchOnMissingReceivesMethod : IO Unit := do
   assertEqual method.interfaceId TestInterface.interfaceId
   assertEqual method.methodId TestInterface.barMethodId
   assertEqual (response == payload) true
+
+@[test]
+def testBackendOfRawCall : IO Unit := do
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
+  let raw : Capnp.Rpc.RawCall := fun _ method requestBytes => do
+    seenMethod.set method
+    pure requestBytes
+  let backend := Capnp.Rpc.Backend.ofRawCall raw
+  let response ← TestInterface.callFoo backend (UInt32.ofNat 17) payload
+  let method := (← seenMethod.get)
+  assertEqual method.interfaceId TestInterface.interfaceId
+  assertEqual method.methodId TestInterface.fooMethodId
+  assertEqual (response == payload) true
