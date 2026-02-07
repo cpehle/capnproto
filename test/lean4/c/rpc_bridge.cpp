@@ -89,6 +89,59 @@ struct RawCallResult {
   std::vector<uint8_t> responseCaps;
 };
 
+class OneShotEchoCaptureServer final : public capnp::Capability::Server {
+ public:
+  OneShotEchoCaptureServer(uint64_t expectedInterfaceId, uint16_t expectedMethodId,
+                           kj::Own<kj::PromiseFulfiller<RawCallResult>> fulfiller)
+      : expectedInterfaceId_(expectedInterfaceId),
+        expectedMethodId_(expectedMethodId),
+        fulfiller_(kj::mv(fulfiller)) {}
+
+  DispatchCallResult dispatchCall(
+      uint64_t interfaceId, uint16_t methodId,
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
+    if (interfaceId != expectedInterfaceId_ || methodId != expectedMethodId_) {
+      throw std::runtime_error("unexpected method in capnp_lean_rpc_cpp_serve_echo_once");
+    }
+
+    capnp::MallocMessageBuilder requestMessage;
+    capnp::BuilderCapabilityTable requestCapTable;
+    requestCapTable
+        .imbue(requestMessage.getRoot<capnp::AnyPointer>())
+        .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+
+    auto requestWords = capnp::messageToFlatArray(requestMessage);
+    auto requestBytes = requestWords.asBytes();
+    std::vector<uint8_t> requestCopy(requestBytes.begin(), requestBytes.end());
+
+    std::vector<uint8_t> requestCaps;
+    auto requestCapEntries = requestCapTable.getTable();
+    requestCaps.reserve(requestCapEntries.size() * 4);
+    for (auto& maybeHook : requestCapEntries) {
+      KJ_IF_SOME(_hook, maybeHook) {
+        throw std::runtime_error(
+            "capnp_lean_rpc_cpp_serve_echo_once does not support capability arguments");
+      } else {
+        appendUint32Le(requestCaps, 0);
+      }
+    }
+
+    if (!fulfilled_) {
+      fulfiller_->fulfill(RawCallResult{std::move(requestCopy), std::move(requestCaps)});
+      fulfilled_ = true;
+    }
+
+    context.getResults().setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+    return {kj::READY_NOW, false};
+  }
+
+ private:
+  uint64_t expectedInterfaceId_;
+  uint16_t expectedMethodId_;
+  kj::Own<kj::PromiseFulfiller<RawCallResult>> fulfiller_;
+  bool fulfilled_ = false;
+};
+
 RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
                              uint16_t methodId, const std::vector<uint8_t>& requestBytes,
                              const std::vector<uint32_t>& requestCapIds) {
@@ -147,6 +200,23 @@ RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint
   }
 
   return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+}
+
+RawCallResult cppServeEchoOnce(const std::string& address, uint32_t portHint, uint64_t interfaceId,
+                               uint16_t methodId) {
+  auto io = kj::setupAsyncIo();
+  auto addr = io.provider->getNetwork().parseAddress(address.c_str(), portHint).wait(io.waitScope);
+  auto listener = addr->listen();
+
+  auto paf = kj::newPromiseAndFulfiller<RawCallResult>();
+  auto server = kj::heap<capnp::TwoPartyServer>(capnp::Capability::Client(
+      kj::heap<OneShotEchoCaptureServer>(interfaceId, methodId, kj::mv(paf.fulfiller))));
+
+  auto connection = listener->accept().wait(io.waitScope);
+  server->accept(kj::mv(connection));
+  auto result = paf.promise.wait(io.waitScope);
+  server->drain().wait(io.waitScope);
+  return result;
 }
 
 lean_obj_res mkIoOkRawCallResult(const RawCallResult& result) {
@@ -2385,6 +2455,21 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_call_one_shot(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_call_one_shot");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_serve_echo_once(
+    b_lean_obj_arg address, uint32_t portHint, uint64_t interfaceId, uint16_t methodId) {
+  try {
+    auto result = cppServeEchoOnce(std::string(lean_string_cstr(address)), portHint, interfaceId,
+                                   methodId);
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_serve_echo_once");
   }
 }
 

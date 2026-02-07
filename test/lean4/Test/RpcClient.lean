@@ -795,3 +795,68 @@ def testInteropCppClientCallsLeanServer : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testInteropLeanClientCallsCppServer : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeEchoOnce address Echo.fooMethod)
+    IO.sleep (UInt32.ofNat 20)
+
+    let mut target? : Option Capnp.Rpc.Client := none
+    let mut attempts := 0
+    while target?.isNone && attempts < 20 do
+      let nextTarget? ←
+        try
+          let c ← runtime.connect address
+          pure (some (Capnp.Rpc.Client.ofCapability c))
+        catch _ =>
+          pure none
+      target? := nextTarget?
+      if target?.isNone then
+        IO.sleep (UInt32.ofNat 10)
+      attempts := attempts + 1
+
+    let target ←
+      match target? with
+      | some c => pure c
+      | none => throw (IO.userError "failed to connect Lean runtime target to C++ server")
+    let responseResult : Except IO.Error Capnp.Rpc.Payload ←
+      try
+        let response ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure (Except.ok response)
+      catch err =>
+        pure (Except.error err)
+
+    let response ←
+      match responseResult with
+      | Except.ok r => pure r
+      | Except.error err =>
+          match serveTask.get with
+          | Except.ok _ =>
+              throw err
+          | Except.error serveErr =>
+              throw (IO.userError s!"call failed ({err}); serve task failed ({serveErr})")
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+
+    match serveTask.get with
+    | .ok observed =>
+        assertEqual observed.capTable.caps.size 0
+    | .error err =>
+        throw err
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()

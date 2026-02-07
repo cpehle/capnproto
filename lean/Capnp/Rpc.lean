@@ -136,6 +136,11 @@ opaque ffiRuntimeCppCallWithAcceptImpl
     (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
 
+@[extern "capnp_lean_rpc_cpp_serve_echo_once"]
+opaque ffiCppServeEchoOnceImpl
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16) :
+    IO (ByteArray × ByteArray)
+
 structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
@@ -498,6 +503,12 @@ namespace Interop
   let (responseBytes, responseCaps) ← ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle
     listener address portHint method.interfaceId method.methodId requestBytes requestCaps
   return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
+@[inline] def cppServeEchoOnce (address : String) (method : Method)
+    (portHint : UInt32 := 0) : IO Payload := do
+  let (requestBytes, requestCaps) ←
+    ffiCppServeEchoOnceImpl address portHint method.interfaceId method.methodId
+  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
 
 end Interop
 
