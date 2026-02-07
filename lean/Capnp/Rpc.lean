@@ -293,6 +293,40 @@ namespace RuntimeM
 @[inline] def newServer (bootstrap : Client) : RuntimeM RuntimeServerRef := do
   Runtime.newServer (← runtime) bootstrap
 
+@[inline] def clientRelease (client : RuntimeClientRef) : RuntimeM Unit := do
+  client.release
+
+@[inline] def clientBootstrap (client : RuntimeClientRef) : RuntimeM Client := do
+  client.bootstrap
+
+@[inline] def clientOnDisconnect (client : RuntimeClientRef) : RuntimeM Unit := do
+  client.onDisconnect
+
+@[inline] def clientSetFlowLimit (client : RuntimeClientRef) (words : UInt64) : RuntimeM Unit := do
+  client.setFlowLimit words
+
+@[inline] def clientQueueSize (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  client.queueSize
+
+@[inline] def clientQueueCount (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  client.queueCount
+
+@[inline] def clientOutgoingWaitNanos (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  client.outgoingWaitNanos
+
+@[inline] def serverRelease (server : RuntimeServerRef) : RuntimeM Unit := do
+  server.release
+
+@[inline] def serverListen (server : RuntimeServerRef) (address : String)
+    (portHint : UInt32 := 0) : RuntimeM Listener := do
+  server.listen address portHint
+
+@[inline] def serverAccept (server : RuntimeServerRef) (listener : Listener) : RuntimeM Unit := do
+  server.accept listener
+
+@[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
+  server.drain
+
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
   Capnp.Rpc.call (← backend) target method payload

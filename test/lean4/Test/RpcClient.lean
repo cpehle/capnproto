@@ -328,3 +328,129 @@ def testRuntimeClientSetFlowLimit : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimeMClientServerLifecycle : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let (response, queueSize, queueCount) ← Capnp.Rpc.RuntimeM.run runtime do
+      let bootstrap ← Capnp.Rpc.RuntimeM.registerEchoTarget
+      let server ← Capnp.Rpc.RuntimeM.newServer bootstrap
+      let listener ← Capnp.Rpc.RuntimeM.serverListen server address
+      let client ← Capnp.Rpc.RuntimeM.newClient address
+      Capnp.Rpc.RuntimeM.serverAccept server listener
+      Capnp.Rpc.RuntimeM.clientSetFlowLimit client (UInt64.ofNat 65_536)
+
+      let target ← Capnp.Rpc.RuntimeM.clientBootstrap client
+      let response ← Echo.callFooM target payload
+      let queueSize ← Capnp.Rpc.RuntimeM.clientQueueSize client
+      let queueCount ← Capnp.Rpc.RuntimeM.clientQueueCount client
+
+      Capnp.Rpc.RuntimeM.serverRelease server
+      Capnp.Rpc.RuntimeM.clientOnDisconnect client
+      Capnp.Rpc.RuntimeM.clientRelease client
+      Capnp.Rpc.RuntimeM.releaseListener listener
+      pure (response, queueSize, queueCount)
+
+    assertEqual response.capTable.caps.size 0
+    assertEqual queueSize (UInt64.ofNat 0)
+    assertEqual queueCount (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeClientReleaseErrors : IO Unit := do
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    client.release
+
+    let failedBootstrapAfterRelease ←
+      try
+        let _ ← client.bootstrap
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedBootstrapAfterRelease true
+
+    let failedDoubleRelease ←
+      try
+        client.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedDoubleRelease true
+
+    server.release
+    runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeServerReleaseErrors : IO Unit := do
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    server.release
+
+    let failedDrainAfterRelease ←
+      try
+        server.drain
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedDrainAfterRelease true
+
+    let failedDoubleRelease ←
+      try
+        server.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedDoubleRelease true
+
+    client.release
+    runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
