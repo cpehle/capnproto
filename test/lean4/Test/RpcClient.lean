@@ -128,5 +128,27 @@ def testRuntimeReleaseTarget : IO Unit := do
       catch _ =>
         pure true
     assertEqual failedAfterRelease true
+
+    let failedDoubleRelease ←
+      try
+        runtime.releaseTarget target
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedDoubleRelease true
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeConnectInvalidAddress : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let failedConnect ←
+      try
+        let _ ← runtime.connect "unix:/tmp/capnp-lean4-rpc-missing.sock"
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedConnect true
   finally
     runtime.shutdown

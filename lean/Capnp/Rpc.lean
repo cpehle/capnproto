@@ -62,6 +62,9 @@ opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_runtime_connect"]
+opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
+
 structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
@@ -100,6 +103,9 @@ namespace Runtime
 
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
+
+@[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
+  ffiRuntimeConnectImpl runtime.handle address portHint
 
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
@@ -145,6 +151,9 @@ namespace RuntimeM
 
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
+
+@[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Client := do
+  Runtime.connect (← runtime) address portHint
 
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
