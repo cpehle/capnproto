@@ -37,15 +37,80 @@ def Backend.ofRawCall (rawCall : RawCall) : Backend where
     let responseBytes ← rawCall target method requestBytes
     return Payload.ofBytes responseBytes
 
-@[extern "capnp_lean_rpc_raw_call"]
-opaque ffiRawCallImpl (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+@[extern "capnp_lean_rpc_raw_call_on_runtime"]
+opaque ffiRawCallOnRuntimeImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) : IO ByteArray
 
-@[inline] def ffiRawCall : RawCall :=
-  fun target method request => ffiRawCallImpl target method.interfaceId method.methodId request
+@[extern "capnp_lean_rpc_runtime_new"]
+opaque ffiRuntimeNewImpl : IO UInt64
 
-@[inline] def ffiBackend : Backend :=
-  Backend.ofRawCall ffiRawCall
+@[extern "capnp_lean_rpc_runtime_release"]
+opaque ffiRuntimeReleaseImpl (runtime : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_is_alive"]
+opaque ffiRuntimeIsAliveImpl (runtime : UInt64) : IO Bool
+
+structure Runtime where
+  handle : UInt64
+  deriving Inhabited, BEq, Repr
+
+namespace Runtime
+
+@[inline] def init : IO Runtime := do
+  return { handle := (← ffiRuntimeNewImpl) }
+
+@[inline] def shutdown (runtime : Runtime) : IO Unit :=
+  ffiRuntimeReleaseImpl runtime.handle
+
+@[inline] def isAlive (runtime : Runtime) : IO Bool :=
+  ffiRuntimeIsAliveImpl runtime.handle
+
+@[inline] def rawCall (runtime : Runtime) : RawCall :=
+  fun target method request =>
+    ffiRawCallOnRuntimeImpl runtime.handle target method.interfaceId method.methodId request
+
+@[inline] def backend (runtime : Runtime) : Backend :=
+  Backend.ofRawCall runtime.rawCall
+
+def withRuntime (action : Runtime -> IO α) : IO α := do
+  let runtime ← init
+  try
+    action runtime
+  finally
+    runtime.shutdown
+
+end Runtime
+
+abbrev RuntimeM := ReaderT Runtime IO
+
+namespace RuntimeM
+
+@[inline] def run (runtime : Runtime) (action : RuntimeM α) : IO α :=
+  action runtime
+
+@[inline] def runWithNewRuntime (action : RuntimeM α) : IO α :=
+  Runtime.withRuntime fun runtime => action runtime
+
+@[inline] def runtime : RuntimeM Runtime := read
+
+@[inline] def backend : RuntimeM Backend := do
+  return Runtime.backend (← runtime)
+
+@[inline] def isAlive : RuntimeM Bool := do
+  Runtime.isAlive (← runtime)
+
+@[inline] def call (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
+  Capnp.Rpc.call (← backend) target method payload
+
+@[inline] def withBackend (f : Backend -> IO α) : RuntimeM α := do
+  f (← backend)
+
+end RuntimeM
+
+@[inline] def ffiBackend (runtime : Runtime) : Backend :=
+  runtime.backend
 
 abbrev Handler := Client -> Payload -> IO Payload
 

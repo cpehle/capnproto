@@ -17,8 +17,14 @@ def capnpBridgeLinkArgs : Array String :=
       "-L../../build-lean4/c++/src/kj",
       "-L../../build-lean4-apple/c++/src/capnp",
       "-L../../build-lean4-apple/c++/src/kj",
-      "-lcapnp", "-lkj-async", "-lkj", "-lstdc++"
+      "-lcapnp", "-lkj-async", "-lkj", "-lstdc++", "-pthread"
     ]
+
+def capnpBridgeCompileArgs : Array String :=
+  if System.Platform.isOSX then
+    #["-fPIC", "-std=c++23"]
+  else
+    #["-fPIC", "-std=c++23", "-pthread"]
 
 package capnp_lean4_test where
   moreLeanArgs := #["-DmaxHeartbeats=2000000"]
@@ -33,7 +39,7 @@ target rpc_bridge.o pkg : FilePath := do
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString
   ]
-  buildO oFile srcJob weakArgs #["-fPIC", "-std=c++23"] "c++" getLeanTrace
+  buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target libleanrpcbridge pkg : FilePath := do
   let bridgeO ← rpc_bridge.o.fetch
