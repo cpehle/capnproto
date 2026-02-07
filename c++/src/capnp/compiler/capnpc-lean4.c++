@@ -482,6 +482,18 @@ private:
         }
         break;
       }
+      case schema::Node::INTERFACE: {
+        auto interfaceSchema = schema.asInterface();
+        for (auto method: interfaceSchema.getMethods()) {
+          auto paramType = method.getParamType();
+          auto resultType = method.getResultType();
+          addImportForTypeId(paramType.getProto().getId(), currentModule, imports);
+          addImportForTypeId(resultType.getProto().getId(), currentModule, imports);
+          collectImportsForAnnotationList(method.getProto().getAnnotations(),
+                                          currentModule, imports);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -1732,6 +1744,13 @@ private:
         if (!field.getProto().isGroup()) continue;
         auto groupId = field.getProto().getGroup().getTypeId();
         collectStructSchemas(schemaLoader.get(groupId), out, seen);
+      }
+    }
+    if (proto.which() == schema::Node::INTERFACE) {
+      auto interfaceSchema = schema.asInterface();
+      for (auto method: interfaceSchema.getMethods()) {
+        collectStructSchemas(method.getParamType(), out, seen);
+        collectStructSchemas(method.getResultType(), out, seen);
       }
     }
     for (auto nested: proto.getNestedNodes()) {
@@ -3594,6 +3613,12 @@ private:
   std::string genInterface(Schema schema, kj::StringPtr currentModule) {
     auto name = qualifiedTypeName(schema.getProto().getId(), currentModule);
     auto interfaceSchema = schema.asInterface();
+    auto absoluteTypeName = [&](uint64_t typeId) -> std::string {
+      auto qualified = qualifiedTypeName(typeId, currentModule);
+      std::string out(qualified.cStr());
+      if (out.rfind("Capnp.", 0) == 0) return out;
+      return std::string(currentModule.cStr()) + "." + out;
+    };
     std::string out;
     out += "abbrev ";
     out += name.cStr();
@@ -3615,10 +3640,19 @@ private:
     struct RpcMethodOut {
       std::string fieldName;
       std::string handlerName;
+      std::string typedHandlerName;
       std::string methodIdName;
       std::string methodName;
       std::string callName;
       std::string callMName;
+      std::string typedCallName;
+      std::string typedCallMName;
+      std::string encodeRequestName;
+      std::string decodeRequestName;
+      std::string encodeResponseName;
+      std::string decodeResponseName;
+      std::string paramTypeName;
+      std::string resultTypeName;
     };
     std::vector<RpcMethodOut> rpcMethods;
 
@@ -3632,11 +3666,24 @@ private:
 
       auto fieldName = uniqueName(methodBase, usedNames);
       auto handlerName = uniqueName(methodBase + "Handler", usedNames);
+      auto typedHandlerName = uniqueName(methodBase + "TypedHandler", usedNames);
       auto methodIdName = uniqueName(methodBase + "MethodId", usedNames);
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
       auto callMName = uniqueName("call" + std::string(cap.cStr()) + "M", usedNames);
-      rpcMethods.push_back({fieldName, handlerName, methodIdName, methodName, callName, callMName});
+      auto typedCallName = uniqueName("call" + std::string(cap.cStr()) + "Typed", usedNames);
+      auto typedCallMName = uniqueName("call" + std::string(cap.cStr()) + "TypedM", usedNames);
+      auto encodeRequestName = uniqueName(methodBase + "RequestToPayload", usedNames);
+      auto decodeRequestName = uniqueName(methodBase + "RequestOfPayload", usedNames);
+      auto encodeResponseName = uniqueName(methodBase + "ResponseToPayload", usedNames);
+      auto decodeResponseName = uniqueName(methodBase + "ResponseOfPayload", usedNames);
+      auto paramTypeName = absoluteTypeName(method.getParamType().getProto().getId());
+      auto resultTypeName = absoluteTypeName(method.getResultType().getProto().getId());
+      rpcMethods.push_back({
+        fieldName, handlerName, typedHandlerName, methodIdName, methodName, callName, callMName,
+        typedCallName, typedCallMName, encodeRequestName, decodeRequestName,
+        encodeResponseName, decodeResponseName, paramTypeName, resultTypeName
+      });
 
       out += "\n";
       out += "def ";
@@ -3669,6 +3716,71 @@ private:
       out += methodName;
       out += " payload\n";
 
+      auto paramReaderTypeName = paramTypeName + ".Reader";
+      auto resultReaderTypeName = resultTypeName + ".Reader";
+
+      out += "abbrev ";
+      out += typedHandlerName;
+      out += " := Capnp.Rpc.Client -> ";
+      out += paramReaderTypeName;
+      out += " -> Capnp.CapTable -> IO Capnp.Rpc.Payload\n";
+
+      out += "def ";
+      out += decodeRequestName;
+      out += " (payload : Capnp.Rpc.Payload) : IO (";
+      out += paramReaderTypeName;
+      out += " × Capnp.CapTable) := do\n";
+      out += "  let reader ← match ";
+      out += paramTypeName;
+      out += ".readChecked (Capnp.getRoot payload.msg) with\n";
+      out += "    | Except.ok r => pure r\n";
+      out += "    | Except.error e => throw (IO.userError s!\"invalid ";
+      out += methodName;
+      out += " request: {e}\")\n";
+      out += "  return (reader, payload.capTable)\n";
+
+      out += "def ";
+      out += decodeResponseName;
+      out += " (payload : Capnp.Rpc.Payload) : IO (";
+      out += resultReaderTypeName;
+      out += " × Capnp.CapTable) := do\n";
+      out += "  let reader ← match ";
+      out += resultTypeName;
+      out += ".readChecked (Capnp.getRoot payload.msg) with\n";
+      out += "    | Except.ok r => pure r\n";
+      out += "    | Except.error e => throw (IO.userError s!\"invalid ";
+      out += methodName;
+      out += " response: {e}\")\n";
+      out += "  return (reader, payload.capTable)\n";
+
+      out += "def ";
+      out += typedCallName;
+      out += " (backend : Capnp.Rpc.Backend) (target : ";
+      out += name.cStr();
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (";
+      out += resultReaderTypeName;
+      out += " × Capnp.CapTable) := do\n";
+      out += "  let response ← Capnp.Rpc.call backend target ";
+      out += methodName;
+      out += " payload\n";
+      out += "  ";
+      out += decodeResponseName;
+      out += " response\n";
+
+      out += "def ";
+      out += typedCallMName;
+      out += " (target : ";
+      out += name.cStr();
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (";
+      out += resultReaderTypeName;
+      out += " × Capnp.CapTable) := do\n";
+      out += "  let response ← Capnp.Rpc.RuntimeM.call target ";
+      out += methodName;
+      out += " payload\n";
+      out += "  ";
+      out += decodeResponseName;
+      out += " response\n";
+
       auto methodOwner = std::string(name.cStr()) + "." + methodName;
       auto methodAnnOut = genAnnotationUses(
           kj::StringPtr(methodOwner.c_str(), methodOwner.size()),
@@ -3687,6 +3799,11 @@ private:
     auto backendName = uniqueName("backend", usedNames);
     auto registerTargetName = uniqueName("registerTarget", usedNames);
     auto registerTargetMName = uniqueName("registerTargetM", usedNames);
+    auto typedServerTypeName = uniqueName("TypedServer", usedNames);
+    auto typedDispatchName = uniqueName("typedDispatch", usedNames);
+    auto typedBackendName = uniqueName("typedBackend", usedNames);
+    auto registerTypedTargetName = uniqueName("registerTypedTarget", usedNames);
+    auto registerTypedTargetMName = uniqueName("registerTypedTargetM", usedNames);
 
     out += "\n";
     out += "abbrev ";
@@ -3771,6 +3888,83 @@ private:
     out += " := do\n";
     out += "  Capnp.Rpc.RuntimeM.registerDispatchTarget (";
     out += dispatchName;
+    out += " server) (onMissing := onMissing)\n";
+
+    out += "\n";
+    out += "structure ";
+    out += typedServerTypeName;
+    out += " where\n";
+    if (rpcMethods.empty()) {
+      out += "  unit : Unit := ()\n";
+    } else {
+      for (auto& methodOut: rpcMethods) {
+        out += "  ";
+        out += methodOut.fieldName;
+        out += " : ";
+        out += methodOut.typedHandlerName;
+        out += "\n";
+      }
+    }
+
+    out += "\n";
+    out += "def ";
+    out += typedDispatchName;
+    out += " (server : ";
+    out += typedServerTypeName;
+    out += ") : Capnp.Rpc.Dispatch := Id.run do\n";
+    out += "  let mut d := Capnp.Rpc.Dispatch.empty\n";
+    if (rpcMethods.empty()) {
+      out += "  let _ := server\n";
+    }
+    for (auto& methodOut: rpcMethods) {
+      out += "  d := Capnp.Rpc.Dispatch.register d ";
+      out += methodOut.methodName;
+      out += " (fun target payload => do\n";
+      out += "    let (request, requestCaps) ← ";
+      out += methodOut.decodeRequestName;
+      out += " payload\n";
+      out += "    server.";
+      out += methodOut.fieldName;
+      out += " target request requestCaps\n";
+      out += "  )\n";
+    }
+    out += "  return d\n";
+
+    out += "\n";
+    out += "def ";
+    out += typedBackendName;
+    out += " (server : ";
+    out += typedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=\n";
+    out += "  (";
+    out += typedDispatchName;
+    out += " server).toBackend (onMissing := onMissing)\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerTypedTargetName;
+    out += " (runtime : Capnp.Rpc.Runtime) (server : ";
+    out += typedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.Runtime.registerDispatchTarget runtime (";
+    out += typedDispatchName;
+    out += " server) (onMissing := onMissing)\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerTypedTargetMName;
+    out += " (server : ";
+    out += typedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.RuntimeM.registerDispatchTarget (";
+    out += typedDispatchName;
     out += " server) (onMissing := onMissing)\n";
 
     out += "\nend ";

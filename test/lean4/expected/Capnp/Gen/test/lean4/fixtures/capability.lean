@@ -94,6 +94,26 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Dummy := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  unit : Unit := ()
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO Dummy := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Dummy := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end Dummy
 
 mutual

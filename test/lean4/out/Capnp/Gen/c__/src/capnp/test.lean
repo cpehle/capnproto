@@ -3,6 +3,7 @@
 
 import Capnp.Runtime
 import Capnp.Rpc
+import Capnp.Gen.capnp.stream
 
 set_option maxHeartbeats 2000000
 
@@ -1225,6 +1226,63 @@ structure TestGenerics.Inner2.DeepNest.Builder where
 def TestGenerics.Inner2.DeepNest.Builder.fromStruct (sb : Capnp.StructBuilder) : TestGenerics.Inner2.DeepNest.Builder := { struct := sb }
 
 
+structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.read (ptr : Capnp.AnyPointer) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.fromStruct (sr : Capnp.StructReader) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader := { struct := sr }
+
+structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder := { struct := sb }
+
+
+structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.read (ptr : Capnp.AnyPointer) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.fromStruct (sr : Capnp.StructReader) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader := { struct := sr }
+
+structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder := { struct := sb }
+
+
+structure TestGenerics.Interface.call_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestGenerics.Interface.call_Results.read (ptr : Capnp.AnyPointer) : TestGenerics.Interface.call_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestGenerics.Interface.call_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestGenerics.Interface.call_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestGenerics.Interface.call_Results.fromStruct (sr : Capnp.StructReader) : TestGenerics.Interface.call_Results.Reader := { struct := sr }
+
+structure TestGenerics.Interface.call_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestGenerics.Interface.call_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestGenerics.Interface.call_Results.Builder := { struct := sb }
+
+
 structure TestGenerics.UseAliases.Reader where
   struct : Capnp.StructReader
 
@@ -1299,6 +1357,44 @@ structure TestGenericsWrapper2.Builder where
   deriving BEq
 
 def TestGenericsWrapper2.Builder.fromStruct (sb : Capnp.StructBuilder) : TestGenericsWrapper2.Builder := { struct := sb }
+
+
+structure TestImplicitMethodParams.call_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestImplicitMethodParams.call_Params.read (ptr : Capnp.AnyPointer) : TestImplicitMethodParams.call_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestImplicitMethodParams.call_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestImplicitMethodParams.call_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestImplicitMethodParams.call_Params.fromStruct (sr : Capnp.StructReader) : TestImplicitMethodParams.call_Params.Reader := { struct := sr }
+
+structure TestImplicitMethodParams.call_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestImplicitMethodParams.call_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestImplicitMethodParams.call_Params.Builder := { struct := sb }
+
+
+structure TestImplicitMethodParamsInGeneric.call_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestImplicitMethodParamsInGeneric.call_Params.read (ptr : Capnp.AnyPointer) : TestImplicitMethodParamsInGeneric.call_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestImplicitMethodParamsInGeneric.call_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestImplicitMethodParamsInGeneric.call_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestImplicitMethodParamsInGeneric.call_Params.fromStruct (sr : Capnp.StructReader) : TestImplicitMethodParamsInGeneric.call_Params.Reader := { struct := sr }
+
+structure TestImplicitMethodParamsInGeneric.call_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestImplicitMethodParamsInGeneric.call_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestImplicitMethodParamsInGeneric.call_Params.Builder := { struct := sb }
 
 
 structure TestGenericsUnion.Reader where
@@ -1415,6 +1511,500 @@ structure TestListOfAny.Builder where
 def TestListOfAny.Builder.fromStruct (sb : Capnp.StructBuilder) : TestListOfAny.Builder := { struct := sb }
 
 
+structure TestInterface.foo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.foo_Params.read (ptr : Capnp.AnyPointer) : TestInterface.foo_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.foo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.foo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.foo_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.foo_Params.Reader := { struct := sr }
+
+structure TestInterface.foo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.foo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.foo_Params.Builder := { struct := sb }
+
+
+structure TestInterface.foo_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.foo_Results.read (ptr : Capnp.AnyPointer) : TestInterface.foo_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.foo_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.foo_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.foo_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.foo_Results.Reader := { struct := sr }
+
+structure TestInterface.foo_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.foo_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.foo_Results.Builder := { struct := sb }
+
+
+structure TestInterface.bar_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.bar_Params.read (ptr : Capnp.AnyPointer) : TestInterface.bar_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.bar_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.bar_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.bar_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.bar_Params.Reader := { struct := sr }
+
+structure TestInterface.bar_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.bar_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.bar_Params.Builder := { struct := sb }
+
+
+structure TestInterface.bar_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.bar_Results.read (ptr : Capnp.AnyPointer) : TestInterface.bar_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.bar_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.bar_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.bar_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.bar_Results.Reader := { struct := sr }
+
+structure TestInterface.bar_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.bar_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.bar_Results.Builder := { struct := sb }
+
+
+structure TestInterface.baz_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.baz_Params.read (ptr : Capnp.AnyPointer) : TestInterface.baz_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.baz_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.baz_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.baz_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.baz_Params.Reader := { struct := sr }
+
+structure TestInterface.baz_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.baz_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.baz_Params.Builder := { struct := sb }
+
+
+structure TestInterface.baz_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.baz_Results.read (ptr : Capnp.AnyPointer) : TestInterface.baz_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.baz_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.baz_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.baz_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.baz_Results.Reader := { struct := sr }
+
+structure TestInterface.baz_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.baz_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.baz_Results.Builder := { struct := sb }
+
+
+structure TestInterface.getTestPipeline_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestPipeline_Params.read (ptr : Capnp.AnyPointer) : TestInterface.getTestPipeline_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestPipeline_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestPipeline_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestPipeline_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestPipeline_Params.Reader := { struct := sr }
+
+structure TestInterface.getTestPipeline_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestPipeline_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestPipeline_Params.Builder := { struct := sb }
+
+
+structure TestInterface.getTestPipeline_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestPipeline_Results.read (ptr : Capnp.AnyPointer) : TestInterface.getTestPipeline_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestPipeline_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestPipeline_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestPipeline_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestPipeline_Results.Reader := { struct := sr }
+
+structure TestInterface.getTestPipeline_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestPipeline_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestPipeline_Results.Builder := { struct := sb }
+
+
+structure TestInterface.getTestTailCallee_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestTailCallee_Params.read (ptr : Capnp.AnyPointer) : TestInterface.getTestTailCallee_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestTailCallee_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestTailCallee_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestTailCallee_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestTailCallee_Params.Reader := { struct := sr }
+
+structure TestInterface.getTestTailCallee_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestTailCallee_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestTailCallee_Params.Builder := { struct := sb }
+
+
+structure TestInterface.getTestTailCallee_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestTailCallee_Results.read (ptr : Capnp.AnyPointer) : TestInterface.getTestTailCallee_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestTailCallee_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestTailCallee_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestTailCallee_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestTailCallee_Results.Reader := { struct := sr }
+
+structure TestInterface.getTestTailCallee_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestTailCallee_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestTailCallee_Results.Builder := { struct := sb }
+
+
+structure TestInterface.getTestTailCaller_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestTailCaller_Params.read (ptr : Capnp.AnyPointer) : TestInterface.getTestTailCaller_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestTailCaller_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestTailCaller_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestTailCaller_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestTailCaller_Params.Reader := { struct := sr }
+
+structure TestInterface.getTestTailCaller_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestTailCaller_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestTailCaller_Params.Builder := { struct := sb }
+
+
+structure TestInterface.getTestTailCaller_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestTailCaller_Results.read (ptr : Capnp.AnyPointer) : TestInterface.getTestTailCaller_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestTailCaller_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestTailCaller_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestTailCaller_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestTailCaller_Results.Reader := { struct := sr }
+
+structure TestInterface.getTestTailCaller_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestTailCaller_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestTailCaller_Results.Builder := { struct := sb }
+
+
+structure TestInterface.getTestMoreStuff_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestMoreStuff_Params.read (ptr : Capnp.AnyPointer) : TestInterface.getTestMoreStuff_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestMoreStuff_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestMoreStuff_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestMoreStuff_Params.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestMoreStuff_Params.Reader := { struct := sr }
+
+structure TestInterface.getTestMoreStuff_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestMoreStuff_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestMoreStuff_Params.Builder := { struct := sb }
+
+
+structure TestInterface.getTestMoreStuff_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestInterface.getTestMoreStuff_Results.read (ptr : Capnp.AnyPointer) : TestInterface.getTestMoreStuff_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestInterface.getTestMoreStuff_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestInterface.getTestMoreStuff_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestInterface.getTestMoreStuff_Results.fromStruct (sr : Capnp.StructReader) : TestInterface.getTestMoreStuff_Results.Reader := { struct := sr }
+
+structure TestInterface.getTestMoreStuff_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestInterface.getTestMoreStuff_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestInterface.getTestMoreStuff_Results.Builder := { struct := sb }
+
+
+structure TestExtends.qux_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestExtends.qux_Params.read (ptr : Capnp.AnyPointer) : TestExtends.qux_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestExtends.qux_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestExtends.qux_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestExtends.qux_Params.fromStruct (sr : Capnp.StructReader) : TestExtends.qux_Params.Reader := { struct := sr }
+
+structure TestExtends.qux_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestExtends.qux_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestExtends.qux_Params.Builder := { struct := sb }
+
+
+structure TestExtends.qux_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestExtends.qux_Results.read (ptr : Capnp.AnyPointer) : TestExtends.qux_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestExtends.qux_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestExtends.qux_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestExtends.qux_Results.fromStruct (sr : Capnp.StructReader) : TestExtends.qux_Results.Reader := { struct := sr }
+
+structure TestExtends.qux_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestExtends.qux_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestExtends.qux_Results.Builder := { struct := sb }
+
+
+structure TestExtends.corge_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestExtends.corge_Results.read (ptr : Capnp.AnyPointer) : TestExtends.corge_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestExtends.corge_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestExtends.corge_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestExtends.corge_Results.fromStruct (sr : Capnp.StructReader) : TestExtends.corge_Results.Reader := { struct := sr }
+
+structure TestExtends.corge_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestExtends.corge_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestExtends.corge_Results.Builder := { struct := sb }
+
+
+structure TestExtends.grault_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestExtends.grault_Params.read (ptr : Capnp.AnyPointer) : TestExtends.grault_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestExtends.grault_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestExtends.grault_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestExtends.grault_Params.fromStruct (sr : Capnp.StructReader) : TestExtends.grault_Params.Reader := { struct := sr }
+
+structure TestExtends.grault_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestExtends.grault_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestExtends.grault_Params.Builder := { struct := sb }
+
+
+structure TestPipeline.getCap_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getCap_Params.read (ptr : Capnp.AnyPointer) : TestPipeline.getCap_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getCap_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getCap_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getCap_Params.fromStruct (sr : Capnp.StructReader) : TestPipeline.getCap_Params.Reader := { struct := sr }
+
+structure TestPipeline.getCap_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getCap_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getCap_Params.Builder := { struct := sb }
+
+
+structure TestPipeline.getCap_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getCap_Results.read (ptr : Capnp.AnyPointer) : TestPipeline.getCap_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getCap_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getCap_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getCap_Results.fromStruct (sr : Capnp.StructReader) : TestPipeline.getCap_Results.Reader := { struct := sr }
+
+structure TestPipeline.getCap_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getCap_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getCap_Results.Builder := { struct := sb }
+
+
+structure TestPipeline.testPointers_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.testPointers_Params.read (ptr : Capnp.AnyPointer) : TestPipeline.testPointers_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.testPointers_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.testPointers_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.testPointers_Params.fromStruct (sr : Capnp.StructReader) : TestPipeline.testPointers_Params.Reader := { struct := sr }
+
+structure TestPipeline.testPointers_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.testPointers_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.testPointers_Params.Builder := { struct := sb }
+
+
+structure TestPipeline.testPointers_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.testPointers_Results.read (ptr : Capnp.AnyPointer) : TestPipeline.testPointers_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.testPointers_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.testPointers_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.testPointers_Results.fromStruct (sr : Capnp.StructReader) : TestPipeline.testPointers_Results.Reader := { struct := sr }
+
+structure TestPipeline.testPointers_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.testPointers_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.testPointers_Results.Builder := { struct := sb }
+
+
+structure TestPipeline.getAnyCap_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getAnyCap_Params.read (ptr : Capnp.AnyPointer) : TestPipeline.getAnyCap_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getAnyCap_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getAnyCap_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getAnyCap_Params.fromStruct (sr : Capnp.StructReader) : TestPipeline.getAnyCap_Params.Reader := { struct := sr }
+
+structure TestPipeline.getAnyCap_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getAnyCap_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getAnyCap_Params.Builder := { struct := sb }
+
+
+structure TestPipeline.getAnyCap_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getAnyCap_Results.read (ptr : Capnp.AnyPointer) : TestPipeline.getAnyCap_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getAnyCap_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getAnyCap_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getAnyCap_Results.fromStruct (sr : Capnp.StructReader) : TestPipeline.getAnyCap_Results.Reader := { struct := sr }
+
+structure TestPipeline.getAnyCap_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getAnyCap_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getAnyCap_Results.Builder := { struct := sb }
+
+
+structure TestPipeline.getCapPipelineOnly_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getCapPipelineOnly_Params.read (ptr : Capnp.AnyPointer) : TestPipeline.getCapPipelineOnly_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getCapPipelineOnly_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getCapPipelineOnly_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getCapPipelineOnly_Params.fromStruct (sr : Capnp.StructReader) : TestPipeline.getCapPipelineOnly_Params.Reader := { struct := sr }
+
+structure TestPipeline.getCapPipelineOnly_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getCapPipelineOnly_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getCapPipelineOnly_Params.Builder := { struct := sb }
+
+
+structure TestPipeline.getCapPipelineOnly_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestPipeline.getCapPipelineOnly_Results.read (ptr : Capnp.AnyPointer) : TestPipeline.getCapPipelineOnly_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestPipeline.getCapPipelineOnly_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestPipeline.getCapPipelineOnly_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestPipeline.getCapPipelineOnly_Results.fromStruct (sr : Capnp.StructReader) : TestPipeline.getCapPipelineOnly_Results.Reader := { struct := sr }
+
+structure TestPipeline.getCapPipelineOnly_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestPipeline.getCapPipelineOnly_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.getCapPipelineOnly_Results.Builder := { struct := sb }
+
+
 structure TestPipeline.Box.Reader where
   struct : Capnp.StructReader
 
@@ -1453,6 +2043,63 @@ structure TestPipeline.AnyBox.Builder where
 def TestPipeline.AnyBox.Builder.fromStruct (sb : Capnp.StructBuilder) : TestPipeline.AnyBox.Builder := { struct := sb }
 
 
+structure TestCallOrder.getCallSequence_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestCallOrder.getCallSequence_Params.read (ptr : Capnp.AnyPointer) : TestCallOrder.getCallSequence_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestCallOrder.getCallSequence_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestCallOrder.getCallSequence_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestCallOrder.getCallSequence_Params.fromStruct (sr : Capnp.StructReader) : TestCallOrder.getCallSequence_Params.Reader := { struct := sr }
+
+structure TestCallOrder.getCallSequence_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestCallOrder.getCallSequence_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestCallOrder.getCallSequence_Params.Builder := { struct := sb }
+
+
+structure TestCallOrder.getCallSequence_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestCallOrder.getCallSequence_Results.read (ptr : Capnp.AnyPointer) : TestCallOrder.getCallSequence_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestCallOrder.getCallSequence_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestCallOrder.getCallSequence_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestCallOrder.getCallSequence_Results.fromStruct (sr : Capnp.StructReader) : TestCallOrder.getCallSequence_Results.Reader := { struct := sr }
+
+structure TestCallOrder.getCallSequence_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestCallOrder.getCallSequence_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestCallOrder.getCallSequence_Results.Builder := { struct := sb }
+
+
+structure TestTailCallee.foo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestTailCallee.foo_Params.read (ptr : Capnp.AnyPointer) : TestTailCallee.foo_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestTailCallee.foo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestTailCallee.foo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestTailCallee.foo_Params.fromStruct (sr : Capnp.StructReader) : TestTailCallee.foo_Params.Reader := { struct := sr }
+
+structure TestTailCallee.foo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestTailCallee.foo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestTailCallee.foo_Params.Builder := { struct := sb }
+
+
 structure TestTailCallee.TailResult.Reader where
   struct : Capnp.StructReader
 
@@ -1472,6 +2119,823 @@ structure TestTailCallee.TailResult.Builder where
 def TestTailCallee.TailResult.Builder.fromStruct (sb : Capnp.StructBuilder) : TestTailCallee.TailResult.Builder := { struct := sb }
 
 
+structure TestTailCaller.foo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestTailCaller.foo_Params.read (ptr : Capnp.AnyPointer) : TestTailCaller.foo_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestTailCaller.foo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestTailCaller.foo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestTailCaller.foo_Params.fromStruct (sr : Capnp.StructReader) : TestTailCaller.foo_Params.Reader := { struct := sr }
+
+structure TestTailCaller.foo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestTailCaller.foo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestTailCaller.foo_Params.Builder := { struct := sb }
+
+
+structure TestStreaming.doStreamI_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestStreaming.doStreamI_Params.read (ptr : Capnp.AnyPointer) : TestStreaming.doStreamI_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestStreaming.doStreamI_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestStreaming.doStreamI_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestStreaming.doStreamI_Params.fromStruct (sr : Capnp.StructReader) : TestStreaming.doStreamI_Params.Reader := { struct := sr }
+
+structure TestStreaming.doStreamI_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestStreaming.doStreamI_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestStreaming.doStreamI_Params.Builder := { struct := sb }
+
+
+structure Capnp.Gen.capnp.stream.StreamResult.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def Capnp.Gen.capnp.stream.StreamResult.read (ptr : Capnp.AnyPointer) : Capnp.Gen.capnp.stream.StreamResult.Reader := { struct := Capnp.readStruct ptr }
+def Capnp.Gen.capnp.stream.StreamResult.readChecked (ptr : Capnp.AnyPointer) : Except String Capnp.Gen.capnp.stream.StreamResult.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def Capnp.Gen.capnp.stream.StreamResult.fromStruct (sr : Capnp.StructReader) : Capnp.Gen.capnp.stream.StreamResult.Reader := { struct := sr }
+
+structure Capnp.Gen.capnp.stream.StreamResult.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def Capnp.Gen.capnp.stream.StreamResult.Builder.fromStruct (sb : Capnp.StructBuilder) : Capnp.Gen.capnp.stream.StreamResult.Builder := { struct := sb }
+
+
+structure TestStreaming.doStreamJ_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestStreaming.doStreamJ_Params.read (ptr : Capnp.AnyPointer) : TestStreaming.doStreamJ_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestStreaming.doStreamJ_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestStreaming.doStreamJ_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestStreaming.doStreamJ_Params.fromStruct (sr : Capnp.StructReader) : TestStreaming.doStreamJ_Params.Reader := { struct := sr }
+
+structure TestStreaming.doStreamJ_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestStreaming.doStreamJ_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestStreaming.doStreamJ_Params.Builder := { struct := sb }
+
+
+structure TestStreaming.finishStream_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestStreaming.finishStream_Params.read (ptr : Capnp.AnyPointer) : TestStreaming.finishStream_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestStreaming.finishStream_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestStreaming.finishStream_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestStreaming.finishStream_Params.fromStruct (sr : Capnp.StructReader) : TestStreaming.finishStream_Params.Reader := { struct := sr }
+
+structure TestStreaming.finishStream_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestStreaming.finishStream_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestStreaming.finishStream_Params.Builder := { struct := sb }
+
+
+structure TestStreaming.finishStream_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestStreaming.finishStream_Results.read (ptr : Capnp.AnyPointer) : TestStreaming.finishStream_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestStreaming.finishStream_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestStreaming.finishStream_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestStreaming.finishStream_Results.fromStruct (sr : Capnp.StructReader) : TestStreaming.finishStream_Results.Reader := { struct := sr }
+
+structure TestStreaming.finishStream_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestStreaming.finishStream_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestStreaming.finishStream_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callFoo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callFoo_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callFoo_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callFoo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callFoo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callFoo_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callFoo_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.callFoo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callFoo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callFoo_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callFoo_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callFoo_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callFoo_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callFoo_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callFoo_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callFoo_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callFoo_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.callFoo_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callFoo_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callFoo_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callFooWhenResolved_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callFooWhenResolved_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callFooWhenResolved_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callFooWhenResolved_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callFooWhenResolved_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callFooWhenResolved_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callFooWhenResolved_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.callFooWhenResolved_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callFooWhenResolved_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callFooWhenResolved_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callFooWhenResolved_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callFooWhenResolved_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callFooWhenResolved_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callFooWhenResolved_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callFooWhenResolved_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callFooWhenResolved_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callFooWhenResolved_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.callFooWhenResolved_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callFooWhenResolved_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callFooWhenResolved_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.neverReturn_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.neverReturn_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.neverReturn_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.neverReturn_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.neverReturn_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.neverReturn_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.neverReturn_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.neverReturn_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.neverReturn_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.neverReturn_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.neverReturn_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.neverReturn_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.neverReturn_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.neverReturn_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.neverReturn_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.neverReturn_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.neverReturn_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.neverReturn_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.neverReturn_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.neverReturn_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.hold_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.hold_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.hold_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.hold_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.hold_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.hold_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.hold_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.hold_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.hold_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.hold_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.hold_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.hold_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.hold_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.hold_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.hold_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.hold_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.hold_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.hold_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.hold_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.hold_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callHeld_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callHeld_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callHeld_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callHeld_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callHeld_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callHeld_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callHeld_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.callHeld_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callHeld_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callHeld_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.callHeld_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.callHeld_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.callHeld_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.callHeld_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.callHeld_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.callHeld_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.callHeld_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.callHeld_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.callHeld_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.callHeld_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getHeld_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getHeld_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getHeld_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getHeld_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getHeld_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getHeld_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getHeld_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.getHeld_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getHeld_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getHeld_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getHeld_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getHeld_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getHeld_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getHeld_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getHeld_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getHeld_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getHeld_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.getHeld_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getHeld_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getHeld_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.echo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.echo_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.echo_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.echo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.echo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.echo_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.echo_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.echo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.echo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.echo_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.echo_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.echo_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.echo_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.echo_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.echo_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.echo_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.echo_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.echo_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.echo_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.echo_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.expectCancel_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.expectCancel_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.expectCancel_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.expectCancel_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.expectCancel_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.expectCancel_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.expectCancel_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.expectCancel_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.expectCancel_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.expectCancel_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.expectCancel_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.expectCancel_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.expectCancel_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.expectCancel_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.expectCancel_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.expectCancel_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.expectCancel_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.expectCancel_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.expectCancel_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.expectCancel_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.methodWithDefaults_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.methodWithDefaults_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.methodWithDefaults_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.methodWithDefaults_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.methodWithDefaults_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.methodWithDefaults_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.methodWithDefaults_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.methodWithDefaults_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.methodWithDefaults_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.methodWithDefaults_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.methodWithDefaults_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.methodWithDefaults_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.methodWithDefaults_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.methodWithDefaults_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.methodWithDefaults_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.methodWithDefaults_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.methodWithDefaults_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.methodWithDefaults_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.methodWithDefaults_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getHandle_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getHandle_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getHandle_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getHandle_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getHandle_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getHandle_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getHandle_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.getHandle_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getHandle_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getHandle_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getHandle_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getHandle_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getHandle_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getHandle_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getHandle_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getHandle_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getHandle_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.getHandle_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getHandle_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getHandle_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getNull_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getNull_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getNull_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getNull_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getNull_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getNull_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getNull_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.getNull_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getNull_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getNull_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getNull_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getNull_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getNull_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getNull_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getNull_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getNull_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getNull_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.getNull_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getNull_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getNull_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getEnormousString_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getEnormousString_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getEnormousString_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getEnormousString_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getEnormousString_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getEnormousString_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getEnormousString_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.getEnormousString_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getEnormousString_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getEnormousString_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.getEnormousString_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.getEnormousString_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.getEnormousString_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.getEnormousString_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.getEnormousString_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.getEnormousString_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.getEnormousString_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.getEnormousString_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.getEnormousString_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.getEnormousString_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.methodWithNullDefault_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.methodWithNullDefault_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.methodWithNullDefault_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.methodWithNullDefault_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.methodWithNullDefault_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.methodWithNullDefault_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.methodWithNullDefault_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.methodWithNullDefault_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.methodWithNullDefault_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.methodWithNullDefault_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.methodWithNullDefault_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.methodWithNullDefault_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.methodWithNullDefault_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.methodWithNullDefault_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.methodWithNullDefault_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.methodWithNullDefault_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.methodWithNullDefault_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.methodWithNullDefault_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.methodWithNullDefault_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.methodWithNullDefault_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.writeToFd_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.writeToFd_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.writeToFd_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.writeToFd_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.writeToFd_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.writeToFd_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.writeToFd_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.writeToFd_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.writeToFd_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.writeToFd_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.writeToFd_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.writeToFd_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.writeToFd_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.writeToFd_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.writeToFd_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.writeToFd_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.writeToFd_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.writeToFd_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.writeToFd_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.writeToFd_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwException_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwException_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwException_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwException_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwException_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwException_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwException_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.throwException_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwException_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwException_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwException_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwException_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwException_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwException_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwException_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwException_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwException_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.throwException_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwException_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwException_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwRemoteException_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwRemoteException_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwRemoteException_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwRemoteException_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwRemoteException_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwRemoteException_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwRemoteException_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.throwRemoteException_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwRemoteException_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwRemoteException_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwRemoteException_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwRemoteException_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwRemoteException_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwRemoteException_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwRemoteException_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwRemoteException_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwRemoteException_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.throwRemoteException_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwRemoteException_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwRemoteException_Results.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwExceptionWithDetail_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwExceptionWithDetail_Params.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwExceptionWithDetail_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwExceptionWithDetail_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwExceptionWithDetail_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwExceptionWithDetail_Params.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwExceptionWithDetail_Params.Reader := { struct := sr }
+
+structure TestMoreStuff.throwExceptionWithDetail_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwExceptionWithDetail_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwExceptionWithDetail_Params.Builder := { struct := sb }
+
+
+structure TestMoreStuff.throwExceptionWithDetail_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMoreStuff.throwExceptionWithDetail_Results.read (ptr : Capnp.AnyPointer) : TestMoreStuff.throwExceptionWithDetail_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMoreStuff.throwExceptionWithDetail_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMoreStuff.throwExceptionWithDetail_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMoreStuff.throwExceptionWithDetail_Results.fromStruct (sr : Capnp.StructReader) : TestMoreStuff.throwExceptionWithDetail_Results.Reader := { struct := sr }
+
+structure TestMoreStuff.throwExceptionWithDetail_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMoreStuff.throwExceptionWithDetail_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMoreStuff.throwExceptionWithDetail_Results.Builder := { struct := sb }
+
+
+structure TestMembrane.makeThing_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.makeThing_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.makeThing_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.makeThing_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.makeThing_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.makeThing_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.makeThing_Params.Reader := { struct := sr }
+
+structure TestMembrane.makeThing_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.makeThing_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.makeThing_Params.Builder := { struct := sb }
+
+
+structure TestMembrane.makeThing_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.makeThing_Results.read (ptr : Capnp.AnyPointer) : TestMembrane.makeThing_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.makeThing_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.makeThing_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.makeThing_Results.fromStruct (sr : Capnp.StructReader) : TestMembrane.makeThing_Results.Reader := { struct := sr }
+
+structure TestMembrane.makeThing_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.makeThing_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.makeThing_Results.Builder := { struct := sb }
+
+
+structure TestMembrane.callPassThrough_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.callPassThrough_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.callPassThrough_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.callPassThrough_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.callPassThrough_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.callPassThrough_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.callPassThrough_Params.Reader := { struct := sr }
+
+structure TestMembrane.callPassThrough_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.callPassThrough_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.callPassThrough_Params.Builder := { struct := sb }
+
+
 structure TestMembrane.Result.Reader where
   struct : Capnp.StructReader
 
@@ -1489,6 +2953,139 @@ structure TestMembrane.Result.Builder where
   deriving BEq
 
 def TestMembrane.Result.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.Result.Builder := { struct := sb }
+
+
+structure TestMembrane.callIntercept_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.callIntercept_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.callIntercept_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.callIntercept_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.callIntercept_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.callIntercept_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.callIntercept_Params.Reader := { struct := sr }
+
+structure TestMembrane.callIntercept_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.callIntercept_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.callIntercept_Params.Builder := { struct := sb }
+
+
+structure TestMembrane.loopback_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.loopback_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.loopback_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.loopback_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.loopback_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.loopback_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.loopback_Params.Reader := { struct := sr }
+
+structure TestMembrane.loopback_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.loopback_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.loopback_Params.Builder := { struct := sb }
+
+
+structure TestMembrane.loopback_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.loopback_Results.read (ptr : Capnp.AnyPointer) : TestMembrane.loopback_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.loopback_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.loopback_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.loopback_Results.fromStruct (sr : Capnp.StructReader) : TestMembrane.loopback_Results.Reader := { struct := sr }
+
+structure TestMembrane.loopback_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.loopback_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.loopback_Results.Builder := { struct := sb }
+
+
+structure TestMembrane.waitForever_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.waitForever_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.waitForever_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.waitForever_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.waitForever_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.waitForever_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.waitForever_Params.Reader := { struct := sr }
+
+structure TestMembrane.waitForever_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.waitForever_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.waitForever_Params.Builder := { struct := sb }
+
+
+structure TestMembrane.waitForever_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.waitForever_Results.read (ptr : Capnp.AnyPointer) : TestMembrane.waitForever_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.waitForever_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.waitForever_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.waitForever_Results.fromStruct (sr : Capnp.StructReader) : TestMembrane.waitForever_Results.Reader := { struct := sr }
+
+structure TestMembrane.waitForever_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.waitForever_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.waitForever_Results.Builder := { struct := sb }
+
+
+structure TestMembrane.Thing.passThrough_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.Thing.passThrough_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.Thing.passThrough_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.Thing.passThrough_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.Thing.passThrough_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.Thing.passThrough_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.Thing.passThrough_Params.Reader := { struct := sr }
+
+structure TestMembrane.Thing.passThrough_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.Thing.passThrough_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.Thing.passThrough_Params.Builder := { struct := sb }
+
+
+structure TestMembrane.Thing.intercept_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestMembrane.Thing.intercept_Params.read (ptr : Capnp.AnyPointer) : TestMembrane.Thing.intercept_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestMembrane.Thing.intercept_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestMembrane.Thing.intercept_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestMembrane.Thing.intercept_Params.fromStruct (sr : Capnp.StructReader) : TestMembrane.Thing.intercept_Params.Reader := { struct := sr }
+
+structure TestMembrane.Thing.intercept_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestMembrane.Thing.intercept_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestMembrane.Thing.intercept_Params.Builder := { struct := sb }
 
 
 structure TestContainMembrane.Reader where
@@ -1546,6 +3143,196 @@ structure TestTransferCap.Element.Builder where
   deriving BEq
 
 def TestTransferCap.Element.Builder.fromStruct (sb : Capnp.StructBuilder) : TestTransferCap.Element.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.delete_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.delete_Params.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.delete_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.delete_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.delete_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.delete_Params.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.delete_Params.Reader := { struct := sr }
+
+structure TestKeywordMethods.delete_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.delete_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.delete_Params.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.delete_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.delete_Results.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.delete_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.delete_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.delete_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.delete_Results.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.delete_Results.Reader := { struct := sr }
+
+structure TestKeywordMethods.delete_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.delete_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.delete_Results.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.class_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.class_Params.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.class_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.class_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.class_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.class_Params.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.class_Params.Reader := { struct := sr }
+
+structure TestKeywordMethods.class_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.class_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.class_Params.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.class_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.class_Results.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.class_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.class_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.class_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.class_Results.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.class_Results.Reader := { struct := sr }
+
+structure TestKeywordMethods.class_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.class_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.class_Results.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.void_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.void_Params.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.void_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.void_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.void_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.void_Params.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.void_Params.Reader := { struct := sr }
+
+structure TestKeywordMethods.void_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.void_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.void_Params.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.void_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.void_Results.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.void_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.void_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.void_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.void_Results.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.void_Results.Reader := { struct := sr }
+
+structure TestKeywordMethods.void_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.void_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.void_Results.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.return_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.return_Params.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.return_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.return_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.return_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.return_Params.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.return_Params.Reader := { struct := sr }
+
+structure TestKeywordMethods.return_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.return_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.return_Params.Builder := { struct := sb }
+
+
+structure TestKeywordMethods.return_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestKeywordMethods.return_Results.read (ptr : Capnp.AnyPointer) : TestKeywordMethods.return_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestKeywordMethods.return_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestKeywordMethods.return_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestKeywordMethods.return_Results.fromStruct (sr : Capnp.StructReader) : TestKeywordMethods.return_Results.Reader := { struct := sr }
+
+structure TestKeywordMethods.return_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestKeywordMethods.return_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestKeywordMethods.return_Results.Builder := { struct := sb }
+
+
+structure TestAuthenticatedBootstrap.getCallerId_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestAuthenticatedBootstrap.getCallerId_Params.read (ptr : Capnp.AnyPointer) : TestAuthenticatedBootstrap.getCallerId_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestAuthenticatedBootstrap.getCallerId_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestAuthenticatedBootstrap.getCallerId_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestAuthenticatedBootstrap.getCallerId_Params.fromStruct (sr : Capnp.StructReader) : TestAuthenticatedBootstrap.getCallerId_Params.Reader := { struct := sr }
+
+structure TestAuthenticatedBootstrap.getCallerId_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestAuthenticatedBootstrap.getCallerId_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestAuthenticatedBootstrap.getCallerId_Params.Builder := { struct := sb }
+
+
+structure TestAuthenticatedBootstrap.getCallerId_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestAuthenticatedBootstrap.getCallerId_Results.read (ptr : Capnp.AnyPointer) : TestAuthenticatedBootstrap.getCallerId_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestAuthenticatedBootstrap.getCallerId_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestAuthenticatedBootstrap.getCallerId_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestAuthenticatedBootstrap.getCallerId_Results.fromStruct (sr : Capnp.StructReader) : TestAuthenticatedBootstrap.getCallerId_Results.Reader := { struct := sr }
+
+structure TestAuthenticatedBootstrap.getCallerId_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestAuthenticatedBootstrap.getCallerId_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestAuthenticatedBootstrap.getCallerId_Results.Builder := { struct := sb }
 
 
 structure TestSturdyRefHostId.Reader where
@@ -1717,6 +3504,44 @@ structure TestNameAnnotation.NestedStruct.Builder where
   deriving BEq
 
 def TestNameAnnotation.NestedStruct.Builder.fromStruct (sb : Capnp.StructBuilder) : TestNameAnnotation.NestedStruct.Builder := { struct := sb }
+
+
+structure TestNameAnnotationInterface.badlyNamedMethod_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestNameAnnotationInterface.badlyNamedMethod_Params.read (ptr : Capnp.AnyPointer) : TestNameAnnotationInterface.badlyNamedMethod_Params.Reader := { struct := Capnp.readStruct ptr }
+def TestNameAnnotationInterface.badlyNamedMethod_Params.readChecked (ptr : Capnp.AnyPointer) : Except String TestNameAnnotationInterface.badlyNamedMethod_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestNameAnnotationInterface.badlyNamedMethod_Params.fromStruct (sr : Capnp.StructReader) : TestNameAnnotationInterface.badlyNamedMethod_Params.Reader := { struct := sr }
+
+structure TestNameAnnotationInterface.badlyNamedMethod_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestNameAnnotationInterface.badlyNamedMethod_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : TestNameAnnotationInterface.badlyNamedMethod_Params.Builder := { struct := sb }
+
+
+structure TestNameAnnotationInterface.badlyNamedMethod_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def TestNameAnnotationInterface.badlyNamedMethod_Results.read (ptr : Capnp.AnyPointer) : TestNameAnnotationInterface.badlyNamedMethod_Results.Reader := { struct := Capnp.readStruct ptr }
+def TestNameAnnotationInterface.badlyNamedMethod_Results.readChecked (ptr : Capnp.AnyPointer) : Except String TestNameAnnotationInterface.badlyNamedMethod_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def TestNameAnnotationInterface.badlyNamedMethod_Results.fromStruct (sr : Capnp.StructReader) : TestNameAnnotationInterface.badlyNamedMethod_Results.Reader := { struct := sr }
+
+structure TestNameAnnotationInterface.badlyNamedMethod_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def TestNameAnnotationInterface.badlyNamedMethod_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : TestNameAnnotationInterface.badlyNamedMethod_Results.Builder := { struct := sb }
 
 
 structure TestImpliedFirstField.Reader where
@@ -1947,6 +3772,23 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.DeepNes
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod request: {e}")
+  return (reader, payload.capTable)
+def callResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callMethod payload
+  callResponseOfPayload response
+def callCallTypedM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev callHandler := Handler
@@ -1971,6 +3813,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  call : callTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod (fun target payload => do
+    let (request, requestCaps) ← callRequestOfPayload payload
+    server.call target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestGenerics.Inner2.DeepNest.DeepNestInterface
 abbrev TestGenerics.Interface := Capnp.Rpc.Client
 
@@ -1984,6 +3849,23 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface) (pa
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod request: {e}")
+  return (reader, payload.capTable)
+def callResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callMethod payload
+  callResponseOfPayload response
+def callCallTypedM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev callHandler := Handler
@@ -2008,6 +3890,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  call : callTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod (fun target payload => do
+    let (request, requestCaps) ← callRequestOfPayload payload
+    server.call target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestGenerics.Interface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestGenerics.Interface
 opaque ann : Capnp.AnyPointer
 abbrev TestImplicitMethodParams := Capnp.Rpc.Client
@@ -2022,6 +3927,23 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParams) (
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod request: {e}")
+  return (reader, payload.capTable)
+def callResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callMethod payload
+  callResponseOfPayload response
+def callCallTypedM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev callHandler := Handler
@@ -2046,6 +3968,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  call : callTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod (fun target payload => do
+    let (request, requestCaps) ← callRequestOfPayload payload
+    server.call target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestImplicitMethodParams := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestImplicitMethodParams
 abbrev TestImplicitMethodParamsInGeneric := Capnp.Rpc.Client
 
@@ -2059,6 +4004,23 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParamsInG
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod request: {e}")
+  return (reader, payload.capTable)
+def callResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callMethod payload
+  callResponseOfPayload response
+def callCallTypedM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev callHandler := Handler
@@ -2083,6 +4045,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  call : callTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod (fun target payload => do
+    let (request, requestCaps) ← callRequestOfPayload payload
+    server.call target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestImplicitMethodParamsInGeneric
 abbrev TestInterface := Capnp.Rpc.Client
 
@@ -2096,6 +4081,23 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod request: {e}")
+  return (reader, payload.capTable)
+def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod response: {e}")
+  return (reader, payload.capTable)
+def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target fooMethod payload
+  fooResponseOfPayload response
+def callFooTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
@@ -2103,6 +4105,23 @@ def callBar (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target barMethod payload
 def callBarM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target barMethod payload
+abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid barMethod request: {e}")
+  return (reader, payload.capTable)
+def barResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid barMethod response: {e}")
+  return (reader, payload.capTable)
+def callBarTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target barMethod payload
+  barResponseOfPayload response
+def callBarTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target barMethod payload
+  barResponseOfPayload response
 
 def bazMethodId : UInt16 := UInt16.ofNat 2
 def bazMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := bazMethodId }
@@ -2110,6 +4129,23 @@ def callBaz (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target bazMethod payload
 def callBazM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target bazMethod payload
+abbrev bazTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def bazRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid bazMethod request: {e}")
+  return (reader, payload.capTable)
+def bazResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid bazMethod response: {e}")
+  return (reader, payload.capTable)
+def callBazTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target bazMethod payload
+  bazResponseOfPayload response
+def callBazTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target bazMethod payload
+  bazResponseOfPayload response
 
 def getTestPipelineMethodId : UInt16 := UInt16.ofNat 3
 def getTestPipelineMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestPipelineMethodId }
@@ -2117,6 +4153,23 @@ def callGetTestPipeline (backend : Capnp.Rpc.Backend) (target : TestInterface) (
   Capnp.Rpc.call backend target getTestPipelineMethod payload
 def callGetTestPipelineM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
+abbrev getTestPipelineTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getTestPipelineRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestPipelineMethod request: {e}")
+  return (reader, payload.capTable)
+def getTestPipelineResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestPipelineMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetTestPipelineTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getTestPipelineMethod payload
+  getTestPipelineResponseOfPayload response
+def callGetTestPipelineTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
+  getTestPipelineResponseOfPayload response
 
 def getTestTailCalleeMethodId : UInt16 := UInt16.ofNat 4
 def getTestTailCalleeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCalleeMethodId }
@@ -2124,6 +4177,23 @@ def callGetTestTailCallee (backend : Capnp.Rpc.Backend) (target : TestInterface)
   Capnp.Rpc.call backend target getTestTailCalleeMethod payload
 def callGetTestTailCalleeM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
+abbrev getTestTailCalleeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getTestTailCalleeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestTailCalleeMethod request: {e}")
+  return (reader, payload.capTable)
+def getTestTailCalleeResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestTailCalleeMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetTestTailCalleeTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getTestTailCalleeMethod payload
+  getTestTailCalleeResponseOfPayload response
+def callGetTestTailCalleeTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
+  getTestTailCalleeResponseOfPayload response
 
 def getTestTailCallerMethodId : UInt16 := UInt16.ofNat 5
 def getTestTailCallerMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCallerMethodId }
@@ -2131,6 +4201,23 @@ def callGetTestTailCaller (backend : Capnp.Rpc.Backend) (target : TestInterface)
   Capnp.Rpc.call backend target getTestTailCallerMethod payload
 def callGetTestTailCallerM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
+abbrev getTestTailCallerTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getTestTailCallerRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestTailCallerMethod request: {e}")
+  return (reader, payload.capTable)
+def getTestTailCallerResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestTailCallerMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetTestTailCallerTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getTestTailCallerMethod payload
+  getTestTailCallerResponseOfPayload response
+def callGetTestTailCallerTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
+  getTestTailCallerResponseOfPayload response
 
 def getTestMoreStuffMethodId : UInt16 := UInt16.ofNat 6
 def getTestMoreStuffMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestMoreStuffMethodId }
@@ -2138,6 +4225,23 @@ def callGetTestMoreStuff (backend : Capnp.Rpc.Backend) (target : TestInterface) 
   Capnp.Rpc.call backend target getTestMoreStuffMethod payload
 def callGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
+abbrev getTestMoreStuffTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getTestMoreStuffRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestMoreStuffMethod request: {e}")
+  return (reader, payload.capTable)
+def getTestMoreStuffResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getTestMoreStuffMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetTestMoreStuffTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getTestMoreStuffMethod payload
+  getTestMoreStuffResponseOfPayload response
+def callGetTestMoreStuffTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
+  getTestMoreStuffResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler
@@ -2180,6 +4284,59 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestInterface := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  foo : fooTypedHandler
+  bar : barTypedHandler
+  baz : bazTypedHandler
+  getTestPipeline : getTestPipelineTypedHandler
+  getTestTailCallee : getTestTailCalleeTypedHandler
+  getTestTailCaller : getTestTailCallerTypedHandler
+  getTestMoreStuff : getTestMoreStuffTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod (fun target payload => do
+    let (request, requestCaps) ← fooRequestOfPayload payload
+    server.foo target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d barMethod (fun target payload => do
+    let (request, requestCaps) ← barRequestOfPayload payload
+    server.bar target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d bazMethod (fun target payload => do
+    let (request, requestCaps) ← bazRequestOfPayload payload
+    server.baz target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getTestPipelineMethod (fun target payload => do
+    let (request, requestCaps) ← getTestPipelineRequestOfPayload payload
+    server.getTestPipeline target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getTestTailCalleeMethod (fun target payload => do
+    let (request, requestCaps) ← getTestTailCalleeRequestOfPayload payload
+    server.getTestTailCallee target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getTestTailCallerMethod (fun target payload => do
+    let (request, requestCaps) ← getTestTailCallerRequestOfPayload payload
+    server.getTestTailCaller target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getTestMoreStuffMethod (fun target payload => do
+    let (request, requestCaps) ← getTestMoreStuffRequestOfPayload payload
+    server.getTestMoreStuff target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestInterface
 abbrev TestExtends := Capnp.Rpc.Client
 
@@ -2193,6 +4350,23 @@ def callQux (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capn
   Capnp.Rpc.call backend target quxMethod payload
 def callQuxM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target quxMethod payload
+abbrev quxTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def quxRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid quxMethod request: {e}")
+  return (reader, payload.capTable)
+def quxResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid quxMethod response: {e}")
+  return (reader, payload.capTable)
+def callQuxTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target quxMethod payload
+  quxResponseOfPayload response
+def callQuxTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target quxMethod payload
+  quxResponseOfPayload response
 
 def corgeMethodId : UInt16 := UInt16.ofNat 1
 def corgeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := corgeMethodId }
@@ -2200,6 +4374,23 @@ def callCorge (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Ca
   Capnp.Rpc.call backend target corgeMethod payload
 def callCorgeM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target corgeMethod payload
+abbrev corgeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def corgeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestAllTypes.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid corgeMethod request: {e}")
+  return (reader, payload.capTable)
+def corgeResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid corgeMethod response: {e}")
+  return (reader, payload.capTable)
+def callCorgeTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target corgeMethod payload
+  corgeResponseOfPayload response
+def callCorgeTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target corgeMethod payload
+  corgeResponseOfPayload response
 
 def graultMethodId : UInt16 := UInt16.ofNat 2
 def graultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := graultMethodId }
@@ -2207,6 +4398,23 @@ def callGrault (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : C
   Capnp.Rpc.call backend target graultMethod payload
 def callGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target graultMethod payload
+abbrev graultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def graultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid graultMethod request: {e}")
+  return (reader, payload.capTable)
+def graultResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestAllTypes.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid graultMethod response: {e}")
+  return (reader, payload.capTable)
+def callGraultTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target graultMethod payload
+  graultResponseOfPayload response
+def callGraultTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target graultMethod payload
+  graultResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev quxHandler := Handler
@@ -2237,6 +4445,39 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  qux : quxTypedHandler
+  corge : corgeTypedHandler
+  grault : graultTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d quxMethod (fun target payload => do
+    let (request, requestCaps) ← quxRequestOfPayload payload
+    server.qux target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d corgeMethod (fun target payload => do
+    let (request, requestCaps) ← corgeRequestOfPayload payload
+    server.corge target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d graultMethod (fun target payload => do
+    let (request, requestCaps) ← graultRequestOfPayload payload
+    server.grault target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestExtends := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestExtends
 abbrev TestExtends2 := Capnp.Rpc.Client
 
@@ -2266,6 +4507,26 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends2 := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  unit : Unit := ()
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestExtends2 := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends2 := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestExtends2
 abbrev TestPipeline := Capnp.Rpc.Client
 
@@ -2279,6 +4540,23 @@ def callGetCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : 
   Capnp.Rpc.call backend target getCapMethod payload
 def callGetCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCapMethod payload
+abbrev getCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCapMethod request: {e}")
+  return (reader, payload.capTable)
+def getCapResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCapMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetCapTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getCapMethod payload
+  getCapResponseOfPayload response
+def callGetCapTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getCapMethod payload
+  getCapResponseOfPayload response
 
 def testPointersMethodId : UInt16 := UInt16.ofNat 1
 def testPointersMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := testPointersMethodId }
@@ -2286,6 +4564,23 @@ def callTestPointers (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payl
   Capnp.Rpc.call backend target testPointersMethod payload
 def callTestPointersM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target testPointersMethod payload
+abbrev testPointersTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def testPointersRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid testPointersMethod request: {e}")
+  return (reader, payload.capTable)
+def testPointersResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid testPointersMethod response: {e}")
+  return (reader, payload.capTable)
+def callTestPointersTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target testPointersMethod payload
+  testPointersResponseOfPayload response
+def callTestPointersTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target testPointersMethod payload
+  testPointersResponseOfPayload response
 
 def getAnyCapMethodId : UInt16 := UInt16.ofNat 2
 def getAnyCapMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getAnyCapMethodId }
@@ -2293,6 +4588,23 @@ def callGetAnyCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload
   Capnp.Rpc.call backend target getAnyCapMethod payload
 def callGetAnyCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
+abbrev getAnyCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getAnyCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getAnyCapMethod request: {e}")
+  return (reader, payload.capTable)
+def getAnyCapResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getAnyCapMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetAnyCapTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getAnyCapMethod payload
+  getAnyCapResponseOfPayload response
+def callGetAnyCapTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
+  getAnyCapResponseOfPayload response
 
 def getCapPipelineOnlyMethodId : UInt16 := UInt16.ofNat 3
 def getCapPipelineOnlyMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCapPipelineOnlyMethodId }
@@ -2300,6 +4612,23 @@ def callGetCapPipelineOnly (backend : Capnp.Rpc.Backend) (target : TestPipeline)
   Capnp.Rpc.call backend target getCapPipelineOnlyMethod payload
 def callGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
+abbrev getCapPipelineOnlyTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getCapPipelineOnlyRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCapPipelineOnlyMethod request: {e}")
+  return (reader, payload.capTable)
+def getCapPipelineOnlyResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCapPipelineOnlyMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetCapPipelineOnlyTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getCapPipelineOnlyMethod payload
+  getCapPipelineOnlyResponseOfPayload response
+def callGetCapPipelineOnlyTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
+  getCapPipelineOnlyResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev getCapHandler := Handler
@@ -2333,6 +4662,44 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestPipeline := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  getCap : getCapTypedHandler
+  testPointers : testPointersTypedHandler
+  getAnyCap : getAnyCapTypedHandler
+  getCapPipelineOnly : getCapPipelineOnlyTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCapMethod (fun target payload => do
+    let (request, requestCaps) ← getCapRequestOfPayload payload
+    server.getCap target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d testPointersMethod (fun target payload => do
+    let (request, requestCaps) ← testPointersRequestOfPayload payload
+    server.testPointers target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getAnyCapMethod (fun target payload => do
+    let (request, requestCaps) ← getAnyCapRequestOfPayload payload
+    server.getAnyCap target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getCapPipelineOnlyMethod (fun target payload => do
+    let (request, requestCaps) ← getCapPipelineOnlyRequestOfPayload payload
+    server.getCapPipelineOnly target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestPipeline := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestPipeline := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestPipeline
 abbrev TestCallOrder := Capnp.Rpc.Client
 
@@ -2346,6 +4713,23 @@ def callGetCallSequence (backend : Capnp.Rpc.Backend) (target : TestCallOrder) (
   Capnp.Rpc.call backend target getCallSequenceMethod payload
 def callGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+abbrev getCallSequenceTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getCallSequenceRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCallSequenceMethod request: {e}")
+  return (reader, payload.capTable)
+def getCallSequenceResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCallSequenceMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetCallSequenceTyped (backend : Capnp.Rpc.Backend) (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getCallSequenceMethod payload
+  getCallSequenceResponseOfPayload response
+def callGetCallSequenceTypedM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+  getCallSequenceResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev getCallSequenceHandler := Handler
@@ -2370,6 +4754,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestCallOrder := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  getCallSequence : getCallSequenceTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCallSequenceMethod (fun target payload => do
+    let (request, requestCaps) ← getCallSequenceRequestOfPayload payload
+    server.getCallSequence target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestCallOrder := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestCallOrder := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestCallOrder
 abbrev TestTailCallee := Capnp.Rpc.Client
 
@@ -2386,6 +4793,23 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payload : C
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod request: {e}")
+  return (reader, payload.capTable)
+def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod response: {e}")
+  return (reader, payload.capTable)
+def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target fooMethod payload
+  fooResponseOfPayload response
+def callFooTypedM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler
@@ -2410,6 +4834,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCallee := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  foo : fooTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod (fun target payload => do
+    let (request, requestCaps) ← fooRequestOfPayload payload
+    server.foo target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestTailCallee := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCallee := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestTailCallee
 abbrev TestTailCaller := Capnp.Rpc.Client
 
@@ -2423,6 +4870,23 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payload : C
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod request: {e}")
+  return (reader, payload.capTable)
+def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod response: {e}")
+  return (reader, payload.capTable)
+def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target fooMethod payload
+  fooResponseOfPayload response
+def callFooTypedM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler
@@ -2447,6 +4911,29 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCaller := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  foo : fooTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod (fun target payload => do
+    let (request, requestCaps) ← fooRequestOfPayload payload
+    server.foo target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestTailCaller := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCaller := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestTailCaller
 abbrev TestStreaming := Capnp.Rpc.Client
 
@@ -2463,6 +4950,23 @@ def callDoStreamI (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payloa
   Capnp.Rpc.call backend target doStreamIMethod payload
 def callDoStreamIM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
+abbrev doStreamITypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def doStreamIRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid doStreamIMethod request: {e}")
+  return (reader, payload.capTable)
+def doStreamIResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.capnp.stream.StreamResult.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid doStreamIMethod response: {e}")
+  return (reader, payload.capTable)
+def callDoStreamITyped (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target doStreamIMethod payload
+  doStreamIResponseOfPayload response
+def callDoStreamITypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
+  doStreamIResponseOfPayload response
 
 def doStreamJMethodId : UInt16 := UInt16.ofNat 1
 def doStreamJMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := doStreamJMethodId }
@@ -2470,6 +4974,23 @@ def callDoStreamJ (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payloa
   Capnp.Rpc.call backend target doStreamJMethod payload
 def callDoStreamJM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
+abbrev doStreamJTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def doStreamJRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid doStreamJMethod request: {e}")
+  return (reader, payload.capTable)
+def doStreamJResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.capnp.stream.StreamResult.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid doStreamJMethod response: {e}")
+  return (reader, payload.capTable)
+def callDoStreamJTyped (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target doStreamJMethod payload
+  doStreamJResponseOfPayload response
+def callDoStreamJTypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
+  doStreamJResponseOfPayload response
 
 def finishStreamMethodId : UInt16 := UInt16.ofNat 2
 def finishStreamMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := finishStreamMethodId }
@@ -2477,6 +4998,23 @@ def callFinishStream (backend : Capnp.Rpc.Backend) (target : TestStreaming) (pay
   Capnp.Rpc.call backend target finishStreamMethod payload
 def callFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
+abbrev finishStreamTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def finishStreamRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid finishStreamMethod request: {e}")
+  return (reader, payload.capTable)
+def finishStreamResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid finishStreamMethod response: {e}")
+  return (reader, payload.capTable)
+def callFinishStreamTyped (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target finishStreamMethod payload
+  finishStreamResponseOfPayload response
+def callFinishStreamTypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
+  finishStreamResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev doStreamIHandler := Handler
@@ -2507,6 +5045,39 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestStreaming := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  doStreamI : doStreamITypedHandler
+  doStreamJ : doStreamJTypedHandler
+  finishStream : finishStreamTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d doStreamIMethod (fun target payload => do
+    let (request, requestCaps) ← doStreamIRequestOfPayload payload
+    server.doStreamI target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d doStreamJMethod (fun target payload => do
+    let (request, requestCaps) ← doStreamJRequestOfPayload payload
+    server.doStreamJ target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d finishStreamMethod (fun target payload => do
+    let (request, requestCaps) ← finishStreamRequestOfPayload payload
+    server.finishStream target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestStreaming := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestStreaming := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestStreaming
 abbrev TestHandle := Capnp.Rpc.Client
 
@@ -2536,6 +5107,26 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestHandle := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  unit : Unit := ()
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestHandle := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestHandle := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestHandle
 abbrev TestMoreStuff := Capnp.Rpc.Client
 
@@ -2549,6 +5140,23 @@ def callCallFoo (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target callFooMethod payload
 def callCallFooM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callFooMethod payload
+abbrev callFooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callFooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callFooMethod request: {e}")
+  return (reader, payload.capTable)
+def callFooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callFooMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallFooTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callFooMethod payload
+  callFooResponseOfPayload response
+def callCallFooTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callFooMethod payload
+  callFooResponseOfPayload response
 
 def callFooWhenResolvedMethodId : UInt16 := UInt16.ofNat 1
 def callFooWhenResolvedMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callFooWhenResolvedMethodId }
@@ -2556,6 +5164,23 @@ def callCallFooWhenResolved (backend : Capnp.Rpc.Backend) (target : TestMoreStuf
   Capnp.Rpc.call backend target callFooWhenResolvedMethod payload
 def callCallFooWhenResolvedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
+abbrev callFooWhenResolvedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callFooWhenResolvedRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callFooWhenResolvedMethod request: {e}")
+  return (reader, payload.capTable)
+def callFooWhenResolvedResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callFooWhenResolvedMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallFooWhenResolvedTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callFooWhenResolvedMethod payload
+  callFooWhenResolvedResponseOfPayload response
+def callCallFooWhenResolvedTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
+  callFooWhenResolvedResponseOfPayload response
 
 def neverReturnMethodId : UInt16 := UInt16.ofNat 2
 def neverReturnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := neverReturnMethodId }
@@ -2563,6 +5188,23 @@ def callNeverReturn (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payl
   Capnp.Rpc.call backend target neverReturnMethod payload
 def callNeverReturnM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
+abbrev neverReturnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def neverReturnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid neverReturnMethod request: {e}")
+  return (reader, payload.capTable)
+def neverReturnResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid neverReturnMethod response: {e}")
+  return (reader, payload.capTable)
+def callNeverReturnTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target neverReturnMethod payload
+  neverReturnResponseOfPayload response
+def callNeverReturnTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
+  neverReturnResponseOfPayload response
 
 def TestMoreStuff.neverReturnMethod._ann_allowCancellation : Unit := ()
 
@@ -2572,6 +5214,23 @@ def callHold (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : C
   Capnp.Rpc.call backend target holdMethod payload
 def callHoldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target holdMethod payload
+abbrev holdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def holdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid holdMethod request: {e}")
+  return (reader, payload.capTable)
+def holdResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid holdMethod response: {e}")
+  return (reader, payload.capTable)
+def callHoldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target holdMethod payload
+  holdResponseOfPayload response
+def callHoldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target holdMethod payload
+  holdResponseOfPayload response
 
 def callHeldMethodId : UInt16 := UInt16.ofNat 4
 def callHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callHeldMethodId }
@@ -2579,6 +5238,23 @@ def callCallHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload
   Capnp.Rpc.call backend target callHeldMethod payload
 def callCallHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callHeldMethod payload
+abbrev callHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callHeldMethod request: {e}")
+  return (reader, payload.capTable)
+def callHeldResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callHeldMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallHeldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callHeldMethod payload
+  callHeldResponseOfPayload response
+def callCallHeldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callHeldMethod payload
+  callHeldResponseOfPayload response
 
 def getHeldMethodId : UInt16 := UInt16.ofNat 5
 def getHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHeldMethodId }
@@ -2586,6 +5262,23 @@ def callGetHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target getHeldMethod payload
 def callGetHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getHeldMethod payload
+abbrev getHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getHeldMethod request: {e}")
+  return (reader, payload.capTable)
+def getHeldResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getHeldMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetHeldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getHeldMethod payload
+  getHeldResponseOfPayload response
+def callGetHeldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getHeldMethod payload
+  getHeldResponseOfPayload response
 
 def echoMethodId : UInt16 := UInt16.ofNat 6
 def echoMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := echoMethodId }
@@ -2593,6 +5286,23 @@ def callEcho (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : C
   Capnp.Rpc.call backend target echoMethod payload
 def callEchoM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target echoMethod payload
+abbrev echoTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def echoRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid echoMethod request: {e}")
+  return (reader, payload.capTable)
+def echoResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid echoMethod response: {e}")
+  return (reader, payload.capTable)
+def callEchoTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target echoMethod payload
+  echoResponseOfPayload response
+def callEchoTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target echoMethod payload
+  echoResponseOfPayload response
 
 def expectCancelMethodId : UInt16 := UInt16.ofNat 7
 def expectCancelMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := expectCancelMethodId }
@@ -2600,6 +5310,23 @@ def callExpectCancel (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pay
   Capnp.Rpc.call backend target expectCancelMethod payload
 def callExpectCancelM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
+abbrev expectCancelTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def expectCancelRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid expectCancelMethod request: {e}")
+  return (reader, payload.capTable)
+def expectCancelResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid expectCancelMethod response: {e}")
+  return (reader, payload.capTable)
+def callExpectCancelTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target expectCancelMethod payload
+  expectCancelResponseOfPayload response
+def callExpectCancelTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
+  expectCancelResponseOfPayload response
 
 def TestMoreStuff.expectCancelMethod._ann_allowCancellation : Unit := ()
 
@@ -2609,6 +5336,23 @@ def callMethodWithDefaults (backend : Capnp.Rpc.Backend) (target : TestMoreStuff
   Capnp.Rpc.call backend target methodWithDefaultsMethod payload
 def callMethodWithDefaultsM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
+abbrev methodWithDefaultsTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def methodWithDefaultsRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid methodWithDefaultsMethod request: {e}")
+  return (reader, payload.capTable)
+def methodWithDefaultsResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid methodWithDefaultsMethod response: {e}")
+  return (reader, payload.capTable)
+def callMethodWithDefaultsTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target methodWithDefaultsMethod payload
+  methodWithDefaultsResponseOfPayload response
+def callMethodWithDefaultsTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
+  methodWithDefaultsResponseOfPayload response
 
 def getHandleMethodId : UInt16 := UInt16.ofNat 9
 def getHandleMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHandleMethodId }
@@ -2616,6 +5360,23 @@ def callGetHandle (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
   Capnp.Rpc.call backend target getHandleMethod payload
 def callGetHandleM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getHandleMethod payload
+abbrev getHandleTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getHandleRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getHandleMethod request: {e}")
+  return (reader, payload.capTable)
+def getHandleResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getHandleMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetHandleTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getHandleMethod payload
+  getHandleResponseOfPayload response
+def callGetHandleTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getHandleMethod payload
+  getHandleResponseOfPayload response
 
 def getNullMethodId : UInt16 := UInt16.ofNat 10
 def getNullMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getNullMethodId }
@@ -2623,6 +5384,23 @@ def callGetNull (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target getNullMethod payload
 def callGetNullM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getNullMethod payload
+abbrev getNullTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getNullRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getNullMethod request: {e}")
+  return (reader, payload.capTable)
+def getNullResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getNullMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetNullTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getNullMethod payload
+  getNullResponseOfPayload response
+def callGetNullTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getNullMethod payload
+  getNullResponseOfPayload response
 
 def getEnormousStringMethodId : UInt16 := UInt16.ofNat 11
 def getEnormousStringMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getEnormousStringMethodId }
@@ -2630,6 +5408,23 @@ def callGetEnormousString (backend : Capnp.Rpc.Backend) (target : TestMoreStuff)
   Capnp.Rpc.call backend target getEnormousStringMethod payload
 def callGetEnormousStringM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
+abbrev getEnormousStringTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getEnormousStringRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getEnormousStringMethod request: {e}")
+  return (reader, payload.capTable)
+def getEnormousStringResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getEnormousStringMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetEnormousStringTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getEnormousStringMethod payload
+  getEnormousStringResponseOfPayload response
+def callGetEnormousStringTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
+  getEnormousStringResponseOfPayload response
 
 def methodWithNullDefaultMethodId : UInt16 := UInt16.ofNat 12
 def methodWithNullDefaultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := methodWithNullDefaultMethodId }
@@ -2637,6 +5432,23 @@ def callMethodWithNullDefault (backend : Capnp.Rpc.Backend) (target : TestMoreSt
   Capnp.Rpc.call backend target methodWithNullDefaultMethod payload
 def callMethodWithNullDefaultM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
+abbrev methodWithNullDefaultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def methodWithNullDefaultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid methodWithNullDefaultMethod request: {e}")
+  return (reader, payload.capTable)
+def methodWithNullDefaultResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid methodWithNullDefaultMethod response: {e}")
+  return (reader, payload.capTable)
+def callMethodWithNullDefaultTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target methodWithNullDefaultMethod payload
+  methodWithNullDefaultResponseOfPayload response
+def callMethodWithNullDefaultTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
+  methodWithNullDefaultResponseOfPayload response
 
 def writeToFdMethodId : UInt16 := UInt16.ofNat 13
 def writeToFdMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := writeToFdMethodId }
@@ -2644,6 +5456,23 @@ def callWriteToFd (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
   Capnp.Rpc.call backend target writeToFdMethod payload
 def callWriteToFdM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
+abbrev writeToFdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def writeToFdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid writeToFdMethod request: {e}")
+  return (reader, payload.capTable)
+def writeToFdResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid writeToFdMethod response: {e}")
+  return (reader, payload.capTable)
+def callWriteToFdTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target writeToFdMethod payload
+  writeToFdResponseOfPayload response
+def callWriteToFdTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
+  writeToFdResponseOfPayload response
 
 def throwExceptionMethodId : UInt16 := UInt16.ofNat 14
 def throwExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionMethodId }
@@ -2651,6 +5480,23 @@ def callThrowException (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (p
   Capnp.Rpc.call backend target throwExceptionMethod payload
 def callThrowExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
+abbrev throwExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def throwExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwExceptionMethod request: {e}")
+  return (reader, payload.capTable)
+def throwExceptionResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwExceptionMethod response: {e}")
+  return (reader, payload.capTable)
+def callThrowExceptionTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target throwExceptionMethod payload
+  throwExceptionResponseOfPayload response
+def callThrowExceptionTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
+  throwExceptionResponseOfPayload response
 
 def throwRemoteExceptionMethodId : UInt16 := UInt16.ofNat 15
 def throwRemoteExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwRemoteExceptionMethodId }
@@ -2658,6 +5504,23 @@ def callThrowRemoteException (backend : Capnp.Rpc.Backend) (target : TestMoreStu
   Capnp.Rpc.call backend target throwRemoteExceptionMethod payload
 def callThrowRemoteExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
+abbrev throwRemoteExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def throwRemoteExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwRemoteExceptionMethod request: {e}")
+  return (reader, payload.capTable)
+def throwRemoteExceptionResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwRemoteExceptionMethod response: {e}")
+  return (reader, payload.capTable)
+def callThrowRemoteExceptionTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target throwRemoteExceptionMethod payload
+  throwRemoteExceptionResponseOfPayload response
+def callThrowRemoteExceptionTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
+  throwRemoteExceptionResponseOfPayload response
 
 def throwExceptionWithDetailMethodId : UInt16 := UInt16.ofNat 16
 def throwExceptionWithDetailMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionWithDetailMethodId }
@@ -2665,6 +5528,23 @@ def callThrowExceptionWithDetail (backend : Capnp.Rpc.Backend) (target : TestMor
   Capnp.Rpc.call backend target throwExceptionWithDetailMethod payload
 def callThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
+abbrev throwExceptionWithDetailTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def throwExceptionWithDetailRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwExceptionWithDetailMethod request: {e}")
+  return (reader, payload.capTable)
+def throwExceptionWithDetailResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid throwExceptionWithDetailMethod response: {e}")
+  return (reader, payload.capTable)
+def callThrowExceptionWithDetailTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target throwExceptionWithDetailMethod payload
+  throwExceptionWithDetailResponseOfPayload response
+def callThrowExceptionWithDetailTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
+  throwExceptionWithDetailResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev callFooHandler := Handler
@@ -2737,6 +5617,109 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMoreStuff := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  callFoo : callFooTypedHandler
+  callFooWhenResolved : callFooWhenResolvedTypedHandler
+  neverReturn : neverReturnTypedHandler
+  hold : holdTypedHandler
+  callHeld : callHeldTypedHandler
+  getHeld : getHeldTypedHandler
+  echo : echoTypedHandler
+  expectCancel : expectCancelTypedHandler
+  methodWithDefaults : methodWithDefaultsTypedHandler
+  getHandle : getHandleTypedHandler
+  getNull : getNullTypedHandler
+  getEnormousString : getEnormousStringTypedHandler
+  methodWithNullDefault : methodWithNullDefaultTypedHandler
+  writeToFd : writeToFdTypedHandler
+  throwException : throwExceptionTypedHandler
+  throwRemoteException : throwRemoteExceptionTypedHandler
+  throwExceptionWithDetail : throwExceptionWithDetailTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callFooMethod (fun target payload => do
+    let (request, requestCaps) ← callFooRequestOfPayload payload
+    server.callFoo target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d callFooWhenResolvedMethod (fun target payload => do
+    let (request, requestCaps) ← callFooWhenResolvedRequestOfPayload payload
+    server.callFooWhenResolved target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d neverReturnMethod (fun target payload => do
+    let (request, requestCaps) ← neverReturnRequestOfPayload payload
+    server.neverReturn target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d holdMethod (fun target payload => do
+    let (request, requestCaps) ← holdRequestOfPayload payload
+    server.hold target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d callHeldMethod (fun target payload => do
+    let (request, requestCaps) ← callHeldRequestOfPayload payload
+    server.callHeld target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getHeldMethod (fun target payload => do
+    let (request, requestCaps) ← getHeldRequestOfPayload payload
+    server.getHeld target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d echoMethod (fun target payload => do
+    let (request, requestCaps) ← echoRequestOfPayload payload
+    server.echo target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d expectCancelMethod (fun target payload => do
+    let (request, requestCaps) ← expectCancelRequestOfPayload payload
+    server.expectCancel target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d methodWithDefaultsMethod (fun target payload => do
+    let (request, requestCaps) ← methodWithDefaultsRequestOfPayload payload
+    server.methodWithDefaults target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getHandleMethod (fun target payload => do
+    let (request, requestCaps) ← getHandleRequestOfPayload payload
+    server.getHandle target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getNullMethod (fun target payload => do
+    let (request, requestCaps) ← getNullRequestOfPayload payload
+    server.getNull target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d getEnormousStringMethod (fun target payload => do
+    let (request, requestCaps) ← getEnormousStringRequestOfPayload payload
+    server.getEnormousString target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d methodWithNullDefaultMethod (fun target payload => do
+    let (request, requestCaps) ← methodWithNullDefaultRequestOfPayload payload
+    server.methodWithNullDefault target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d writeToFdMethod (fun target payload => do
+    let (request, requestCaps) ← writeToFdRequestOfPayload payload
+    server.writeToFd target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d throwExceptionMethod (fun target payload => do
+    let (request, requestCaps) ← throwExceptionRequestOfPayload payload
+    server.throwException target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d throwRemoteExceptionMethod (fun target payload => do
+    let (request, requestCaps) ← throwRemoteExceptionRequestOfPayload payload
+    server.throwRemoteException target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d throwExceptionWithDetailMethod (fun target payload => do
+    let (request, requestCaps) ← throwExceptionWithDetailRequestOfPayload payload
+    server.throwExceptionWithDetail target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMoreStuff := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMoreStuff := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestMoreStuff
 abbrev TestMembrane := Capnp.Rpc.Client
 
@@ -2750,6 +5733,23 @@ def callMakeThing (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload
   Capnp.Rpc.call backend target makeThingMethod payload
 def callMakeThingM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target makeThingMethod payload
+abbrev makeThingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def makeThingRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid makeThingMethod request: {e}")
+  return (reader, payload.capTable)
+def makeThingResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid makeThingMethod response: {e}")
+  return (reader, payload.capTable)
+def callMakeThingTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target makeThingMethod payload
+  makeThingResponseOfPayload response
+def callMakeThingTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target makeThingMethod payload
+  makeThingResponseOfPayload response
 
 def callPassThroughMethodId : UInt16 := UInt16.ofNat 1
 def callPassThroughMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callPassThroughMethodId }
@@ -2757,6 +5757,23 @@ def callCallPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane) (p
   Capnp.Rpc.call backend target callPassThroughMethod payload
 def callCallPassThroughM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
+abbrev callPassThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callPassThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callPassThroughMethod request: {e}")
+  return (reader, payload.capTable)
+def callPassThroughResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callPassThroughMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallPassThroughTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callPassThroughMethod payload
+  callPassThroughResponseOfPayload response
+def callCallPassThroughTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
+  callPassThroughResponseOfPayload response
 
 def callInterceptMethodId : UInt16 := UInt16.ofNat 2
 def callInterceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callInterceptMethodId }
@@ -2764,6 +5781,23 @@ def callCallIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane) (pay
   Capnp.Rpc.call backend target callInterceptMethod payload
 def callCallInterceptM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
+abbrev callInterceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def callInterceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callInterceptMethod request: {e}")
+  return (reader, payload.capTable)
+def callInterceptResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid callInterceptMethod response: {e}")
+  return (reader, payload.capTable)
+def callCallInterceptTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target callInterceptMethod payload
+  callInterceptResponseOfPayload response
+def callCallInterceptTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
+  callInterceptResponseOfPayload response
 
 def loopbackMethodId : UInt16 := UInt16.ofNat 3
 def loopbackMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := loopbackMethodId }
@@ -2771,6 +5805,23 @@ def callLoopback (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload 
   Capnp.Rpc.call backend target loopbackMethod payload
 def callLoopbackM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target loopbackMethod payload
+abbrev loopbackTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def loopbackRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid loopbackMethod request: {e}")
+  return (reader, payload.capTable)
+def loopbackResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid loopbackMethod response: {e}")
+  return (reader, payload.capTable)
+def callLoopbackTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target loopbackMethod payload
+  loopbackResponseOfPayload response
+def callLoopbackTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target loopbackMethod payload
+  loopbackResponseOfPayload response
 
 def waitForeverMethodId : UInt16 := UInt16.ofNat 4
 def waitForeverMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := waitForeverMethodId }
@@ -2778,6 +5829,23 @@ def callWaitForever (backend : Capnp.Rpc.Backend) (target : TestMembrane) (paylo
   Capnp.Rpc.call backend target waitForeverMethod payload
 def callWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
+abbrev waitForeverTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def waitForeverRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid waitForeverMethod request: {e}")
+  return (reader, payload.capTable)
+def waitForeverResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid waitForeverMethod response: {e}")
+  return (reader, payload.capTable)
+def callWaitForeverTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target waitForeverMethod payload
+  waitForeverResponseOfPayload response
+def callWaitForeverTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
+  waitForeverResponseOfPayload response
 
 def TestMembrane.waitForeverMethod._ann_allowCancellation : Unit := ()
 
@@ -2816,6 +5884,49 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  makeThing : makeThingTypedHandler
+  callPassThrough : callPassThroughTypedHandler
+  callIntercept : callInterceptTypedHandler
+  loopback : loopbackTypedHandler
+  waitForever : waitForeverTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d makeThingMethod (fun target payload => do
+    let (request, requestCaps) ← makeThingRequestOfPayload payload
+    server.makeThing target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d callPassThroughMethod (fun target payload => do
+    let (request, requestCaps) ← callPassThroughRequestOfPayload payload
+    server.callPassThrough target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d callInterceptMethod (fun target payload => do
+    let (request, requestCaps) ← callInterceptRequestOfPayload payload
+    server.callIntercept target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d loopbackMethod (fun target payload => do
+    let (request, requestCaps) ← loopbackRequestOfPayload payload
+    server.loopback target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d waitForeverMethod (fun target payload => do
+    let (request, requestCaps) ← waitForeverRequestOfPayload payload
+    server.waitForever target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMembrane := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestMembrane
 abbrev TestMembrane.Thing := Capnp.Rpc.Client
 
@@ -2829,6 +5940,23 @@ def callPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) 
   Capnp.Rpc.call backend target passThroughMethod payload
 def callPassThroughM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target passThroughMethod payload
+abbrev passThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def passThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid passThroughMethod request: {e}")
+  return (reader, payload.capTable)
+def passThroughResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid passThroughMethod response: {e}")
+  return (reader, payload.capTable)
+def callPassThroughTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target passThroughMethod payload
+  passThroughResponseOfPayload response
+def callPassThroughTypedM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target passThroughMethod payload
+  passThroughResponseOfPayload response
 
 def interceptMethodId : UInt16 := UInt16.ofNat 1
 def interceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := interceptMethodId }
@@ -2836,6 +5964,23 @@ def callIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (p
   Capnp.Rpc.call backend target interceptMethod payload
 def callInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target interceptMethod payload
+abbrev interceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def interceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid interceptMethod request: {e}")
+  return (reader, payload.capTable)
+def interceptResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid interceptMethod response: {e}")
+  return (reader, payload.capTable)
+def callInterceptTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target interceptMethod payload
+  interceptResponseOfPayload response
+def callInterceptTypedM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target interceptMethod payload
+  interceptResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev passThroughHandler := Handler
@@ -2863,6 +6008,34 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  passThrough : passThroughTypedHandler
+  intercept : interceptTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d passThroughMethod (fun target payload => do
+    let (request, requestCaps) ← passThroughRequestOfPayload payload
+    server.passThrough target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d interceptMethod (fun target payload => do
+    let (request, requestCaps) ← interceptRequestOfPayload payload
+    server.intercept target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMembrane.Thing := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestMembrane.Thing
 abbrev TestKeywordMethods := Capnp.Rpc.Client
 
@@ -2876,6 +6049,23 @@ def callDelete (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payl
   Capnp.Rpc.call backend target deleteMethod payload
 def callDeleteM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target deleteMethod payload
+abbrev deleteTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def deleteRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid deleteMethod request: {e}")
+  return (reader, payload.capTable)
+def deleteResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid deleteMethod response: {e}")
+  return (reader, payload.capTable)
+def callDeleteTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target deleteMethod payload
+  deleteResponseOfPayload response
+def callDeleteTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target deleteMethod payload
+  deleteResponseOfPayload response
 
 def _classMethodId : UInt16 := UInt16.ofNat 1
 def _classMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _classMethodId }
@@ -2883,6 +6073,23 @@ def call_class (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payl
   Capnp.Rpc.call backend target _classMethod payload
 def call_classM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target _classMethod payload
+abbrev _classTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def _classRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid _classMethod request: {e}")
+  return (reader, payload.capTable)
+def _classResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid _classMethod response: {e}")
+  return (reader, payload.capTable)
+def call_classTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target _classMethod payload
+  _classResponseOfPayload response
+def call_classTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target _classMethod payload
+  _classResponseOfPayload response
 
 def voidMethodId : UInt16 := UInt16.ofNat 2
 def voidMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := voidMethodId }
@@ -2890,6 +6097,23 @@ def callVoid (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payloa
   Capnp.Rpc.call backend target voidMethod payload
 def callVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target voidMethod payload
+abbrev voidTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def voidRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid voidMethod request: {e}")
+  return (reader, payload.capTable)
+def voidResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid voidMethod response: {e}")
+  return (reader, payload.capTable)
+def callVoidTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target voidMethod payload
+  voidResponseOfPayload response
+def callVoidTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target voidMethod payload
+  voidResponseOfPayload response
 
 def _returnMethodId : UInt16 := UInt16.ofNat 3
 def _returnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _returnMethodId }
@@ -2897,6 +6121,23 @@ def call_return (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (pay
   Capnp.Rpc.call backend target _returnMethod payload
 def call_returnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target _returnMethod payload
+abbrev _returnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def _returnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid _returnMethod request: {e}")
+  return (reader, payload.capTable)
+def _returnResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid _returnMethod response: {e}")
+  return (reader, payload.capTable)
+def call_returnTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target _returnMethod payload
+  _returnResponseOfPayload response
+def call_returnTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target _returnMethod payload
+  _returnResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev deleteHandler := Handler
@@ -2930,6 +6171,44 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  delete : deleteTypedHandler
+  _class : _classTypedHandler
+  void : voidTypedHandler
+  _return : _returnTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d deleteMethod (fun target payload => do
+    let (request, requestCaps) ← deleteRequestOfPayload payload
+    server.delete target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d _classMethod (fun target payload => do
+    let (request, requestCaps) ← _classRequestOfPayload payload
+    server._class target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d voidMethod (fun target payload => do
+    let (request, requestCaps) ← voidRequestOfPayload payload
+    server.void target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d _returnMethod (fun target payload => do
+    let (request, requestCaps) ← _returnRequestOfPayload payload
+    server._return target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestKeywordMethods := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end TestKeywordMethods
 abbrev TestAuthenticatedBootstrap := Capnp.Rpc.Client
 
@@ -2943,6 +6222,23 @@ def callGetCallerId (backend : Capnp.Rpc.Backend) (target : TestAuthenticatedBoo
   Capnp.Rpc.call backend target getCallerIdMethod payload
 def callGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+abbrev getCallerIdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def getCallerIdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCallerIdMethod request: {e}")
+  return (reader, payload.capTable)
+def getCallerIdResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid getCallerIdMethod response: {e}")
+  return (reader, payload.capTable)
+def callGetCallerIdTyped (backend : Capnp.Rpc.Backend) (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target getCallerIdMethod payload
+  getCallerIdResponseOfPayload response
+def callGetCallerIdTypedM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+  getCallerIdResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev getCallerIdHandler := Handler
@@ -2966,6 +6262,29 @@ def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
 def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
+structure TypedServer where
+  getCallerId : getCallerIdTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCallerIdMethod (fun target payload => do
+    let (request, requestCaps) ← getCallerIdRequestOfPayload payload
+    server.getCallerId target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestAuthenticatedBootstrap := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
 
 end TestAuthenticatedBootstrap
 inductive TestNameAnnotation.BadlyNamedEnum where
@@ -3031,6 +6350,23 @@ def callBadlyNamedMethod (backend : Capnp.Rpc.Backend) (target : TestNameAnnotat
   Capnp.Rpc.call backend target badlyNamedMethodMethod payload
 def callBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
+abbrev badlyNamedMethodTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def badlyNamedMethodRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid badlyNamedMethodMethod request: {e}")
+  return (reader, payload.capTable)
+def badlyNamedMethodResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid badlyNamedMethodMethod response: {e}")
+  return (reader, payload.capTable)
+def callBadlyNamedMethodTyped (backend : Capnp.Rpc.Backend) (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target badlyNamedMethodMethod payload
+  badlyNamedMethodResponseOfPayload response
+def callBadlyNamedMethodTypedM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
+  badlyNamedMethodResponseOfPayload response
 
 def TestNameAnnotationInterface.badlyNamedMethodMethod._ann_name : Capnp.Text := "renamedMethod"
 
@@ -3056,6 +6392,29 @@ def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
 def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
+structure TypedServer where
+  badlyNamedMethod : badlyNamedMethodTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d badlyNamedMethodMethod (fun target payload => do
+    let (request, requestCaps) ← badlyNamedMethodRequestOfPayload payload
+    server.badlyNamedMethod target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestNameAnnotationInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
 
 end TestNameAnnotationInterface
 inductive TestUnion.Union0Group.Which where
@@ -3778,6 +7137,17 @@ mutual
     qux : Capnp.AnyPointer
 
 
+  structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params where
+
+
+  structure TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results where
+
+
+  structure TestGenerics.Interface.call_Results where
+    qux : Capnp.AnyPointer
+    gen : TestGenerics
+
+
   structure TestGenerics.UseAliases where
     foo : Capnp.AnyPointer
     inner : TestGenerics.Inner
@@ -3797,6 +7167,16 @@ mutual
 
   structure TestGenericsWrapper2 where
     value : TestGenericsWrapper
+
+
+  structure TestImplicitMethodParams.call_Params where
+    foo : Capnp.AnyPointer
+    bar : Capnp.AnyPointer
+
+
+  structure TestImplicitMethodParamsInGeneric.call_Params where
+    foo : Capnp.AnyPointer
+    bar : Capnp.AnyPointer
 
 
   structure TestGenericsUnion where
@@ -3820,6 +7200,105 @@ mutual
     capList : Array Capnp.AnyPointer
 
 
+  structure TestInterface.foo_Params where
+    i : UInt32
+    j : Bool
+    expectedCallCount : Int32
+
+
+  structure TestInterface.foo_Results where
+    x : Capnp.Text
+
+
+  structure TestInterface.bar_Params where
+
+
+  structure TestInterface.bar_Results where
+
+
+  structure TestInterface.baz_Params where
+    s : TestAllTypes
+
+
+  structure TestInterface.baz_Results where
+
+
+  structure TestInterface.getTestPipeline_Params where
+
+
+  structure TestInterface.getTestPipeline_Results where
+    cap : TestPipeline
+
+
+  structure TestInterface.getTestTailCallee_Params where
+
+
+  structure TestInterface.getTestTailCallee_Results where
+    cap : TestTailCallee
+
+
+  structure TestInterface.getTestTailCaller_Params where
+
+
+  structure TestInterface.getTestTailCaller_Results where
+    cap : TestTailCaller
+
+
+  structure TestInterface.getTestMoreStuff_Params where
+
+
+  structure TestInterface.getTestMoreStuff_Results where
+    cap : TestMoreStuff
+
+
+  structure TestExtends.qux_Params where
+
+
+  structure TestExtends.qux_Results where
+
+
+  structure TestExtends.corge_Results where
+
+
+  structure TestExtends.grault_Params where
+
+
+  structure TestPipeline.getCap_Params where
+    n : UInt32
+    inCap : TestInterface
+
+
+  structure TestPipeline.getCap_Results where
+    s : Capnp.Text
+    outBox : TestPipeline.Box
+
+
+  structure TestPipeline.testPointers_Params where
+    cap : TestInterface
+    obj : Capnp.AnyPointer
+    list : Array TestInterface
+
+
+  structure TestPipeline.testPointers_Results where
+
+
+  structure TestPipeline.getAnyCap_Params where
+    n : UInt32
+    inCap : Capnp.AnyPointer
+
+
+  structure TestPipeline.getAnyCap_Results where
+    s : Capnp.Text
+    outBox : TestPipeline.AnyBox
+
+
+  structure TestPipeline.getCapPipelineOnly_Params where
+
+
+  structure TestPipeline.getCapPipelineOnly_Results where
+    outBox : TestPipeline.Box
+
+
   structure TestPipeline.Box where
     cap : TestInterface
 
@@ -3828,14 +7307,218 @@ mutual
     cap : Capnp.AnyPointer
 
 
+  structure TestCallOrder.getCallSequence_Params where
+    expected : UInt32
+
+
+  structure TestCallOrder.getCallSequence_Results where
+    n : UInt32
+
+
+  structure TestTailCallee.foo_Params where
+    i : Int32
+    t : Capnp.Text
+
+
   structure TestTailCallee.TailResult where
     i : UInt32
     t : Capnp.Text
     c : TestCallOrder
 
 
+  structure TestTailCaller.foo_Params where
+    i : Int32
+    callee : TestTailCallee
+
+
+  structure TestStreaming.doStreamI_Params where
+    i : UInt32
+
+
+  structure Capnp.Gen.capnp.stream.StreamResult where
+
+
+  structure TestStreaming.doStreamJ_Params where
+    j : UInt32
+
+
+  structure TestStreaming.finishStream_Params where
+
+
+  structure TestStreaming.finishStream_Results where
+    totalI : UInt32
+    totalJ : UInt32
+
+
+  structure TestMoreStuff.callFoo_Params where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.callFoo_Results where
+    s : Capnp.Text
+
+
+  structure TestMoreStuff.callFooWhenResolved_Params where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.callFooWhenResolved_Results where
+    s : Capnp.Text
+
+
+  structure TestMoreStuff.neverReturn_Params where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.neverReturn_Results where
+    capCopy : TestInterface
+
+
+  structure TestMoreStuff.hold_Params where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.hold_Results where
+
+
+  structure TestMoreStuff.callHeld_Params where
+    expectedCallCount : Int32
+
+
+  structure TestMoreStuff.callHeld_Results where
+    s : Capnp.Text
+
+
+  structure TestMoreStuff.getHeld_Params where
+
+
+  structure TestMoreStuff.getHeld_Results where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.echo_Params where
+    cap : TestCallOrder
+
+
+  structure TestMoreStuff.echo_Results where
+    cap : TestCallOrder
+
+
+  structure TestMoreStuff.expectCancel_Params where
+    cap : TestInterface
+
+
+  structure TestMoreStuff.expectCancel_Results where
+
+
+  structure TestMoreStuff.methodWithDefaults_Params where
+    a : Capnp.Text
+    b : UInt32
+    c : Capnp.Text
+
+
+  structure TestMoreStuff.methodWithDefaults_Results where
+    d : Capnp.Text
+    e : Capnp.Text
+
+
+  structure TestMoreStuff.getHandle_Params where
+
+
+  structure TestMoreStuff.getHandle_Results where
+    handle : TestHandle
+
+
+  structure TestMoreStuff.getNull_Params where
+
+
+  structure TestMoreStuff.getNull_Results where
+    nullCap : TestMoreStuff
+
+
+  structure TestMoreStuff.getEnormousString_Params where
+
+
+  structure TestMoreStuff.getEnormousString_Results where
+    str : Capnp.Text
+
+
+  structure TestMoreStuff.methodWithNullDefault_Params where
+    a : Capnp.Text
+    b : TestInterface
+
+
+  structure TestMoreStuff.methodWithNullDefault_Results where
+
+
+  structure TestMoreStuff.writeToFd_Params where
+    fill : Array UInt8
+    fdCap1 : TestInterface
+    fdCap2 : TestInterface
+
+
+  structure TestMoreStuff.writeToFd_Results where
+    fdCap3 : TestInterface
+    secondFdPresent : Bool
+
+
+  structure TestMoreStuff.throwException_Params where
+
+
+  structure TestMoreStuff.throwException_Results where
+
+
+  structure TestMoreStuff.throwRemoteException_Params where
+
+
+  structure TestMoreStuff.throwRemoteException_Results where
+
+
+  structure TestMoreStuff.throwExceptionWithDetail_Params where
+
+
+  structure TestMoreStuff.throwExceptionWithDetail_Results where
+
+
+  structure TestMembrane.makeThing_Params where
+
+
+  structure TestMembrane.makeThing_Results where
+    thing : TestMembrane.Thing
+
+
+  structure TestMembrane.callPassThrough_Params where
+    thing : TestMembrane.Thing
+    tailCall : Bool
+
+
   structure TestMembrane.Result where
     text : Capnp.Text
+
+
+  structure TestMembrane.callIntercept_Params where
+    thing : TestMembrane.Thing
+    tailCall : Bool
+
+
+  structure TestMembrane.loopback_Params where
+    thing : TestMembrane.Thing
+
+
+  structure TestMembrane.loopback_Results where
+    thing : TestMembrane.Thing
+
+
+  structure TestMembrane.waitForever_Params where
+
+
+  structure TestMembrane.waitForever_Results where
+
+
+  structure TestMembrane.Thing.passThrough_Params where
+
+
+  structure TestMembrane.Thing.intercept_Params where
 
 
   structure TestContainMembrane where
@@ -3850,6 +7533,37 @@ mutual
   structure TestTransferCap.Element where
     text : Capnp.Text
     cap : TestInterface
+
+
+  structure TestKeywordMethods.delete_Params where
+
+
+  structure TestKeywordMethods.delete_Results where
+
+
+  structure TestKeywordMethods.class_Params where
+
+
+  structure TestKeywordMethods.class_Results where
+
+
+  structure TestKeywordMethods.void_Params where
+
+
+  structure TestKeywordMethods.void_Results where
+
+
+  structure TestKeywordMethods.return_Params where
+
+
+  structure TestKeywordMethods.return_Results where
+
+
+  structure TestAuthenticatedBootstrap.getCallerId_Params where
+
+
+  structure TestAuthenticatedBootstrap.getCallerId_Results where
+    caller : Capnp.AnyPointer
 
 
   structure TestSturdyRefHostId where
@@ -3887,6 +7601,13 @@ mutual
   structure TestNameAnnotation.badlyNamedUnion.BadlyNamedGroupGroup where
     foo : Unit
     bar : Unit
+
+
+  structure TestNameAnnotationInterface.badlyNamedMethod_Params where
+    badlyNamedParam : UInt8
+
+
+  structure TestNameAnnotationInterface.badlyNamedMethod_Results where
 
 
   structure TestImpliedFirstField where
@@ -7542,6 +11263,43 @@ def TestGenerics.Inner2.DeepNest.Builder.clearQux (b : TestGenerics.Inner2.DeepN
 
 def TestGenerics.Inner2.DeepNest.Builder.getQux (b : TestGenerics.Inner2.DeepNest.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 3
 
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.initRoot : Capnp.BuilderM TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.initRoot : Capnp.BuilderM TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestGenerics.Interface.call_Results.Reader.getQux (r : TestGenerics.Interface.call_Results.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def TestGenerics.Interface.call_Results.Reader.getQuxChecked (r : TestGenerics.Interface.call_Results.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def TestGenerics.Interface.call_Results.Reader.hasQux (r : TestGenerics.Interface.call_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestGenerics.Interface.call_Results.Reader.getGen (r : TestGenerics.Interface.call_Results.Reader) : TestGenerics.Reader := TestGenerics.read (Capnp.getPointer r.struct 1)
+def TestGenerics.Interface.call_Results.Reader.getGenChecked (r : TestGenerics.Interface.call_Results.Reader) : Except String (TestGenerics.Reader) := TestGenerics.readChecked (Capnp.getPointer r.struct 1)
+def TestGenerics.Interface.call_Results.Reader.hasGen (r : TestGenerics.Interface.call_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestGenerics.Interface.call_Results.initRoot : Capnp.BuilderM TestGenerics.Interface.call_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestGenerics.Interface.call_Results.Builder.clearQux (b : TestGenerics.Interface.call_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestGenerics.Interface.call_Results.Builder.getQux (b : TestGenerics.Interface.call_Results.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+def TestGenerics.Interface.call_Results.Builder.clearGen (b : TestGenerics.Interface.call_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestGenerics.Interface.call_Results.Builder.initGen (b : TestGenerics.Interface.call_Results.Builder) : Capnp.BuilderM TestGenerics.Builder := do
+  let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 1) 1 3
+  return TestGenerics.Builder.fromStruct sb
+
 
 def TestGenerics.UseAliases.Reader.getFoo (r : TestGenerics.UseAliases.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
 def TestGenerics.UseAliases.Reader.getFooChecked (r : TestGenerics.UseAliases.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
@@ -7667,6 +11425,56 @@ def TestGenericsWrapper2.Builder.clearValue (b : TestGenericsWrapper2.Builder) :
 def TestGenericsWrapper2.Builder.initValue (b : TestGenericsWrapper2.Builder) : Capnp.BuilderM TestGenericsWrapper.Builder := do
   let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 0) 0 1
   return TestGenericsWrapper.Builder.fromStruct sb
+
+
+def TestImplicitMethodParams.call_Params.Reader.getFoo (r : TestImplicitMethodParams.call_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def TestImplicitMethodParams.call_Params.Reader.getFooChecked (r : TestImplicitMethodParams.call_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def TestImplicitMethodParams.call_Params.Reader.hasFoo (r : TestImplicitMethodParams.call_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestImplicitMethodParams.call_Params.Reader.getBar (r : TestImplicitMethodParams.call_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 1
+def TestImplicitMethodParams.call_Params.Reader.getBarChecked (r : TestImplicitMethodParams.call_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 1)
+def TestImplicitMethodParams.call_Params.Reader.hasBar (r : TestImplicitMethodParams.call_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestImplicitMethodParams.call_Params.initRoot : Capnp.BuilderM TestImplicitMethodParams.call_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestImplicitMethodParams.call_Params.Builder.clearFoo (b : TestImplicitMethodParams.call_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestImplicitMethodParams.call_Params.Builder.getFoo (b : TestImplicitMethodParams.call_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+def TestImplicitMethodParams.call_Params.Builder.clearBar (b : TestImplicitMethodParams.call_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestImplicitMethodParams.call_Params.Builder.getBar (b : TestImplicitMethodParams.call_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 1
+
+
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.getFoo (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.getFooChecked (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.hasFoo (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.getBar (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 1
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.getBarChecked (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 1)
+def TestImplicitMethodParamsInGeneric.call_Params.Reader.hasBar (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestImplicitMethodParamsInGeneric.call_Params.initRoot : Capnp.BuilderM TestImplicitMethodParamsInGeneric.call_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestImplicitMethodParamsInGeneric.call_Params.Builder.clearFoo (b : TestImplicitMethodParamsInGeneric.call_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestImplicitMethodParamsInGeneric.call_Params.Builder.getFoo (b : TestImplicitMethodParamsInGeneric.call_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+def TestImplicitMethodParamsInGeneric.call_Params.Builder.clearBar (b : TestImplicitMethodParamsInGeneric.call_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestImplicitMethodParamsInGeneric.call_Params.Builder.getBar (b : TestImplicitMethodParamsInGeneric.call_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 1
 
 
 def TestGenericsUnion.Reader.getFoo (r : TestGenericsUnion.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
@@ -8081,6 +11889,327 @@ def TestListOfAny.Builder.setCapList (b : TestListOfAny.Builder) (v : Array Capn
     i_52 := i_52 + 1
 
 
+def TestInterface.foo_Params.Reader.getI (r : TestInterface.foo_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestInterface.foo_Params.Reader.getIChecked (r : TestInterface.foo_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+
+def TestInterface.foo_Params.Reader.getJ (r : TestInterface.foo_Params.Reader) : Bool := Capnp.getBool r.struct 32
+def TestInterface.foo_Params.Reader.getJChecked (r : TestInterface.foo_Params.Reader) : Except String (Bool) := pure (Capnp.getBool r.struct 32)
+
+def TestInterface.foo_Params.Reader.getExpectedCallCount (r : TestInterface.foo_Params.Reader) : Int32 := Capnp.getInt32Masked r.struct 8 (UInt32.ofNat 4294967295)
+def TestInterface.foo_Params.Reader.getExpectedCallCountChecked (r : TestInterface.foo_Params.Reader) : Except String (Int32) := pure (Capnp.getInt32Masked r.struct 8 (UInt32.ofNat 4294967295))
+def TestInterface.foo_Params.initRoot : Capnp.BuilderM TestInterface.foo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 2 0
+  return { struct := sb }
+
+def TestInterface.foo_Params.Builder.setI (b : TestInterface.foo_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def TestInterface.foo_Params.Builder.setJ (b : TestInterface.foo_Params.Builder) (v : Bool) : Capnp.BuilderM Unit := do
+  Capnp.setBool b.struct 32 v
+
+def TestInterface.foo_Params.Builder.setExpectedCallCount (b : TestInterface.foo_Params.Builder) (v : Int32) : Capnp.BuilderM Unit := do
+  Capnp.setInt32Masked b.struct 8 (UInt32.ofNat 4294967295) v
+
+
+def TestInterface.foo_Results.Reader.getX (r : TestInterface.foo_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestInterface.foo_Results.Reader.getXChecked (r : TestInterface.foo_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestInterface.foo_Results.Reader.getXView (r : TestInterface.foo_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestInterface.foo_Results.Reader.getXViewChecked (r : TestInterface.foo_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestInterface.foo_Results.Reader.hasX (r : TestInterface.foo_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestInterface.foo_Results.initRoot : Capnp.BuilderM TestInterface.foo_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.foo_Results.Builder.clearX (b : TestInterface.foo_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestInterface.foo_Results.Builder.setX (b : TestInterface.foo_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestInterface.bar_Params.initRoot : Capnp.BuilderM TestInterface.bar_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestInterface.bar_Results.initRoot : Capnp.BuilderM TestInterface.bar_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestInterface.baz_Params.Reader.getS (r : TestInterface.baz_Params.Reader) : TestAllTypes.Reader := TestAllTypes.read (Capnp.getPointer r.struct 0)
+def TestInterface.baz_Params.Reader.getSChecked (r : TestInterface.baz_Params.Reader) : Except String (TestAllTypes.Reader) := TestAllTypes.readChecked (Capnp.getPointer r.struct 0)
+def TestInterface.baz_Params.Reader.hasS (r : TestInterface.baz_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestInterface.baz_Params.initRoot : Capnp.BuilderM TestInterface.baz_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.baz_Params.Builder.clearS (b : TestInterface.baz_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestInterface.baz_Params.Builder.initS (b : TestInterface.baz_Params.Builder) : Capnp.BuilderM TestAllTypes.Builder := do
+  let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 0) 6 20
+  return TestAllTypes.Builder.fromStruct sb
+
+def TestInterface.baz_Results.initRoot : Capnp.BuilderM TestInterface.baz_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestInterface.getTestPipeline_Params.initRoot : Capnp.BuilderM TestInterface.getTestPipeline_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestInterface.getTestPipeline_Results.Reader.getCap (r : TestInterface.getTestPipeline_Results.Reader) : TestPipeline := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestInterface.getTestPipeline_Results.Reader.getCapChecked (r : TestInterface.getTestPipeline_Results.Reader) : Except String (TestPipeline) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestInterface.getTestPipeline_Results.initRoot : Capnp.BuilderM TestInterface.getTestPipeline_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.getTestPipeline_Results.Builder.setCap (b : TestInterface.getTestPipeline_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestInterface.getTestTailCallee_Params.initRoot : Capnp.BuilderM TestInterface.getTestTailCallee_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestInterface.getTestTailCallee_Results.Reader.getCap (r : TestInterface.getTestTailCallee_Results.Reader) : TestTailCallee := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestInterface.getTestTailCallee_Results.Reader.getCapChecked (r : TestInterface.getTestTailCallee_Results.Reader) : Except String (TestTailCallee) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestInterface.getTestTailCallee_Results.initRoot : Capnp.BuilderM TestInterface.getTestTailCallee_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.getTestTailCallee_Results.Builder.setCap (b : TestInterface.getTestTailCallee_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestInterface.getTestTailCaller_Params.initRoot : Capnp.BuilderM TestInterface.getTestTailCaller_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestInterface.getTestTailCaller_Results.Reader.getCap (r : TestInterface.getTestTailCaller_Results.Reader) : TestTailCaller := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestInterface.getTestTailCaller_Results.Reader.getCapChecked (r : TestInterface.getTestTailCaller_Results.Reader) : Except String (TestTailCaller) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestInterface.getTestTailCaller_Results.initRoot : Capnp.BuilderM TestInterface.getTestTailCaller_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.getTestTailCaller_Results.Builder.setCap (b : TestInterface.getTestTailCaller_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestInterface.getTestMoreStuff_Params.initRoot : Capnp.BuilderM TestInterface.getTestMoreStuff_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestInterface.getTestMoreStuff_Results.Reader.getCap (r : TestInterface.getTestMoreStuff_Results.Reader) : TestMoreStuff := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestInterface.getTestMoreStuff_Results.Reader.getCapChecked (r : TestInterface.getTestMoreStuff_Results.Reader) : Except String (TestMoreStuff) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestInterface.getTestMoreStuff_Results.initRoot : Capnp.BuilderM TestInterface.getTestMoreStuff_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestInterface.getTestMoreStuff_Results.Builder.setCap (b : TestInterface.getTestMoreStuff_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestExtends.qux_Params.initRoot : Capnp.BuilderM TestExtends.qux_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestExtends.qux_Results.initRoot : Capnp.BuilderM TestExtends.qux_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestExtends.corge_Results.initRoot : Capnp.BuilderM TestExtends.corge_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestExtends.grault_Params.initRoot : Capnp.BuilderM TestExtends.grault_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestPipeline.getCap_Params.Reader.getN (r : TestPipeline.getCap_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestPipeline.getCap_Params.Reader.getNChecked (r : TestPipeline.getCap_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+
+def TestPipeline.getCap_Params.Reader.getInCap (r : TestPipeline.getCap_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestPipeline.getCap_Params.Reader.getInCapChecked (r : TestPipeline.getCap_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestPipeline.getCap_Params.initRoot : Capnp.BuilderM TestPipeline.getCap_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestPipeline.getCap_Params.Builder.setN (b : TestPipeline.getCap_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def TestPipeline.getCap_Params.Builder.setInCap (b : TestPipeline.getCap_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestPipeline.getCap_Results.Reader.getS (r : TestPipeline.getCap_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestPipeline.getCap_Results.Reader.getSChecked (r : TestPipeline.getCap_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestPipeline.getCap_Results.Reader.getSView (r : TestPipeline.getCap_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestPipeline.getCap_Results.Reader.getSViewChecked (r : TestPipeline.getCap_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestPipeline.getCap_Results.Reader.hasS (r : TestPipeline.getCap_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestPipeline.getCap_Results.Reader.getOutBox (r : TestPipeline.getCap_Results.Reader) : TestPipeline.Box.Reader := TestPipeline.Box.read (Capnp.getPointer r.struct 1)
+def TestPipeline.getCap_Results.Reader.getOutBoxChecked (r : TestPipeline.getCap_Results.Reader) : Except String (TestPipeline.Box.Reader) := TestPipeline.Box.readChecked (Capnp.getPointer r.struct 1)
+def TestPipeline.getCap_Results.Reader.hasOutBox (r : TestPipeline.getCap_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestPipeline.getCap_Results.initRoot : Capnp.BuilderM TestPipeline.getCap_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestPipeline.getCap_Results.Builder.clearS (b : TestPipeline.getCap_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestPipeline.getCap_Results.Builder.setS (b : TestPipeline.getCap_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestPipeline.getCap_Results.Builder.clearOutBox (b : TestPipeline.getCap_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestPipeline.getCap_Results.Builder.initOutBox (b : TestPipeline.getCap_Results.Builder) : Capnp.BuilderM TestPipeline.Box.Builder := do
+  let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 1) 0 1
+  return TestPipeline.Box.Builder.fromStruct sb
+
+
+def TestPipeline.testPointers_Params.Reader.getCap (r : TestPipeline.testPointers_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestPipeline.testPointers_Params.Reader.getCapChecked (r : TestPipeline.testPointers_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+
+def TestPipeline.testPointers_Params.Reader.getObj (r : TestPipeline.testPointers_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 1
+def TestPipeline.testPointers_Params.Reader.getObjChecked (r : TestPipeline.testPointers_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 1)
+def TestPipeline.testPointers_Params.Reader.hasObj (r : TestPipeline.testPointers_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+
+def TestPipeline.testPointers_Params.Reader.getList (r : TestPipeline.testPointers_Params.Reader) : Capnp.ListReader TestInterface := Capnp.readListCapabilityReader (Capnp.getPointer r.struct 2)
+def TestPipeline.testPointers_Params.Reader.getListChecked (r : TestPipeline.testPointers_Params.Reader) : Except String (Capnp.ListReader TestInterface) := do
+  let r ← Capnp.readListPointerCheckedReader (Capnp.getPointer r.struct 2)
+  return Capnp.ListReader.map Capnp.readCapability r
+def TestPipeline.testPointers_Params.Reader.hasList (r : TestPipeline.testPointers_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 2)
+
+def TestPipeline.testPointers_Params.initRoot : Capnp.BuilderM TestPipeline.testPointers_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 3
+  return { struct := sb }
+
+def TestPipeline.testPointers_Params.Builder.setCap (b : TestPipeline.testPointers_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestPipeline.testPointers_Params.Builder.clearObj (b : TestPipeline.testPointers_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestPipeline.testPointers_Params.Builder.getObj (b : TestPipeline.testPointers_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 1
+
+def TestPipeline.testPointers_Params.Builder.clearList (b : TestPipeline.testPointers_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 2)
+
+def TestPipeline.testPointers_Params.Builder.initList (b : TestPipeline.testPointers_Params.Builder) (n : Nat) : Capnp.BuilderM (Array Capnp.AnyPointerBuilder) := do
+  Capnp.writeListPointer (Capnp.getPointerBuilder b.struct 2) n
+def TestPipeline.testPointers_Params.Builder.setList (b : TestPipeline.testPointers_Params.Builder) (v : Array Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeListCapability (Capnp.getPointerBuilder b.struct 2) v
+
+def TestPipeline.testPointers_Results.initRoot : Capnp.BuilderM TestPipeline.testPointers_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestPipeline.getAnyCap_Params.Reader.getN (r : TestPipeline.getAnyCap_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestPipeline.getAnyCap_Params.Reader.getNChecked (r : TestPipeline.getAnyCap_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+
+def TestPipeline.getAnyCap_Params.Reader.getInCap (r : TestPipeline.getAnyCap_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def TestPipeline.getAnyCap_Params.Reader.getInCapChecked (r : TestPipeline.getAnyCap_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def TestPipeline.getAnyCap_Params.Reader.hasInCap (r : TestPipeline.getAnyCap_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestPipeline.getAnyCap_Params.initRoot : Capnp.BuilderM TestPipeline.getAnyCap_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestPipeline.getAnyCap_Params.Builder.setN (b : TestPipeline.getAnyCap_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def TestPipeline.getAnyCap_Params.Builder.clearInCap (b : TestPipeline.getAnyCap_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestPipeline.getAnyCap_Params.Builder.getInCap (b : TestPipeline.getAnyCap_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+def TestPipeline.getAnyCap_Results.Reader.getS (r : TestPipeline.getAnyCap_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestPipeline.getAnyCap_Results.Reader.getSChecked (r : TestPipeline.getAnyCap_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestPipeline.getAnyCap_Results.Reader.getSView (r : TestPipeline.getAnyCap_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestPipeline.getAnyCap_Results.Reader.getSViewChecked (r : TestPipeline.getAnyCap_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestPipeline.getAnyCap_Results.Reader.hasS (r : TestPipeline.getAnyCap_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestPipeline.getAnyCap_Results.Reader.getOutBox (r : TestPipeline.getAnyCap_Results.Reader) : TestPipeline.AnyBox.Reader := TestPipeline.AnyBox.read (Capnp.getPointer r.struct 1)
+def TestPipeline.getAnyCap_Results.Reader.getOutBoxChecked (r : TestPipeline.getAnyCap_Results.Reader) : Except String (TestPipeline.AnyBox.Reader) := TestPipeline.AnyBox.readChecked (Capnp.getPointer r.struct 1)
+def TestPipeline.getAnyCap_Results.Reader.hasOutBox (r : TestPipeline.getAnyCap_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestPipeline.getAnyCap_Results.initRoot : Capnp.BuilderM TestPipeline.getAnyCap_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestPipeline.getAnyCap_Results.Builder.clearS (b : TestPipeline.getAnyCap_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestPipeline.getAnyCap_Results.Builder.setS (b : TestPipeline.getAnyCap_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestPipeline.getAnyCap_Results.Builder.clearOutBox (b : TestPipeline.getAnyCap_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestPipeline.getAnyCap_Results.Builder.initOutBox (b : TestPipeline.getAnyCap_Results.Builder) : Capnp.BuilderM TestPipeline.AnyBox.Builder := do
+  let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 1) 0 1
+  return TestPipeline.AnyBox.Builder.fromStruct sb
+
+def TestPipeline.getCapPipelineOnly_Params.initRoot : Capnp.BuilderM TestPipeline.getCapPipelineOnly_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestPipeline.getCapPipelineOnly_Results.Reader.getOutBox (r : TestPipeline.getCapPipelineOnly_Results.Reader) : TestPipeline.Box.Reader := TestPipeline.Box.read (Capnp.getPointer r.struct 0)
+def TestPipeline.getCapPipelineOnly_Results.Reader.getOutBoxChecked (r : TestPipeline.getCapPipelineOnly_Results.Reader) : Except String (TestPipeline.Box.Reader) := TestPipeline.Box.readChecked (Capnp.getPointer r.struct 0)
+def TestPipeline.getCapPipelineOnly_Results.Reader.hasOutBox (r : TestPipeline.getCapPipelineOnly_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestPipeline.getCapPipelineOnly_Results.initRoot : Capnp.BuilderM TestPipeline.getCapPipelineOnly_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestPipeline.getCapPipelineOnly_Results.Builder.clearOutBox (b : TestPipeline.getCapPipelineOnly_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestPipeline.getCapPipelineOnly_Results.Builder.initOutBox (b : TestPipeline.getCapPipelineOnly_Results.Builder) : Capnp.BuilderM TestPipeline.Box.Builder := do
+  let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 0) 0 1
+  return TestPipeline.Box.Builder.fromStruct sb
+
+
 def TestPipeline.Box.Reader.getCap (r : TestPipeline.Box.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
 def TestPipeline.Box.Reader.getCapChecked (r : TestPipeline.Box.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
 def TestPipeline.Box.initRoot : Capnp.BuilderM TestPipeline.Box.Builder := do
@@ -8105,6 +12234,53 @@ def TestPipeline.AnyBox.Builder.clearCap (b : TestPipeline.AnyBox.Builder) : Cap
   Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
 
 def TestPipeline.AnyBox.Builder.getCap (b : TestPipeline.AnyBox.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+def TestCallOrder.getCallSequence_Params.Reader.getExpected (r : TestCallOrder.getCallSequence_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestCallOrder.getCallSequence_Params.Reader.getExpectedChecked (r : TestCallOrder.getCallSequence_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+def TestCallOrder.getCallSequence_Params.initRoot : Capnp.BuilderM TestCallOrder.getCallSequence_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestCallOrder.getCallSequence_Params.Builder.setExpected (b : TestCallOrder.getCallSequence_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+
+def TestCallOrder.getCallSequence_Results.Reader.getN (r : TestCallOrder.getCallSequence_Results.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestCallOrder.getCallSequence_Results.Reader.getNChecked (r : TestCallOrder.getCallSequence_Results.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+def TestCallOrder.getCallSequence_Results.initRoot : Capnp.BuilderM TestCallOrder.getCallSequence_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestCallOrder.getCallSequence_Results.Builder.setN (b : TestCallOrder.getCallSequence_Results.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+
+def TestTailCallee.foo_Params.Reader.getI (r : TestTailCallee.foo_Params.Reader) : Int32 := Capnp.getInt32 r.struct 0
+def TestTailCallee.foo_Params.Reader.getIChecked (r : TestTailCallee.foo_Params.Reader) : Except String (Int32) := pure (Capnp.getInt32 r.struct 0)
+
+def TestTailCallee.foo_Params.Reader.getT (r : TestTailCallee.foo_Params.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestTailCallee.foo_Params.Reader.getTChecked (r : TestTailCallee.foo_Params.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestTailCallee.foo_Params.Reader.getTView (r : TestTailCallee.foo_Params.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestTailCallee.foo_Params.Reader.getTViewChecked (r : TestTailCallee.foo_Params.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestTailCallee.foo_Params.Reader.hasT (r : TestTailCallee.foo_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestTailCallee.foo_Params.initRoot : Capnp.BuilderM TestTailCallee.foo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestTailCallee.foo_Params.Builder.setI (b : TestTailCallee.foo_Params.Builder) (v : Int32) : Capnp.BuilderM Unit := do
+  Capnp.setInt32 b.struct 0 v
+
+def TestTailCallee.foo_Params.Builder.clearT (b : TestTailCallee.foo_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestTailCallee.foo_Params.Builder.setT (b : TestTailCallee.foo_Params.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
 
 
 def TestTailCallee.TailResult.Reader.getI (r : TestTailCallee.TailResult.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
@@ -8138,6 +12314,528 @@ def TestTailCallee.TailResult.Builder.setC (b : TestTailCallee.TailResult.Builde
   Capnp.writeCapability (Capnp.getPointerBuilder b.struct 1) v
 
 
+def TestTailCaller.foo_Params.Reader.getI (r : TestTailCaller.foo_Params.Reader) : Int32 := Capnp.getInt32 r.struct 0
+def TestTailCaller.foo_Params.Reader.getIChecked (r : TestTailCaller.foo_Params.Reader) : Except String (Int32) := pure (Capnp.getInt32 r.struct 0)
+
+def TestTailCaller.foo_Params.Reader.getCallee (r : TestTailCaller.foo_Params.Reader) : TestTailCallee := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestTailCaller.foo_Params.Reader.getCalleeChecked (r : TestTailCaller.foo_Params.Reader) : Except String (TestTailCallee) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestTailCaller.foo_Params.initRoot : Capnp.BuilderM TestTailCaller.foo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestTailCaller.foo_Params.Builder.setI (b : TestTailCaller.foo_Params.Builder) (v : Int32) : Capnp.BuilderM Unit := do
+  Capnp.setInt32 b.struct 0 v
+
+def TestTailCaller.foo_Params.Builder.setCallee (b : TestTailCaller.foo_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestStreaming.doStreamI_Params.Reader.getI (r : TestStreaming.doStreamI_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestStreaming.doStreamI_Params.Reader.getIChecked (r : TestStreaming.doStreamI_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+def TestStreaming.doStreamI_Params.initRoot : Capnp.BuilderM TestStreaming.doStreamI_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestStreaming.doStreamI_Params.Builder.setI (b : TestStreaming.doStreamI_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def Capnp.Gen.capnp.stream.StreamResult.initRoot : Capnp.BuilderM Capnp.Gen.capnp.stream.StreamResult.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestStreaming.doStreamJ_Params.Reader.getJ (r : TestStreaming.doStreamJ_Params.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestStreaming.doStreamJ_Params.Reader.getJChecked (r : TestStreaming.doStreamJ_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+def TestStreaming.doStreamJ_Params.initRoot : Capnp.BuilderM TestStreaming.doStreamJ_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestStreaming.doStreamJ_Params.Builder.setJ (b : TestStreaming.doStreamJ_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def TestStreaming.finishStream_Params.initRoot : Capnp.BuilderM TestStreaming.finishStream_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestStreaming.finishStream_Results.Reader.getTotalI (r : TestStreaming.finishStream_Results.Reader) : UInt32 := Capnp.getUInt32 r.struct 0
+def TestStreaming.finishStream_Results.Reader.getTotalIChecked (r : TestStreaming.finishStream_Results.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 0)
+
+def TestStreaming.finishStream_Results.Reader.getTotalJ (r : TestStreaming.finishStream_Results.Reader) : UInt32 := Capnp.getUInt32 r.struct 4
+def TestStreaming.finishStream_Results.Reader.getTotalJChecked (r : TestStreaming.finishStream_Results.Reader) : Except String (UInt32) := pure (Capnp.getUInt32 r.struct 4)
+def TestStreaming.finishStream_Results.initRoot : Capnp.BuilderM TestStreaming.finishStream_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestStreaming.finishStream_Results.Builder.setTotalI (b : TestStreaming.finishStream_Results.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 0 v
+
+def TestStreaming.finishStream_Results.Builder.setTotalJ (b : TestStreaming.finishStream_Results.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32 b.struct 4 v
+
+
+def TestMoreStuff.callFoo_Params.Reader.getCap (r : TestMoreStuff.callFoo_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFoo_Params.Reader.getCapChecked (r : TestMoreStuff.callFoo_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFoo_Params.initRoot : Capnp.BuilderM TestMoreStuff.callFoo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.callFoo_Params.Builder.setCap (b : TestMoreStuff.callFoo_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.callFoo_Results.Reader.getS (r : TestMoreStuff.callFoo_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFoo_Results.Reader.getSChecked (r : TestMoreStuff.callFoo_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFoo_Results.Reader.getSView (r : TestMoreStuff.callFoo_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFoo_Results.Reader.getSViewChecked (r : TestMoreStuff.callFoo_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callFoo_Results.Reader.hasS (r : TestMoreStuff.callFoo_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callFoo_Results.initRoot : Capnp.BuilderM TestMoreStuff.callFoo_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.callFoo_Results.Builder.clearS (b : TestMoreStuff.callFoo_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.callFoo_Results.Builder.setS (b : TestMoreStuff.callFoo_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.callFooWhenResolved_Params.Reader.getCap (r : TestMoreStuff.callFooWhenResolved_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFooWhenResolved_Params.Reader.getCapChecked (r : TestMoreStuff.callFooWhenResolved_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFooWhenResolved_Params.initRoot : Capnp.BuilderM TestMoreStuff.callFooWhenResolved_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.callFooWhenResolved_Params.Builder.setCap (b : TestMoreStuff.callFooWhenResolved_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.callFooWhenResolved_Results.Reader.getS (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFooWhenResolved_Results.Reader.getSChecked (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFooWhenResolved_Results.Reader.getSView (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callFooWhenResolved_Results.Reader.getSViewChecked (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callFooWhenResolved_Results.Reader.hasS (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callFooWhenResolved_Results.initRoot : Capnp.BuilderM TestMoreStuff.callFooWhenResolved_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.callFooWhenResolved_Results.Builder.clearS (b : TestMoreStuff.callFooWhenResolved_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.callFooWhenResolved_Results.Builder.setS (b : TestMoreStuff.callFooWhenResolved_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.neverReturn_Params.Reader.getCap (r : TestMoreStuff.neverReturn_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.neverReturn_Params.Reader.getCapChecked (r : TestMoreStuff.neverReturn_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.neverReturn_Params.initRoot : Capnp.BuilderM TestMoreStuff.neverReturn_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.neverReturn_Params.Builder.setCap (b : TestMoreStuff.neverReturn_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.neverReturn_Results.Reader.getCapCopy (r : TestMoreStuff.neverReturn_Results.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.neverReturn_Results.Reader.getCapCopyChecked (r : TestMoreStuff.neverReturn_Results.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.neverReturn_Results.initRoot : Capnp.BuilderM TestMoreStuff.neverReturn_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.neverReturn_Results.Builder.setCapCopy (b : TestMoreStuff.neverReturn_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.hold_Params.Reader.getCap (r : TestMoreStuff.hold_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.hold_Params.Reader.getCapChecked (r : TestMoreStuff.hold_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.hold_Params.initRoot : Capnp.BuilderM TestMoreStuff.hold_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.hold_Params.Builder.setCap (b : TestMoreStuff.hold_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.hold_Results.initRoot : Capnp.BuilderM TestMoreStuff.hold_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.callHeld_Params.Reader.getExpectedCallCount (r : TestMoreStuff.callHeld_Params.Reader) : Int32 := Capnp.getInt32Masked r.struct 0 (UInt32.ofNat 4294967295)
+def TestMoreStuff.callHeld_Params.Reader.getExpectedCallCountChecked (r : TestMoreStuff.callHeld_Params.Reader) : Except String (Int32) := pure (Capnp.getInt32Masked r.struct 0 (UInt32.ofNat 4294967295))
+def TestMoreStuff.callHeld_Params.initRoot : Capnp.BuilderM TestMoreStuff.callHeld_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestMoreStuff.callHeld_Params.Builder.setExpectedCallCount (b : TestMoreStuff.callHeld_Params.Builder) (v : Int32) : Capnp.BuilderM Unit := do
+  Capnp.setInt32Masked b.struct 0 (UInt32.ofNat 4294967295) v
+
+
+def TestMoreStuff.callHeld_Results.Reader.getS (r : TestMoreStuff.callHeld_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callHeld_Results.Reader.getSChecked (r : TestMoreStuff.callHeld_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callHeld_Results.Reader.getSView (r : TestMoreStuff.callHeld_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.callHeld_Results.Reader.getSViewChecked (r : TestMoreStuff.callHeld_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callHeld_Results.Reader.hasS (r : TestMoreStuff.callHeld_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.callHeld_Results.initRoot : Capnp.BuilderM TestMoreStuff.callHeld_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.callHeld_Results.Builder.clearS (b : TestMoreStuff.callHeld_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.callHeld_Results.Builder.setS (b : TestMoreStuff.callHeld_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.getHeld_Params.initRoot : Capnp.BuilderM TestMoreStuff.getHeld_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.getHeld_Results.Reader.getCap (r : TestMoreStuff.getHeld_Results.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getHeld_Results.Reader.getCapChecked (r : TestMoreStuff.getHeld_Results.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getHeld_Results.initRoot : Capnp.BuilderM TestMoreStuff.getHeld_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.getHeld_Results.Builder.setCap (b : TestMoreStuff.getHeld_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.echo_Params.Reader.getCap (r : TestMoreStuff.echo_Params.Reader) : TestCallOrder := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.echo_Params.Reader.getCapChecked (r : TestMoreStuff.echo_Params.Reader) : Except String (TestCallOrder) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.echo_Params.initRoot : Capnp.BuilderM TestMoreStuff.echo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.echo_Params.Builder.setCap (b : TestMoreStuff.echo_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.echo_Results.Reader.getCap (r : TestMoreStuff.echo_Results.Reader) : TestCallOrder := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.echo_Results.Reader.getCapChecked (r : TestMoreStuff.echo_Results.Reader) : Except String (TestCallOrder) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.echo_Results.initRoot : Capnp.BuilderM TestMoreStuff.echo_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.echo_Results.Builder.setCap (b : TestMoreStuff.echo_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.expectCancel_Params.Reader.getCap (r : TestMoreStuff.expectCancel_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.expectCancel_Params.Reader.getCapChecked (r : TestMoreStuff.expectCancel_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.expectCancel_Params.initRoot : Capnp.BuilderM TestMoreStuff.expectCancel_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.expectCancel_Params.Builder.setCap (b : TestMoreStuff.expectCancel_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.expectCancel_Results.initRoot : Capnp.BuilderM TestMoreStuff.expectCancel_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.methodWithDefaults_Params._default_c : Capnp.AnyPointer :=
+  Capnp.getRoot (Capnp.readMessage (ByteArray.mk #[0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 34, 0, 0, 0, 102, 111, 111, 0, 0, 0, 0, 0]))
+
+def TestMoreStuff.methodWithDefaults_Params.Reader.getA (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getAChecked (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getAView (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getAViewChecked (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.methodWithDefaults_Params.Reader.hasA (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestMoreStuff.methodWithDefaults_Params.Reader.getB (r : TestMoreStuff.methodWithDefaults_Params.Reader) : UInt32 := Capnp.getUInt32Masked r.struct 0 (UInt32.ofNat 123)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getBChecked (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Except String (UInt32) := pure (Capnp.getUInt32Masked r.struct 0 (UInt32.ofNat 123))
+
+def TestMoreStuff.methodWithDefaults_Params.Reader.getC (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Capnp.Text := Capnp.readText (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Params._default_c)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getCChecked (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Params._default_c)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getCView (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Params._default_c)
+def TestMoreStuff.methodWithDefaults_Params.Reader.getCViewChecked (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Params._default_c)
+
+def TestMoreStuff.methodWithDefaults_Params.Reader.hasC (r : TestMoreStuff.methodWithDefaults_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestMoreStuff.methodWithDefaults_Params.initRoot : Capnp.BuilderM TestMoreStuff.methodWithDefaults_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 2
+  return { struct := sb }
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.clearA (b : TestMoreStuff.methodWithDefaults_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.setA (b : TestMoreStuff.methodWithDefaults_Params.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.setB (b : TestMoreStuff.methodWithDefaults_Params.Builder) (v : UInt32) : Capnp.BuilderM Unit := do
+  Capnp.setUInt32Masked b.struct 0 (UInt32.ofNat 123) v
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.clearC (b : TestMoreStuff.methodWithDefaults_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestMoreStuff.methodWithDefaults_Params.Builder.setC (b : TestMoreStuff.methodWithDefaults_Params.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 1) v
+
+
+def TestMoreStuff.methodWithDefaults_Results._default_e : Capnp.AnyPointer :=
+  Capnp.getRoot (Capnp.readMessage (ByteArray.mk #[0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 34, 0, 0, 0, 98, 97, 114, 0, 0, 0, 0, 0]))
+
+def TestMoreStuff.methodWithDefaults_Results.Reader.getD (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getDChecked (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getDView (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getDViewChecked (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.methodWithDefaults_Results.Reader.hasD (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestMoreStuff.methodWithDefaults_Results.Reader.getE (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Results._default_e)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getEChecked (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Results._default_e)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getEView (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Results._default_e)
+def TestMoreStuff.methodWithDefaults_Results.Reader.getEViewChecked (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.withDefaultPointer (Capnp.getPointer r.struct 1) TestMoreStuff.methodWithDefaults_Results._default_e)
+
+def TestMoreStuff.methodWithDefaults_Results.Reader.hasE (r : TestMoreStuff.methodWithDefaults_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 1)
+
+def TestMoreStuff.methodWithDefaults_Results.initRoot : Capnp.BuilderM TestMoreStuff.methodWithDefaults_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestMoreStuff.methodWithDefaults_Results.Builder.clearD (b : TestMoreStuff.methodWithDefaults_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.methodWithDefaults_Results.Builder.setD (b : TestMoreStuff.methodWithDefaults_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.methodWithDefaults_Results.Builder.clearE (b : TestMoreStuff.methodWithDefaults_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 1)
+
+def TestMoreStuff.methodWithDefaults_Results.Builder.setE (b : TestMoreStuff.methodWithDefaults_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 1) v
+
+def TestMoreStuff.getHandle_Params.initRoot : Capnp.BuilderM TestMoreStuff.getHandle_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.getHandle_Results.Reader.getHandle (r : TestMoreStuff.getHandle_Results.Reader) : TestHandle := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getHandle_Results.Reader.getHandleChecked (r : TestMoreStuff.getHandle_Results.Reader) : Except String (TestHandle) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getHandle_Results.initRoot : Capnp.BuilderM TestMoreStuff.getHandle_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.getHandle_Results.Builder.setHandle (b : TestMoreStuff.getHandle_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.getNull_Params.initRoot : Capnp.BuilderM TestMoreStuff.getNull_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.getNull_Results.Reader.getNullCap (r : TestMoreStuff.getNull_Results.Reader) : TestMoreStuff := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getNull_Results.Reader.getNullCapChecked (r : TestMoreStuff.getNull_Results.Reader) : Except String (TestMoreStuff) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getNull_Results.initRoot : Capnp.BuilderM TestMoreStuff.getNull_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.getNull_Results.Builder.setNullCap (b : TestMoreStuff.getNull_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.getEnormousString_Params.initRoot : Capnp.BuilderM TestMoreStuff.getEnormousString_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.getEnormousString_Results.Reader.getStr (r : TestMoreStuff.getEnormousString_Results.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getEnormousString_Results.Reader.getStrChecked (r : TestMoreStuff.getEnormousString_Results.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getEnormousString_Results.Reader.getStrView (r : TestMoreStuff.getEnormousString_Results.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.getEnormousString_Results.Reader.getStrViewChecked (r : TestMoreStuff.getEnormousString_Results.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.getEnormousString_Results.Reader.hasStr (r : TestMoreStuff.getEnormousString_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.getEnormousString_Results.initRoot : Capnp.BuilderM TestMoreStuff.getEnormousString_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMoreStuff.getEnormousString_Results.Builder.clearStr (b : TestMoreStuff.getEnormousString_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.getEnormousString_Results.Builder.setStr (b : TestMoreStuff.getEnormousString_Results.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getA (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getAChecked (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getAView (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getAViewChecked (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Except String Capnp.TextView := Capnp.readTextViewChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.methodWithNullDefault_Params.Reader.hasA (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getB (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 1)
+def TestMoreStuff.methodWithNullDefault_Params.Reader.getBChecked (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 1)
+def TestMoreStuff.methodWithNullDefault_Params.initRoot : Capnp.BuilderM TestMoreStuff.methodWithNullDefault_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 2
+  return { struct := sb }
+
+def TestMoreStuff.methodWithNullDefault_Params.Builder.clearA (b : TestMoreStuff.methodWithNullDefault_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.methodWithNullDefault_Params.Builder.setA (b : TestMoreStuff.methodWithNullDefault_Params.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
+  Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.methodWithNullDefault_Params.Builder.setB (b : TestMoreStuff.methodWithNullDefault_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 1) v
+
+def TestMoreStuff.methodWithNullDefault_Results.initRoot : Capnp.BuilderM TestMoreStuff.methodWithNullDefault_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMoreStuff.writeToFd_Params.Reader.getFill (r : TestMoreStuff.writeToFd_Params.Reader) : Capnp.ListReader UInt8 := Capnp.readListUInt8Reader (Capnp.getPointer r.struct 0)
+def TestMoreStuff.writeToFd_Params.Reader.getFillChecked (r : TestMoreStuff.writeToFd_Params.Reader) : Except String (Capnp.ListReader UInt8) := Capnp.readListUInt8CheckedReader (Capnp.getPointer r.struct 0)
+def TestMoreStuff.writeToFd_Params.Reader.hasFill (r : TestMoreStuff.writeToFd_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+
+def TestMoreStuff.writeToFd_Params.Reader.getFdCap1 (r : TestMoreStuff.writeToFd_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 1)
+def TestMoreStuff.writeToFd_Params.Reader.getFdCap1Checked (r : TestMoreStuff.writeToFd_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 1)
+
+def TestMoreStuff.writeToFd_Params.Reader.getFdCap2 (r : TestMoreStuff.writeToFd_Params.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 2)
+def TestMoreStuff.writeToFd_Params.Reader.getFdCap2Checked (r : TestMoreStuff.writeToFd_Params.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 2)
+def TestMoreStuff.writeToFd_Params.initRoot : Capnp.BuilderM TestMoreStuff.writeToFd_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 3
+  return { struct := sb }
+
+def TestMoreStuff.writeToFd_Params.Builder.clearFill (b : TestMoreStuff.writeToFd_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestMoreStuff.writeToFd_Params.Builder.initFill (b : TestMoreStuff.writeToFd_Params.Builder) (n : Nat) : Capnp.BuilderM Capnp.ListBuilder := do
+  Capnp.initListPointer (Capnp.getPointerBuilder b.struct 0) Capnp.elemSizeByte n
+def TestMoreStuff.writeToFd_Params.Builder.setFill (b : TestMoreStuff.writeToFd_Params.Builder) (v : Array UInt8) : Capnp.BuilderM Unit := do
+  Capnp.writeListUInt8 (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.writeToFd_Params.Builder.setFdCap1 (b : TestMoreStuff.writeToFd_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 1) v
+
+def TestMoreStuff.writeToFd_Params.Builder.setFdCap2 (b : TestMoreStuff.writeToFd_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 2) v
+
+
+def TestMoreStuff.writeToFd_Results.Reader.getFdCap3 (r : TestMoreStuff.writeToFd_Results.Reader) : TestInterface := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMoreStuff.writeToFd_Results.Reader.getFdCap3Checked (r : TestMoreStuff.writeToFd_Results.Reader) : Except String (TestInterface) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+
+def TestMoreStuff.writeToFd_Results.Reader.getSecondFdPresent (r : TestMoreStuff.writeToFd_Results.Reader) : Bool := Capnp.getBool r.struct 0
+def TestMoreStuff.writeToFd_Results.Reader.getSecondFdPresentChecked (r : TestMoreStuff.writeToFd_Results.Reader) : Except String (Bool) := pure (Capnp.getBool r.struct 0)
+def TestMoreStuff.writeToFd_Results.initRoot : Capnp.BuilderM TestMoreStuff.writeToFd_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestMoreStuff.writeToFd_Results.Builder.setFdCap3 (b : TestMoreStuff.writeToFd_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMoreStuff.writeToFd_Results.Builder.setSecondFdPresent (b : TestMoreStuff.writeToFd_Results.Builder) (v : Bool) : Capnp.BuilderM Unit := do
+  Capnp.setBool b.struct 0 v
+
+def TestMoreStuff.throwException_Params.initRoot : Capnp.BuilderM TestMoreStuff.throwException_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMoreStuff.throwException_Results.initRoot : Capnp.BuilderM TestMoreStuff.throwException_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMoreStuff.throwRemoteException_Params.initRoot : Capnp.BuilderM TestMoreStuff.throwRemoteException_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMoreStuff.throwRemoteException_Results.initRoot : Capnp.BuilderM TestMoreStuff.throwRemoteException_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMoreStuff.throwExceptionWithDetail_Params.initRoot : Capnp.BuilderM TestMoreStuff.throwExceptionWithDetail_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMoreStuff.throwExceptionWithDetail_Results.initRoot : Capnp.BuilderM TestMoreStuff.throwExceptionWithDetail_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMembrane.makeThing_Params.initRoot : Capnp.BuilderM TestMembrane.makeThing_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestMembrane.makeThing_Results.Reader.getThing (r : TestMembrane.makeThing_Results.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMembrane.makeThing_Results.Reader.getThingChecked (r : TestMembrane.makeThing_Results.Reader) : Except String (TestMembrane.Thing) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMembrane.makeThing_Results.initRoot : Capnp.BuilderM TestMembrane.makeThing_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMembrane.makeThing_Results.Builder.setThing (b : TestMembrane.makeThing_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMembrane.callPassThrough_Params.Reader.getThing (r : TestMembrane.callPassThrough_Params.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMembrane.callPassThrough_Params.Reader.getThingChecked (r : TestMembrane.callPassThrough_Params.Reader) : Except String (TestMembrane.Thing) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+
+def TestMembrane.callPassThrough_Params.Reader.getTailCall (r : TestMembrane.callPassThrough_Params.Reader) : Bool := Capnp.getBool r.struct 0
+def TestMembrane.callPassThrough_Params.Reader.getTailCallChecked (r : TestMembrane.callPassThrough_Params.Reader) : Except String (Bool) := pure (Capnp.getBool r.struct 0)
+def TestMembrane.callPassThrough_Params.initRoot : Capnp.BuilderM TestMembrane.callPassThrough_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestMembrane.callPassThrough_Params.Builder.setThing (b : TestMembrane.callPassThrough_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMembrane.callPassThrough_Params.Builder.setTailCall (b : TestMembrane.callPassThrough_Params.Builder) (v : Bool) : Capnp.BuilderM Unit := do
+  Capnp.setBool b.struct 0 v
+
+
 def TestMembrane.Result.Reader.getText (r : TestMembrane.Result.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
 def TestMembrane.Result.Reader.getTextChecked (r : TestMembrane.Result.Reader) : Except String (Capnp.Text) := Capnp.readTextChecked (Capnp.getPointer r.struct 0)
 def TestMembrane.Result.Reader.getTextView (r : TestMembrane.Result.Reader) : Capnp.TextView := Capnp.readTextView (Capnp.getPointer r.struct 0)
@@ -8155,6 +12853,65 @@ def TestMembrane.Result.Builder.clearText (b : TestMembrane.Result.Builder) : Ca
 
 def TestMembrane.Result.Builder.setText (b : TestMembrane.Result.Builder) (v : Capnp.Text) : Capnp.BuilderM Unit := do
   Capnp.writeText (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMembrane.callIntercept_Params.Reader.getThing (r : TestMembrane.callIntercept_Params.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMembrane.callIntercept_Params.Reader.getThingChecked (r : TestMembrane.callIntercept_Params.Reader) : Except String (TestMembrane.Thing) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+
+def TestMembrane.callIntercept_Params.Reader.getTailCall (r : TestMembrane.callIntercept_Params.Reader) : Bool := Capnp.getBool r.struct 0
+def TestMembrane.callIntercept_Params.Reader.getTailCallChecked (r : TestMembrane.callIntercept_Params.Reader) : Except String (Bool) := pure (Capnp.getBool r.struct 0)
+def TestMembrane.callIntercept_Params.initRoot : Capnp.BuilderM TestMembrane.callIntercept_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 1
+  return { struct := sb }
+
+def TestMembrane.callIntercept_Params.Builder.setThing (b : TestMembrane.callIntercept_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMembrane.callIntercept_Params.Builder.setTailCall (b : TestMembrane.callIntercept_Params.Builder) (v : Bool) : Capnp.BuilderM Unit := do
+  Capnp.setBool b.struct 0 v
+
+
+def TestMembrane.loopback_Params.Reader.getThing (r : TestMembrane.loopback_Params.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMembrane.loopback_Params.Reader.getThingChecked (r : TestMembrane.loopback_Params.Reader) : Except String (TestMembrane.Thing) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMembrane.loopback_Params.initRoot : Capnp.BuilderM TestMembrane.loopback_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMembrane.loopback_Params.Builder.setThing (b : TestMembrane.loopback_Params.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+
+def TestMembrane.loopback_Results.Reader.getThing (r : TestMembrane.loopback_Results.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
+def TestMembrane.loopback_Results.Reader.getThingChecked (r : TestMembrane.loopback_Results.Reader) : Except String (TestMembrane.Thing) := Capnp.readCapabilityChecked (Capnp.getPointer r.struct 0)
+def TestMembrane.loopback_Results.initRoot : Capnp.BuilderM TestMembrane.loopback_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestMembrane.loopback_Results.Builder.setThing (b : TestMembrane.loopback_Results.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
+  Capnp.writeCapability (Capnp.getPointerBuilder b.struct 0) v
+
+def TestMembrane.waitForever_Params.initRoot : Capnp.BuilderM TestMembrane.waitForever_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMembrane.waitForever_Results.initRoot : Capnp.BuilderM TestMembrane.waitForever_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMembrane.Thing.passThrough_Params.initRoot : Capnp.BuilderM TestMembrane.Thing.passThrough_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestMembrane.Thing.intercept_Params.initRoot : Capnp.BuilderM TestMembrane.Thing.intercept_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
 
 
 def TestContainMembrane.Reader.getCap (r : TestContainMembrane.Reader) : TestMembrane.Thing := Capnp.readCapability (Capnp.getPointer r.struct 0)
@@ -8235,6 +12992,66 @@ def TestTransferCap.Element.Builder.setText (b : TestTransferCap.Element.Builder
 
 def TestTransferCap.Element.Builder.setCap (b : TestTransferCap.Element.Builder) (v : Capnp.Capability) : Capnp.BuilderM Unit := do
   Capnp.writeCapability (Capnp.getPointerBuilder b.struct 1) v
+
+def TestKeywordMethods.delete_Params.initRoot : Capnp.BuilderM TestKeywordMethods.delete_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.delete_Results.initRoot : Capnp.BuilderM TestKeywordMethods.delete_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.class_Params.initRoot : Capnp.BuilderM TestKeywordMethods.class_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.class_Results.initRoot : Capnp.BuilderM TestKeywordMethods.class_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.void_Params.initRoot : Capnp.BuilderM TestKeywordMethods.void_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.void_Results.initRoot : Capnp.BuilderM TestKeywordMethods.void_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.return_Params.initRoot : Capnp.BuilderM TestKeywordMethods.return_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestKeywordMethods.return_Results.initRoot : Capnp.BuilderM TestKeywordMethods.return_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+def TestAuthenticatedBootstrap.getCallerId_Params.initRoot : Capnp.BuilderM TestAuthenticatedBootstrap.getCallerId_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
+
+
+def TestAuthenticatedBootstrap.getCallerId_Results.Reader.getCaller (r : TestAuthenticatedBootstrap.getCallerId_Results.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def TestAuthenticatedBootstrap.getCallerId_Results.Reader.getCallerChecked (r : TestAuthenticatedBootstrap.getCallerId_Results.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def TestAuthenticatedBootstrap.getCallerId_Results.Reader.hasCaller (r : TestAuthenticatedBootstrap.getCallerId_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def TestAuthenticatedBootstrap.getCallerId_Results.initRoot : Capnp.BuilderM TestAuthenticatedBootstrap.getCallerId_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def TestAuthenticatedBootstrap.getCallerId_Results.Builder.clearCaller (b : TestAuthenticatedBootstrap.getCallerId_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def TestAuthenticatedBootstrap.getCallerId_Results.Builder.getCaller (b : TestAuthenticatedBootstrap.getCallerId_Results.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
 
 
 def TestSturdyRefHostId.Reader.getHost (r : TestSturdyRefHostId.Reader) : Capnp.Text := Capnp.readText (Capnp.getPointer r.struct 0)
@@ -8471,6 +13288,24 @@ def TestNameAnnotation.NestedStruct._ann_name : Capnp.Text := "RenamedNestedStru
 def TestNameAnnotation.NestedStruct._ann_badNestedFieldName_name : Capnp.Text := "goodNestedFieldName"
 
 def TestNameAnnotation.NestedStruct._ann_anotherBadNestedFieldName_name : Capnp.Text := "anotherGoodNestedFieldName"
+
+
+def TestNameAnnotationInterface.badlyNamedMethod_Params.Reader.getBadlyNamedParam (r : TestNameAnnotationInterface.badlyNamedMethod_Params.Reader) : UInt8 := Capnp.getUInt8 r.struct 0
+def TestNameAnnotationInterface.badlyNamedMethod_Params.Reader.getBadlyNamedParamChecked (r : TestNameAnnotationInterface.badlyNamedMethod_Params.Reader) : Except String (UInt8) := pure (Capnp.getUInt8 r.struct 0)
+def TestNameAnnotationInterface.badlyNamedMethod_Params.initRoot : Capnp.BuilderM TestNameAnnotationInterface.badlyNamedMethod_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 1 0
+  return { struct := sb }
+
+def TestNameAnnotationInterface.badlyNamedMethod_Params.Builder.setBadlyNamedParam (b : TestNameAnnotationInterface.badlyNamedMethod_Params.Builder) (v : UInt8) : Capnp.BuilderM Unit := do
+  Capnp.setUInt8 b.struct 0 v
+
+def TestNameAnnotationInterface.badlyNamedMethod_Params._ann_badlyNamedParam_name : Capnp.Text := "renamedParam"
+
+def TestNameAnnotationInterface.badlyNamedMethod_Results.initRoot : Capnp.BuilderM TestNameAnnotationInterface.badlyNamedMethod_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 0
+  return { struct := sb }
 
 
 def TestImpliedFirstField._default_textStruct : Capnp.AnyPointer :=
@@ -9363,6 +14198,24 @@ mutual
     Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 3) v.qux
 
 
+  def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder.setFromValue (b : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Builder) (v : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder.setFromValue (b : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Builder) (v : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestGenerics.Interface.call_Results.Builder.setFromValue (b : TestGenerics.Interface.call_Results.Builder) (v : TestGenerics.Interface.call_Results) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.qux
+    let sb ← b.initGen
+    TestGenerics.Builder.setFromValue sb v.gen
+
+
   def TestGenerics.UseAliases.Builder.setFromValue (b : TestGenerics.UseAliases.Builder) (v : TestGenerics.UseAliases) : Capnp.BuilderM Unit := do
     Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.foo
     let sb ← b.initInner
@@ -9388,6 +14241,16 @@ mutual
   def TestGenericsWrapper2.Builder.setFromValue (b : TestGenericsWrapper2.Builder) (v : TestGenericsWrapper2) : Capnp.BuilderM Unit := do
     let sb ← b.initValue
     TestGenericsWrapper.Builder.setFromValue sb v.value
+
+
+  def TestImplicitMethodParams.call_Params.Builder.setFromValue (b : TestImplicitMethodParams.call_Params.Builder) (v : TestImplicitMethodParams.call_Params) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.foo
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 1) v.bar
+
+
+  def TestImplicitMethodParamsInGeneric.call_Params.Builder.setFromValue (b : TestImplicitMethodParamsInGeneric.call_Params.Builder) (v : TestImplicitMethodParamsInGeneric.call_Params) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.foo
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 1) v.bar
 
 
   def TestGenericsUnion.Builder.setFromValue (b : TestGenericsUnion.Builder) (v : TestGenericsUnion) : Capnp.BuilderM Unit := do
@@ -9433,6 +14296,148 @@ mutual
       i_88 := i_88 + 1
 
 
+  def TestInterface.foo_Params.Builder.setFromValue (b : TestInterface.foo_Params.Builder) (v : TestInterface.foo_Params) : Capnp.BuilderM Unit := do
+    b.setI v.i
+    b.setJ v.j
+    b.setExpectedCallCount v.expectedCallCount
+
+
+  def TestInterface.foo_Results.Builder.setFromValue (b : TestInterface.foo_Results.Builder) (v : TestInterface.foo_Results) : Capnp.BuilderM Unit := do
+    b.setX v.x
+
+
+  def TestInterface.bar_Params.Builder.setFromValue (b : TestInterface.bar_Params.Builder) (v : TestInterface.bar_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.bar_Results.Builder.setFromValue (b : TestInterface.bar_Results.Builder) (v : TestInterface.bar_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.baz_Params.Builder.setFromValue (b : TestInterface.baz_Params.Builder) (v : TestInterface.baz_Params) : Capnp.BuilderM Unit := do
+    let sb ← b.initS
+    TestAllTypes.Builder.setFromValue sb v.s
+
+
+  def TestInterface.baz_Results.Builder.setFromValue (b : TestInterface.baz_Results.Builder) (v : TestInterface.baz_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.getTestPipeline_Params.Builder.setFromValue (b : TestInterface.getTestPipeline_Params.Builder) (v : TestInterface.getTestPipeline_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.getTestPipeline_Results.Builder.setFromValue (b : TestInterface.getTestPipeline_Results.Builder) (v : TestInterface.getTestPipeline_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestInterface.getTestTailCallee_Params.Builder.setFromValue (b : TestInterface.getTestTailCallee_Params.Builder) (v : TestInterface.getTestTailCallee_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.getTestTailCallee_Results.Builder.setFromValue (b : TestInterface.getTestTailCallee_Results.Builder) (v : TestInterface.getTestTailCallee_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestInterface.getTestTailCaller_Params.Builder.setFromValue (b : TestInterface.getTestTailCaller_Params.Builder) (v : TestInterface.getTestTailCaller_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.getTestTailCaller_Results.Builder.setFromValue (b : TestInterface.getTestTailCaller_Results.Builder) (v : TestInterface.getTestTailCaller_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestInterface.getTestMoreStuff_Params.Builder.setFromValue (b : TestInterface.getTestMoreStuff_Params.Builder) (v : TestInterface.getTestMoreStuff_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestInterface.getTestMoreStuff_Results.Builder.setFromValue (b : TestInterface.getTestMoreStuff_Results.Builder) (v : TestInterface.getTestMoreStuff_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestExtends.qux_Params.Builder.setFromValue (b : TestExtends.qux_Params.Builder) (v : TestExtends.qux_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestExtends.qux_Results.Builder.setFromValue (b : TestExtends.qux_Results.Builder) (v : TestExtends.qux_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestExtends.corge_Results.Builder.setFromValue (b : TestExtends.corge_Results.Builder) (v : TestExtends.corge_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestExtends.grault_Params.Builder.setFromValue (b : TestExtends.grault_Params.Builder) (v : TestExtends.grault_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestPipeline.getCap_Params.Builder.setFromValue (b : TestPipeline.getCap_Params.Builder) (v : TestPipeline.getCap_Params) : Capnp.BuilderM Unit := do
+    b.setN v.n
+    b.setInCap v.inCap
+
+
+  def TestPipeline.getCap_Results.Builder.setFromValue (b : TestPipeline.getCap_Results.Builder) (v : TestPipeline.getCap_Results) : Capnp.BuilderM Unit := do
+    b.setS v.s
+    let sb ← b.initOutBox
+    TestPipeline.Box.Builder.setFromValue sb v.outBox
+
+
+  def TestPipeline.testPointers_Params.Builder.setFromValue (b : TestPipeline.testPointers_Params.Builder) (v : TestPipeline.testPointers_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 1) v.obj
+    Capnp.writeListCapability (Capnp.getPointerBuilder b.struct 2) (v.list)
+
+
+  def TestPipeline.testPointers_Results.Builder.setFromValue (b : TestPipeline.testPointers_Results.Builder) (v : TestPipeline.testPointers_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestPipeline.getAnyCap_Params.Builder.setFromValue (b : TestPipeline.getAnyCap_Params.Builder) (v : TestPipeline.getAnyCap_Params) : Capnp.BuilderM Unit := do
+    b.setN v.n
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.inCap
+
+
+  def TestPipeline.getAnyCap_Results.Builder.setFromValue (b : TestPipeline.getAnyCap_Results.Builder) (v : TestPipeline.getAnyCap_Results) : Capnp.BuilderM Unit := do
+    b.setS v.s
+    let sb ← b.initOutBox
+    TestPipeline.AnyBox.Builder.setFromValue sb v.outBox
+
+
+  def TestPipeline.getCapPipelineOnly_Params.Builder.setFromValue (b : TestPipeline.getCapPipelineOnly_Params.Builder) (v : TestPipeline.getCapPipelineOnly_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestPipeline.getCapPipelineOnly_Results.Builder.setFromValue (b : TestPipeline.getCapPipelineOnly_Results.Builder) (v : TestPipeline.getCapPipelineOnly_Results) : Capnp.BuilderM Unit := do
+    let sb ← b.initOutBox
+    TestPipeline.Box.Builder.setFromValue sb v.outBox
+
+
   def TestPipeline.Box.Builder.setFromValue (b : TestPipeline.Box.Builder) (v : TestPipeline.Box) : Capnp.BuilderM Unit := do
     b.setCap v.cap
 
@@ -9441,14 +14446,278 @@ mutual
     Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.cap
 
 
+  def TestCallOrder.getCallSequence_Params.Builder.setFromValue (b : TestCallOrder.getCallSequence_Params.Builder) (v : TestCallOrder.getCallSequence_Params) : Capnp.BuilderM Unit := do
+    b.setExpected v.expected
+
+
+  def TestCallOrder.getCallSequence_Results.Builder.setFromValue (b : TestCallOrder.getCallSequence_Results.Builder) (v : TestCallOrder.getCallSequence_Results) : Capnp.BuilderM Unit := do
+    b.setN v.n
+
+
+  def TestTailCallee.foo_Params.Builder.setFromValue (b : TestTailCallee.foo_Params.Builder) (v : TestTailCallee.foo_Params) : Capnp.BuilderM Unit := do
+    b.setI v.i
+    b.setT v.t
+
+
   def TestTailCallee.TailResult.Builder.setFromValue (b : TestTailCallee.TailResult.Builder) (v : TestTailCallee.TailResult) : Capnp.BuilderM Unit := do
     b.setI v.i
     b.setT v.t
     b.setC v.c
 
 
+  def TestTailCaller.foo_Params.Builder.setFromValue (b : TestTailCaller.foo_Params.Builder) (v : TestTailCaller.foo_Params) : Capnp.BuilderM Unit := do
+    b.setI v.i
+    b.setCallee v.callee
+
+
+  def TestStreaming.doStreamI_Params.Builder.setFromValue (b : TestStreaming.doStreamI_Params.Builder) (v : TestStreaming.doStreamI_Params) : Capnp.BuilderM Unit := do
+    b.setI v.i
+
+
+  def Capnp.Gen.capnp.stream.StreamResult.Builder.setFromValue (b : Capnp.Gen.capnp.stream.StreamResult.Builder) (v : Capnp.Gen.capnp.stream.StreamResult) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestStreaming.doStreamJ_Params.Builder.setFromValue (b : TestStreaming.doStreamJ_Params.Builder) (v : TestStreaming.doStreamJ_Params) : Capnp.BuilderM Unit := do
+    b.setJ v.j
+
+
+  def TestStreaming.finishStream_Params.Builder.setFromValue (b : TestStreaming.finishStream_Params.Builder) (v : TestStreaming.finishStream_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestStreaming.finishStream_Results.Builder.setFromValue (b : TestStreaming.finishStream_Results.Builder) (v : TestStreaming.finishStream_Results) : Capnp.BuilderM Unit := do
+    b.setTotalI v.totalI
+    b.setTotalJ v.totalJ
+
+
+  def TestMoreStuff.callFoo_Params.Builder.setFromValue (b : TestMoreStuff.callFoo_Params.Builder) (v : TestMoreStuff.callFoo_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.callFoo_Results.Builder.setFromValue (b : TestMoreStuff.callFoo_Results.Builder) (v : TestMoreStuff.callFoo_Results) : Capnp.BuilderM Unit := do
+    b.setS v.s
+
+
+  def TestMoreStuff.callFooWhenResolved_Params.Builder.setFromValue (b : TestMoreStuff.callFooWhenResolved_Params.Builder) (v : TestMoreStuff.callFooWhenResolved_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.callFooWhenResolved_Results.Builder.setFromValue (b : TestMoreStuff.callFooWhenResolved_Results.Builder) (v : TestMoreStuff.callFooWhenResolved_Results) : Capnp.BuilderM Unit := do
+    b.setS v.s
+
+
+  def TestMoreStuff.neverReturn_Params.Builder.setFromValue (b : TestMoreStuff.neverReturn_Params.Builder) (v : TestMoreStuff.neverReturn_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.neverReturn_Results.Builder.setFromValue (b : TestMoreStuff.neverReturn_Results.Builder) (v : TestMoreStuff.neverReturn_Results) : Capnp.BuilderM Unit := do
+    b.setCapCopy v.capCopy
+
+
+  def TestMoreStuff.hold_Params.Builder.setFromValue (b : TestMoreStuff.hold_Params.Builder) (v : TestMoreStuff.hold_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.hold_Results.Builder.setFromValue (b : TestMoreStuff.hold_Results.Builder) (v : TestMoreStuff.hold_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.callHeld_Params.Builder.setFromValue (b : TestMoreStuff.callHeld_Params.Builder) (v : TestMoreStuff.callHeld_Params) : Capnp.BuilderM Unit := do
+    b.setExpectedCallCount v.expectedCallCount
+
+
+  def TestMoreStuff.callHeld_Results.Builder.setFromValue (b : TestMoreStuff.callHeld_Results.Builder) (v : TestMoreStuff.callHeld_Results) : Capnp.BuilderM Unit := do
+    b.setS v.s
+
+
+  def TestMoreStuff.getHeld_Params.Builder.setFromValue (b : TestMoreStuff.getHeld_Params.Builder) (v : TestMoreStuff.getHeld_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.getHeld_Results.Builder.setFromValue (b : TestMoreStuff.getHeld_Results.Builder) (v : TestMoreStuff.getHeld_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.echo_Params.Builder.setFromValue (b : TestMoreStuff.echo_Params.Builder) (v : TestMoreStuff.echo_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.echo_Results.Builder.setFromValue (b : TestMoreStuff.echo_Results.Builder) (v : TestMoreStuff.echo_Results) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.expectCancel_Params.Builder.setFromValue (b : TestMoreStuff.expectCancel_Params.Builder) (v : TestMoreStuff.expectCancel_Params) : Capnp.BuilderM Unit := do
+    b.setCap v.cap
+
+
+  def TestMoreStuff.expectCancel_Results.Builder.setFromValue (b : TestMoreStuff.expectCancel_Results.Builder) (v : TestMoreStuff.expectCancel_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.methodWithDefaults_Params.Builder.setFromValue (b : TestMoreStuff.methodWithDefaults_Params.Builder) (v : TestMoreStuff.methodWithDefaults_Params) : Capnp.BuilderM Unit := do
+    b.setA v.a
+    b.setB v.b
+    b.setC v.c
+
+
+  def TestMoreStuff.methodWithDefaults_Results.Builder.setFromValue (b : TestMoreStuff.methodWithDefaults_Results.Builder) (v : TestMoreStuff.methodWithDefaults_Results) : Capnp.BuilderM Unit := do
+    b.setD v.d
+    b.setE v.e
+
+
+  def TestMoreStuff.getHandle_Params.Builder.setFromValue (b : TestMoreStuff.getHandle_Params.Builder) (v : TestMoreStuff.getHandle_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.getHandle_Results.Builder.setFromValue (b : TestMoreStuff.getHandle_Results.Builder) (v : TestMoreStuff.getHandle_Results) : Capnp.BuilderM Unit := do
+    b.setHandle v.handle
+
+
+  def TestMoreStuff.getNull_Params.Builder.setFromValue (b : TestMoreStuff.getNull_Params.Builder) (v : TestMoreStuff.getNull_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.getNull_Results.Builder.setFromValue (b : TestMoreStuff.getNull_Results.Builder) (v : TestMoreStuff.getNull_Results) : Capnp.BuilderM Unit := do
+    b.setNullCap v.nullCap
+
+
+  def TestMoreStuff.getEnormousString_Params.Builder.setFromValue (b : TestMoreStuff.getEnormousString_Params.Builder) (v : TestMoreStuff.getEnormousString_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.getEnormousString_Results.Builder.setFromValue (b : TestMoreStuff.getEnormousString_Results.Builder) (v : TestMoreStuff.getEnormousString_Results) : Capnp.BuilderM Unit := do
+    b.setStr v.str
+
+
+  def TestMoreStuff.methodWithNullDefault_Params.Builder.setFromValue (b : TestMoreStuff.methodWithNullDefault_Params.Builder) (v : TestMoreStuff.methodWithNullDefault_Params) : Capnp.BuilderM Unit := do
+    b.setA v.a
+    b.setB v.b
+
+
+  def TestMoreStuff.methodWithNullDefault_Results.Builder.setFromValue (b : TestMoreStuff.methodWithNullDefault_Results.Builder) (v : TestMoreStuff.methodWithNullDefault_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.writeToFd_Params.Builder.setFromValue (b : TestMoreStuff.writeToFd_Params.Builder) (v : TestMoreStuff.writeToFd_Params) : Capnp.BuilderM Unit := do
+    Capnp.writeListUInt8 (Capnp.getPointerBuilder b.struct 0) (v.fill)
+    b.setFdCap1 v.fdCap1
+    b.setFdCap2 v.fdCap2
+
+
+  def TestMoreStuff.writeToFd_Results.Builder.setFromValue (b : TestMoreStuff.writeToFd_Results.Builder) (v : TestMoreStuff.writeToFd_Results) : Capnp.BuilderM Unit := do
+    b.setFdCap3 v.fdCap3
+    b.setSecondFdPresent v.secondFdPresent
+
+
+  def TestMoreStuff.throwException_Params.Builder.setFromValue (b : TestMoreStuff.throwException_Params.Builder) (v : TestMoreStuff.throwException_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.throwException_Results.Builder.setFromValue (b : TestMoreStuff.throwException_Results.Builder) (v : TestMoreStuff.throwException_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.throwRemoteException_Params.Builder.setFromValue (b : TestMoreStuff.throwRemoteException_Params.Builder) (v : TestMoreStuff.throwRemoteException_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.throwRemoteException_Results.Builder.setFromValue (b : TestMoreStuff.throwRemoteException_Results.Builder) (v : TestMoreStuff.throwRemoteException_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.throwExceptionWithDetail_Params.Builder.setFromValue (b : TestMoreStuff.throwExceptionWithDetail_Params.Builder) (v : TestMoreStuff.throwExceptionWithDetail_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMoreStuff.throwExceptionWithDetail_Results.Builder.setFromValue (b : TestMoreStuff.throwExceptionWithDetail_Results.Builder) (v : TestMoreStuff.throwExceptionWithDetail_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMembrane.makeThing_Params.Builder.setFromValue (b : TestMembrane.makeThing_Params.Builder) (v : TestMembrane.makeThing_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMembrane.makeThing_Results.Builder.setFromValue (b : TestMembrane.makeThing_Results.Builder) (v : TestMembrane.makeThing_Results) : Capnp.BuilderM Unit := do
+    b.setThing v.thing
+
+
+  def TestMembrane.callPassThrough_Params.Builder.setFromValue (b : TestMembrane.callPassThrough_Params.Builder) (v : TestMembrane.callPassThrough_Params) : Capnp.BuilderM Unit := do
+    b.setThing v.thing
+    b.setTailCall v.tailCall
+
+
   def TestMembrane.Result.Builder.setFromValue (b : TestMembrane.Result.Builder) (v : TestMembrane.Result) : Capnp.BuilderM Unit := do
     b.setText v.text
+
+
+  def TestMembrane.callIntercept_Params.Builder.setFromValue (b : TestMembrane.callIntercept_Params.Builder) (v : TestMembrane.callIntercept_Params) : Capnp.BuilderM Unit := do
+    b.setThing v.thing
+    b.setTailCall v.tailCall
+
+
+  def TestMembrane.loopback_Params.Builder.setFromValue (b : TestMembrane.loopback_Params.Builder) (v : TestMembrane.loopback_Params) : Capnp.BuilderM Unit := do
+    b.setThing v.thing
+
+
+  def TestMembrane.loopback_Results.Builder.setFromValue (b : TestMembrane.loopback_Results.Builder) (v : TestMembrane.loopback_Results) : Capnp.BuilderM Unit := do
+    b.setThing v.thing
+
+
+  def TestMembrane.waitForever_Params.Builder.setFromValue (b : TestMembrane.waitForever_Params.Builder) (v : TestMembrane.waitForever_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMembrane.waitForever_Results.Builder.setFromValue (b : TestMembrane.waitForever_Results.Builder) (v : TestMembrane.waitForever_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMembrane.Thing.passThrough_Params.Builder.setFromValue (b : TestMembrane.Thing.passThrough_Params.Builder) (v : TestMembrane.Thing.passThrough_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestMembrane.Thing.intercept_Params.Builder.setFromValue (b : TestMembrane.Thing.intercept_Params.Builder) (v : TestMembrane.Thing.intercept_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
 
 
   def TestContainMembrane.Builder.setFromValue (b : TestContainMembrane.Builder) (v : TestContainMembrane) : Capnp.BuilderM Unit := do
@@ -9471,6 +14740,64 @@ mutual
   def TestTransferCap.Element.Builder.setFromValue (b : TestTransferCap.Element.Builder) (v : TestTransferCap.Element) : Capnp.BuilderM Unit := do
     b.setText v.text
     b.setCap v.cap
+
+
+  def TestKeywordMethods.delete_Params.Builder.setFromValue (b : TestKeywordMethods.delete_Params.Builder) (v : TestKeywordMethods.delete_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.delete_Results.Builder.setFromValue (b : TestKeywordMethods.delete_Results.Builder) (v : TestKeywordMethods.delete_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.class_Params.Builder.setFromValue (b : TestKeywordMethods.class_Params.Builder) (v : TestKeywordMethods.class_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.class_Results.Builder.setFromValue (b : TestKeywordMethods.class_Results.Builder) (v : TestKeywordMethods.class_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.void_Params.Builder.setFromValue (b : TestKeywordMethods.void_Params.Builder) (v : TestKeywordMethods.void_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.void_Results.Builder.setFromValue (b : TestKeywordMethods.void_Results.Builder) (v : TestKeywordMethods.void_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.return_Params.Builder.setFromValue (b : TestKeywordMethods.return_Params.Builder) (v : TestKeywordMethods.return_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestKeywordMethods.return_Results.Builder.setFromValue (b : TestKeywordMethods.return_Results.Builder) (v : TestKeywordMethods.return_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestAuthenticatedBootstrap.getCallerId_Params.Builder.setFromValue (b : TestAuthenticatedBootstrap.getCallerId_Params.Builder) (v : TestAuthenticatedBootstrap.getCallerId_Params) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
+
+
+  def TestAuthenticatedBootstrap.getCallerId_Results.Builder.setFromValue (b : TestAuthenticatedBootstrap.getCallerId_Results.Builder) (v : TestAuthenticatedBootstrap.getCallerId_Results) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.caller
 
 
   def TestSturdyRefHostId.Builder.setFromValue (b : TestSturdyRefHostId.Builder) (v : TestSturdyRefHostId) : Capnp.BuilderM Unit := do
@@ -9532,6 +14859,16 @@ mutual
 
   def TestNameAnnotation.NestedStruct.Builder.setFromValue (b : TestNameAnnotation.NestedStruct.Builder) (v : TestNameAnnotation.NestedStruct) : Capnp.BuilderM Unit := do
     Capnp.copyStruct b.struct v.struct
+
+
+  def TestNameAnnotationInterface.badlyNamedMethod_Params.Builder.setFromValue (b : TestNameAnnotationInterface.badlyNamedMethod_Params.Builder) (v : TestNameAnnotationInterface.badlyNamedMethod_Params) : Capnp.BuilderM Unit := do
+    b.setBadlyNamedParam v.badlyNamedParam
+
+
+  def TestNameAnnotationInterface.badlyNamedMethod_Results.Builder.setFromValue (b : TestNameAnnotationInterface.badlyNamedMethod_Results.Builder) (v : TestNameAnnotationInterface.badlyNamedMethod_Results) : Capnp.BuilderM Unit := do
+    let _ := b
+    let _ := v
+    pure ()
 
 
   def TestImpliedFirstField.Builder.setFromValue (b : TestImpliedFirstField.Builder) (v : TestImpliedFirstField) : Capnp.BuilderM Unit := do
@@ -10198,6 +15535,22 @@ mutual
     }
 
 
+  def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.ofReader (_r : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params :=
+    { 
+    }
+
+
+  def TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.ofReader (_r : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader) : TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results :=
+    { 
+    }
+
+
+  def TestGenerics.Interface.call_Results.ofReader (r : TestGenerics.Interface.call_Results.Reader) : TestGenerics.Interface.call_Results :=
+    { qux := r.getQux
+    , gen := TestGenerics.ofReader r.getGen
+    }
+
+
   def TestGenerics.UseAliases.ofReader (r : TestGenerics.UseAliases.Reader) : TestGenerics.UseAliases :=
     { foo := r.getFoo
     , inner := TestGenerics.Inner.ofReader r.getInner
@@ -10220,6 +15573,18 @@ mutual
 
   def TestGenericsWrapper2.ofReader (r : TestGenericsWrapper2.Reader) : TestGenericsWrapper2 :=
     { value := TestGenericsWrapper.ofReader r.getValue
+    }
+
+
+  def TestImplicitMethodParams.call_Params.ofReader (r : TestImplicitMethodParams.call_Params.Reader) : TestImplicitMethodParams.call_Params :=
+    { foo := r.getFoo
+    , bar := r.getBar
+    }
+
+
+  def TestImplicitMethodParamsInGeneric.call_Params.ofReader (r : TestImplicitMethodParamsInGeneric.call_Params.Reader) : TestImplicitMethodParamsInGeneric.call_Params :=
+    { foo := r.getFoo
+    , bar := r.getBar
     }
 
 
@@ -10254,6 +15619,144 @@ mutual
     }
 
 
+  def TestInterface.foo_Params.ofReader (r : TestInterface.foo_Params.Reader) : TestInterface.foo_Params :=
+    { i := r.getI
+    , j := r.getJ
+    , expectedCallCount := r.getExpectedCallCount
+    }
+
+
+  def TestInterface.foo_Results.ofReader (r : TestInterface.foo_Results.Reader) : TestInterface.foo_Results :=
+    { x := r.getX
+    }
+
+
+  def TestInterface.bar_Params.ofReader (_r : TestInterface.bar_Params.Reader) : TestInterface.bar_Params :=
+    { 
+    }
+
+
+  def TestInterface.bar_Results.ofReader (_r : TestInterface.bar_Results.Reader) : TestInterface.bar_Results :=
+    { 
+    }
+
+
+  def TestInterface.baz_Params.ofReader (r : TestInterface.baz_Params.Reader) : TestInterface.baz_Params :=
+    { s := TestAllTypes.ofReader r.getS
+    }
+
+
+  def TestInterface.baz_Results.ofReader (_r : TestInterface.baz_Results.Reader) : TestInterface.baz_Results :=
+    { 
+    }
+
+
+  def TestInterface.getTestPipeline_Params.ofReader (_r : TestInterface.getTestPipeline_Params.Reader) : TestInterface.getTestPipeline_Params :=
+    { 
+    }
+
+
+  def TestInterface.getTestPipeline_Results.ofReader (r : TestInterface.getTestPipeline_Results.Reader) : TestInterface.getTestPipeline_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestInterface.getTestTailCallee_Params.ofReader (_r : TestInterface.getTestTailCallee_Params.Reader) : TestInterface.getTestTailCallee_Params :=
+    { 
+    }
+
+
+  def TestInterface.getTestTailCallee_Results.ofReader (r : TestInterface.getTestTailCallee_Results.Reader) : TestInterface.getTestTailCallee_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestInterface.getTestTailCaller_Params.ofReader (_r : TestInterface.getTestTailCaller_Params.Reader) : TestInterface.getTestTailCaller_Params :=
+    { 
+    }
+
+
+  def TestInterface.getTestTailCaller_Results.ofReader (r : TestInterface.getTestTailCaller_Results.Reader) : TestInterface.getTestTailCaller_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestInterface.getTestMoreStuff_Params.ofReader (_r : TestInterface.getTestMoreStuff_Params.Reader) : TestInterface.getTestMoreStuff_Params :=
+    { 
+    }
+
+
+  def TestInterface.getTestMoreStuff_Results.ofReader (r : TestInterface.getTestMoreStuff_Results.Reader) : TestInterface.getTestMoreStuff_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestExtends.qux_Params.ofReader (_r : TestExtends.qux_Params.Reader) : TestExtends.qux_Params :=
+    { 
+    }
+
+
+  def TestExtends.qux_Results.ofReader (_r : TestExtends.qux_Results.Reader) : TestExtends.qux_Results :=
+    { 
+    }
+
+
+  def TestExtends.corge_Results.ofReader (_r : TestExtends.corge_Results.Reader) : TestExtends.corge_Results :=
+    { 
+    }
+
+
+  def TestExtends.grault_Params.ofReader (_r : TestExtends.grault_Params.Reader) : TestExtends.grault_Params :=
+    { 
+    }
+
+
+  def TestPipeline.getCap_Params.ofReader (r : TestPipeline.getCap_Params.Reader) : TestPipeline.getCap_Params :=
+    { n := r.getN
+    , inCap := r.getInCap
+    }
+
+
+  def TestPipeline.getCap_Results.ofReader (r : TestPipeline.getCap_Results.Reader) : TestPipeline.getCap_Results :=
+    { s := r.getS
+    , outBox := TestPipeline.Box.ofReader r.getOutBox
+    }
+
+
+  def TestPipeline.testPointers_Params.ofReader (r : TestPipeline.testPointers_Params.Reader) : TestPipeline.testPointers_Params :=
+    { cap := r.getCap
+    , obj := r.getObj
+    , list := Capnp.ListReader.toArray (r.getList)
+    }
+
+
+  def TestPipeline.testPointers_Results.ofReader (_r : TestPipeline.testPointers_Results.Reader) : TestPipeline.testPointers_Results :=
+    { 
+    }
+
+
+  def TestPipeline.getAnyCap_Params.ofReader (r : TestPipeline.getAnyCap_Params.Reader) : TestPipeline.getAnyCap_Params :=
+    { n := r.getN
+    , inCap := r.getInCap
+    }
+
+
+  def TestPipeline.getAnyCap_Results.ofReader (r : TestPipeline.getAnyCap_Results.Reader) : TestPipeline.getAnyCap_Results :=
+    { s := r.getS
+    , outBox := TestPipeline.AnyBox.ofReader r.getOutBox
+    }
+
+
+  def TestPipeline.getCapPipelineOnly_Params.ofReader (_r : TestPipeline.getCapPipelineOnly_Params.Reader) : TestPipeline.getCapPipelineOnly_Params :=
+    { 
+    }
+
+
+  def TestPipeline.getCapPipelineOnly_Results.ofReader (r : TestPipeline.getCapPipelineOnly_Results.Reader) : TestPipeline.getCapPipelineOnly_Results :=
+    { outBox := TestPipeline.Box.ofReader r.getOutBox
+    }
+
+
   def TestPipeline.Box.ofReader (r : TestPipeline.Box.Reader) : TestPipeline.Box :=
     { cap := r.getCap
     }
@@ -10264,6 +15767,22 @@ mutual
     }
 
 
+  def TestCallOrder.getCallSequence_Params.ofReader (r : TestCallOrder.getCallSequence_Params.Reader) : TestCallOrder.getCallSequence_Params :=
+    { expected := r.getExpected
+    }
+
+
+  def TestCallOrder.getCallSequence_Results.ofReader (r : TestCallOrder.getCallSequence_Results.Reader) : TestCallOrder.getCallSequence_Results :=
+    { n := r.getN
+    }
+
+
+  def TestTailCallee.foo_Params.ofReader (r : TestTailCallee.foo_Params.Reader) : TestTailCallee.foo_Params :=
+    { i := r.getI
+    , t := r.getT
+    }
+
+
   def TestTailCallee.TailResult.ofReader (r : TestTailCallee.TailResult.Reader) : TestTailCallee.TailResult :=
     { i := r.getI
     , t := r.getT
@@ -10271,8 +15790,269 @@ mutual
     }
 
 
+  def TestTailCaller.foo_Params.ofReader (r : TestTailCaller.foo_Params.Reader) : TestTailCaller.foo_Params :=
+    { i := r.getI
+    , callee := r.getCallee
+    }
+
+
+  def TestStreaming.doStreamI_Params.ofReader (r : TestStreaming.doStreamI_Params.Reader) : TestStreaming.doStreamI_Params :=
+    { i := r.getI
+    }
+
+
+  def Capnp.Gen.capnp.stream.StreamResult.ofReader (_r : Capnp.Gen.capnp.stream.StreamResult.Reader) : Capnp.Gen.capnp.stream.StreamResult :=
+    { 
+    }
+
+
+  def TestStreaming.doStreamJ_Params.ofReader (r : TestStreaming.doStreamJ_Params.Reader) : TestStreaming.doStreamJ_Params :=
+    { j := r.getJ
+    }
+
+
+  def TestStreaming.finishStream_Params.ofReader (_r : TestStreaming.finishStream_Params.Reader) : TestStreaming.finishStream_Params :=
+    { 
+    }
+
+
+  def TestStreaming.finishStream_Results.ofReader (r : TestStreaming.finishStream_Results.Reader) : TestStreaming.finishStream_Results :=
+    { totalI := r.getTotalI
+    , totalJ := r.getTotalJ
+    }
+
+
+  def TestMoreStuff.callFoo_Params.ofReader (r : TestMoreStuff.callFoo_Params.Reader) : TestMoreStuff.callFoo_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.callFoo_Results.ofReader (r : TestMoreStuff.callFoo_Results.Reader) : TestMoreStuff.callFoo_Results :=
+    { s := r.getS
+    }
+
+
+  def TestMoreStuff.callFooWhenResolved_Params.ofReader (r : TestMoreStuff.callFooWhenResolved_Params.Reader) : TestMoreStuff.callFooWhenResolved_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.callFooWhenResolved_Results.ofReader (r : TestMoreStuff.callFooWhenResolved_Results.Reader) : TestMoreStuff.callFooWhenResolved_Results :=
+    { s := r.getS
+    }
+
+
+  def TestMoreStuff.neverReturn_Params.ofReader (r : TestMoreStuff.neverReturn_Params.Reader) : TestMoreStuff.neverReturn_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.neverReturn_Results.ofReader (r : TestMoreStuff.neverReturn_Results.Reader) : TestMoreStuff.neverReturn_Results :=
+    { capCopy := r.getCapCopy
+    }
+
+
+  def TestMoreStuff.hold_Params.ofReader (r : TestMoreStuff.hold_Params.Reader) : TestMoreStuff.hold_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.hold_Results.ofReader (_r : TestMoreStuff.hold_Results.Reader) : TestMoreStuff.hold_Results :=
+    { 
+    }
+
+
+  def TestMoreStuff.callHeld_Params.ofReader (r : TestMoreStuff.callHeld_Params.Reader) : TestMoreStuff.callHeld_Params :=
+    { expectedCallCount := r.getExpectedCallCount
+    }
+
+
+  def TestMoreStuff.callHeld_Results.ofReader (r : TestMoreStuff.callHeld_Results.Reader) : TestMoreStuff.callHeld_Results :=
+    { s := r.getS
+    }
+
+
+  def TestMoreStuff.getHeld_Params.ofReader (_r : TestMoreStuff.getHeld_Params.Reader) : TestMoreStuff.getHeld_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.getHeld_Results.ofReader (r : TestMoreStuff.getHeld_Results.Reader) : TestMoreStuff.getHeld_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.echo_Params.ofReader (r : TestMoreStuff.echo_Params.Reader) : TestMoreStuff.echo_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.echo_Results.ofReader (r : TestMoreStuff.echo_Results.Reader) : TestMoreStuff.echo_Results :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.expectCancel_Params.ofReader (r : TestMoreStuff.expectCancel_Params.Reader) : TestMoreStuff.expectCancel_Params :=
+    { cap := r.getCap
+    }
+
+
+  def TestMoreStuff.expectCancel_Results.ofReader (_r : TestMoreStuff.expectCancel_Results.Reader) : TestMoreStuff.expectCancel_Results :=
+    { 
+    }
+
+
+  def TestMoreStuff.methodWithDefaults_Params.ofReader (r : TestMoreStuff.methodWithDefaults_Params.Reader) : TestMoreStuff.methodWithDefaults_Params :=
+    { a := r.getA
+    , b := r.getB
+    , c := r.getC
+    }
+
+
+  def TestMoreStuff.methodWithDefaults_Results.ofReader (r : TestMoreStuff.methodWithDefaults_Results.Reader) : TestMoreStuff.methodWithDefaults_Results :=
+    { d := r.getD
+    , e := r.getE
+    }
+
+
+  def TestMoreStuff.getHandle_Params.ofReader (_r : TestMoreStuff.getHandle_Params.Reader) : TestMoreStuff.getHandle_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.getHandle_Results.ofReader (r : TestMoreStuff.getHandle_Results.Reader) : TestMoreStuff.getHandle_Results :=
+    { handle := r.getHandle
+    }
+
+
+  def TestMoreStuff.getNull_Params.ofReader (_r : TestMoreStuff.getNull_Params.Reader) : TestMoreStuff.getNull_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.getNull_Results.ofReader (r : TestMoreStuff.getNull_Results.Reader) : TestMoreStuff.getNull_Results :=
+    { nullCap := r.getNullCap
+    }
+
+
+  def TestMoreStuff.getEnormousString_Params.ofReader (_r : TestMoreStuff.getEnormousString_Params.Reader) : TestMoreStuff.getEnormousString_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.getEnormousString_Results.ofReader (r : TestMoreStuff.getEnormousString_Results.Reader) : TestMoreStuff.getEnormousString_Results :=
+    { str := r.getStr
+    }
+
+
+  def TestMoreStuff.methodWithNullDefault_Params.ofReader (r : TestMoreStuff.methodWithNullDefault_Params.Reader) : TestMoreStuff.methodWithNullDefault_Params :=
+    { a := r.getA
+    , b := r.getB
+    }
+
+
+  def TestMoreStuff.methodWithNullDefault_Results.ofReader (_r : TestMoreStuff.methodWithNullDefault_Results.Reader) : TestMoreStuff.methodWithNullDefault_Results :=
+    { 
+    }
+
+
+  def TestMoreStuff.writeToFd_Params.ofReader (r : TestMoreStuff.writeToFd_Params.Reader) : TestMoreStuff.writeToFd_Params :=
+    { fill := Capnp.ListReader.toArray (r.getFill)
+    , fdCap1 := r.getFdCap1
+    , fdCap2 := r.getFdCap2
+    }
+
+
+  def TestMoreStuff.writeToFd_Results.ofReader (r : TestMoreStuff.writeToFd_Results.Reader) : TestMoreStuff.writeToFd_Results :=
+    { fdCap3 := r.getFdCap3
+    , secondFdPresent := r.getSecondFdPresent
+    }
+
+
+  def TestMoreStuff.throwException_Params.ofReader (_r : TestMoreStuff.throwException_Params.Reader) : TestMoreStuff.throwException_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.throwException_Results.ofReader (_r : TestMoreStuff.throwException_Results.Reader) : TestMoreStuff.throwException_Results :=
+    { 
+    }
+
+
+  def TestMoreStuff.throwRemoteException_Params.ofReader (_r : TestMoreStuff.throwRemoteException_Params.Reader) : TestMoreStuff.throwRemoteException_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.throwRemoteException_Results.ofReader (_r : TestMoreStuff.throwRemoteException_Results.Reader) : TestMoreStuff.throwRemoteException_Results :=
+    { 
+    }
+
+
+  def TestMoreStuff.throwExceptionWithDetail_Params.ofReader (_r : TestMoreStuff.throwExceptionWithDetail_Params.Reader) : TestMoreStuff.throwExceptionWithDetail_Params :=
+    { 
+    }
+
+
+  def TestMoreStuff.throwExceptionWithDetail_Results.ofReader (_r : TestMoreStuff.throwExceptionWithDetail_Results.Reader) : TestMoreStuff.throwExceptionWithDetail_Results :=
+    { 
+    }
+
+
+  def TestMembrane.makeThing_Params.ofReader (_r : TestMembrane.makeThing_Params.Reader) : TestMembrane.makeThing_Params :=
+    { 
+    }
+
+
+  def TestMembrane.makeThing_Results.ofReader (r : TestMembrane.makeThing_Results.Reader) : TestMembrane.makeThing_Results :=
+    { thing := r.getThing
+    }
+
+
+  def TestMembrane.callPassThrough_Params.ofReader (r : TestMembrane.callPassThrough_Params.Reader) : TestMembrane.callPassThrough_Params :=
+    { thing := r.getThing
+    , tailCall := r.getTailCall
+    }
+
+
   def TestMembrane.Result.ofReader (r : TestMembrane.Result.Reader) : TestMembrane.Result :=
     { text := r.getText
+    }
+
+
+  def TestMembrane.callIntercept_Params.ofReader (r : TestMembrane.callIntercept_Params.Reader) : TestMembrane.callIntercept_Params :=
+    { thing := r.getThing
+    , tailCall := r.getTailCall
+    }
+
+
+  def TestMembrane.loopback_Params.ofReader (r : TestMembrane.loopback_Params.Reader) : TestMembrane.loopback_Params :=
+    { thing := r.getThing
+    }
+
+
+  def TestMembrane.loopback_Results.ofReader (r : TestMembrane.loopback_Results.Reader) : TestMembrane.loopback_Results :=
+    { thing := r.getThing
+    }
+
+
+  def TestMembrane.waitForever_Params.ofReader (_r : TestMembrane.waitForever_Params.Reader) : TestMembrane.waitForever_Params :=
+    { 
+    }
+
+
+  def TestMembrane.waitForever_Results.ofReader (_r : TestMembrane.waitForever_Results.Reader) : TestMembrane.waitForever_Results :=
+    { 
+    }
+
+
+  def TestMembrane.Thing.passThrough_Params.ofReader (_r : TestMembrane.Thing.passThrough_Params.Reader) : TestMembrane.Thing.passThrough_Params :=
+    { 
+    }
+
+
+  def TestMembrane.Thing.intercept_Params.ofReader (_r : TestMembrane.Thing.intercept_Params.Reader) : TestMembrane.Thing.intercept_Params :=
+    { 
     }
 
 
@@ -10290,6 +16070,56 @@ mutual
   def TestTransferCap.Element.ofReader (r : TestTransferCap.Element.Reader) : TestTransferCap.Element :=
     { text := r.getText
     , cap := r.getCap
+    }
+
+
+  def TestKeywordMethods.delete_Params.ofReader (_r : TestKeywordMethods.delete_Params.Reader) : TestKeywordMethods.delete_Params :=
+    { 
+    }
+
+
+  def TestKeywordMethods.delete_Results.ofReader (_r : TestKeywordMethods.delete_Results.Reader) : TestKeywordMethods.delete_Results :=
+    { 
+    }
+
+
+  def TestKeywordMethods.class_Params.ofReader (_r : TestKeywordMethods.class_Params.Reader) : TestKeywordMethods.class_Params :=
+    { 
+    }
+
+
+  def TestKeywordMethods.class_Results.ofReader (_r : TestKeywordMethods.class_Results.Reader) : TestKeywordMethods.class_Results :=
+    { 
+    }
+
+
+  def TestKeywordMethods.void_Params.ofReader (_r : TestKeywordMethods.void_Params.Reader) : TestKeywordMethods.void_Params :=
+    { 
+    }
+
+
+  def TestKeywordMethods.void_Results.ofReader (_r : TestKeywordMethods.void_Results.Reader) : TestKeywordMethods.void_Results :=
+    { 
+    }
+
+
+  def TestKeywordMethods.return_Params.ofReader (_r : TestKeywordMethods.return_Params.Reader) : TestKeywordMethods.return_Params :=
+    { 
+    }
+
+
+  def TestKeywordMethods.return_Results.ofReader (_r : TestKeywordMethods.return_Results.Reader) : TestKeywordMethods.return_Results :=
+    { 
+    }
+
+
+  def TestAuthenticatedBootstrap.getCallerId_Params.ofReader (_r : TestAuthenticatedBootstrap.getCallerId_Params.Reader) : TestAuthenticatedBootstrap.getCallerId_Params :=
+    { 
+    }
+
+
+  def TestAuthenticatedBootstrap.getCallerId_Results.ofReader (r : TestAuthenticatedBootstrap.getCallerId_Results.Reader) : TestAuthenticatedBootstrap.getCallerId_Results :=
+    { caller := r.getCaller
     }
 
 
@@ -10340,6 +16170,16 @@ mutual
 
 
   def TestNameAnnotation.NestedStruct.ofReader (r : TestNameAnnotation.NestedStruct.Reader) : TestNameAnnotation.NestedStruct := r
+
+
+  def TestNameAnnotationInterface.badlyNamedMethod_Params.ofReader (r : TestNameAnnotationInterface.badlyNamedMethod_Params.Reader) : TestNameAnnotationInterface.badlyNamedMethod_Params :=
+    { badlyNamedParam := r.getBadlyNamedParam
+    }
+
+
+  def TestNameAnnotationInterface.badlyNamedMethod_Results.ofReader (_r : TestNameAnnotationInterface.badlyNamedMethod_Results.Reader) : TestNameAnnotationInterface.badlyNamedMethod_Results :=
+    { 
+    }
 
 
   def TestImpliedFirstField.ofReader (r : TestImpliedFirstField.Reader) : TestImpliedFirstField :=

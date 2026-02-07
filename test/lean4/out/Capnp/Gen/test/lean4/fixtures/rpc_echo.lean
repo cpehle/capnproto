@@ -9,6 +9,82 @@ set_option maxHeartbeats 2000000
 
 namespace Capnp.Gen.test.lean4.fixtures.rpc_echo
 
+structure Echo.foo_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def Echo.foo_Params.read (ptr : Capnp.AnyPointer) : Echo.foo_Params.Reader := { struct := Capnp.readStruct ptr }
+def Echo.foo_Params.readChecked (ptr : Capnp.AnyPointer) : Except String Echo.foo_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def Echo.foo_Params.fromStruct (sr : Capnp.StructReader) : Echo.foo_Params.Reader := { struct := sr }
+
+structure Echo.foo_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def Echo.foo_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : Echo.foo_Params.Builder := { struct := sb }
+
+
+structure Echo.foo_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def Echo.foo_Results.read (ptr : Capnp.AnyPointer) : Echo.foo_Results.Reader := { struct := Capnp.readStruct ptr }
+def Echo.foo_Results.readChecked (ptr : Capnp.AnyPointer) : Except String Echo.foo_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def Echo.foo_Results.fromStruct (sr : Capnp.StructReader) : Echo.foo_Results.Reader := { struct := sr }
+
+structure Echo.foo_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def Echo.foo_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : Echo.foo_Results.Builder := { struct := sb }
+
+
+structure Echo.bar_Params.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def Echo.bar_Params.read (ptr : Capnp.AnyPointer) : Echo.bar_Params.Reader := { struct := Capnp.readStruct ptr }
+def Echo.bar_Params.readChecked (ptr : Capnp.AnyPointer) : Except String Echo.bar_Params.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def Echo.bar_Params.fromStruct (sr : Capnp.StructReader) : Echo.bar_Params.Reader := { struct := sr }
+
+structure Echo.bar_Params.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def Echo.bar_Params.Builder.fromStruct (sb : Capnp.StructBuilder) : Echo.bar_Params.Builder := { struct := sb }
+
+
+structure Echo.bar_Results.Reader where
+  struct : Capnp.StructReader
+
+  deriving BEq
+
+def Echo.bar_Results.read (ptr : Capnp.AnyPointer) : Echo.bar_Results.Reader := { struct := Capnp.readStruct ptr }
+def Echo.bar_Results.readChecked (ptr : Capnp.AnyPointer) : Except String Echo.bar_Results.Reader := do
+  let sr ← Capnp.readStructChecked ptr
+  return { struct := sr }
+def Echo.bar_Results.fromStruct (sr : Capnp.StructReader) : Echo.bar_Results.Reader := { struct := sr }
+
+structure Echo.bar_Results.Builder where
+  struct : Capnp.StructBuilder
+
+  deriving BEq
+
+def Echo.bar_Results.Builder.fromStruct (sb : Capnp.StructBuilder) : Echo.bar_Results.Builder := { struct := sb }
+
+
 abbrev Echo := Capnp.Rpc.Client
 
 namespace Echo
@@ -21,6 +97,23 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod request: {e}")
+  return (reader, payload.capTable)
+def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid fooMethod response: {e}")
+  return (reader, payload.capTable)
+def callFooTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target fooMethod payload
+  fooResponseOfPayload response
+def callFooTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
@@ -28,6 +121,23 @@ def callBar (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target barMethod payload
 def callBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target barMethod payload
+abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid barMethod request: {e}")
+  return (reader, payload.capTable)
+def barResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.readChecked (Capnp.getRoot payload.msg) with
+    | Except.ok r => pure r
+    | Except.error e => throw (IO.userError s!"invalid barMethod response: {e}")
+  return (reader, payload.capTable)
+def callBarTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.call backend target barMethod payload
+  barResponseOfPayload response
+def callBarTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← Capnp.Rpc.RuntimeM.call target barMethod payload
+  barResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler
@@ -55,5 +165,157 @@ def registerTargetM (server : Server)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Echo := do
   Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
+structure TypedServer where
+  foo : fooTypedHandler
+  bar : barTypedHandler
+
+def typedDispatch (server : TypedServer) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod (fun target payload => do
+    let (request, requestCaps) ← fooRequestOfPayload payload
+    server.foo target request requestCaps
+  )
+  d := Capnp.Rpc.Dispatch.register d barMethod (fun target payload => do
+    let (request, requestCaps) ← barRequestOfPayload payload
+    server.bar target request requestCaps
+  )
+  return d
+
+def typedBackend (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (typedDispatch server).toBackend (onMissing := onMissing)
+
+def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO Echo := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (typedDispatch server) (onMissing := onMissing)
+
+def registerTypedTargetM (server : TypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Echo := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (typedDispatch server) (onMissing := onMissing)
+
 end Echo
+
+mutual
+  structure Echo.foo_Params where
+    payload : Capnp.AnyPointer
+
+
+  structure Echo.foo_Results where
+    payload : Capnp.AnyPointer
+
+
+  structure Echo.bar_Params where
+    payload : Capnp.AnyPointer
+
+
+  structure Echo.bar_Results where
+    payload : Capnp.AnyPointer
+
+
+end
+
+
+def Echo.foo_Params.Reader.getPayload (r : Echo.foo_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def Echo.foo_Params.Reader.getPayloadChecked (r : Echo.foo_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def Echo.foo_Params.Reader.hasPayload (r : Echo.foo_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def Echo.foo_Params.initRoot : Capnp.BuilderM Echo.foo_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def Echo.foo_Params.Builder.clearPayload (b : Echo.foo_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def Echo.foo_Params.Builder.getPayload (b : Echo.foo_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+def Echo.foo_Results.Reader.getPayload (r : Echo.foo_Results.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def Echo.foo_Results.Reader.getPayloadChecked (r : Echo.foo_Results.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def Echo.foo_Results.Reader.hasPayload (r : Echo.foo_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def Echo.foo_Results.initRoot : Capnp.BuilderM Echo.foo_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def Echo.foo_Results.Builder.clearPayload (b : Echo.foo_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def Echo.foo_Results.Builder.getPayload (b : Echo.foo_Results.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+def Echo.bar_Params.Reader.getPayload (r : Echo.bar_Params.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def Echo.bar_Params.Reader.getPayloadChecked (r : Echo.bar_Params.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def Echo.bar_Params.Reader.hasPayload (r : Echo.bar_Params.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def Echo.bar_Params.initRoot : Capnp.BuilderM Echo.bar_Params.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def Echo.bar_Params.Builder.clearPayload (b : Echo.bar_Params.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def Echo.bar_Params.Builder.getPayload (b : Echo.bar_Params.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+def Echo.bar_Results.Reader.getPayload (r : Echo.bar_Results.Reader) : Capnp.AnyPointer := Capnp.getPointer r.struct 0
+def Echo.bar_Results.Reader.getPayloadChecked (r : Echo.bar_Results.Reader) : Except String (Capnp.AnyPointer) := Capnp.readAnyPointerChecked (Capnp.getPointer r.struct 0)
+def Echo.bar_Results.Reader.hasPayload (r : Echo.bar_Results.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+
+def Echo.bar_Results.initRoot : Capnp.BuilderM Echo.bar_Results.Builder := do
+  let p ← Capnp.getRootPointer
+  let sb ← Capnp.initStructPointer p 0 1
+  return { struct := sb }
+
+def Echo.bar_Results.Builder.clearPayload (b : Echo.bar_Results.Builder) : Capnp.BuilderM Unit := do
+  Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
+
+def Echo.bar_Results.Builder.getPayload (b : Echo.bar_Results.Builder) : Capnp.AnyPointerBuilder := Capnp.getPointerBuilder b.struct 0
+
+
+mutual
+  def Echo.foo_Params.Builder.setFromValue (b : Echo.foo_Params.Builder) (v : Echo.foo_Params) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.payload
+
+
+  def Echo.foo_Results.Builder.setFromValue (b : Echo.foo_Results.Builder) (v : Echo.foo_Results) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.payload
+
+
+  def Echo.bar_Params.Builder.setFromValue (b : Echo.bar_Params.Builder) (v : Echo.bar_Params) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.payload
+
+
+  def Echo.bar_Results.Builder.setFromValue (b : Echo.bar_Results.Builder) (v : Echo.bar_Results) : Capnp.BuilderM Unit := do
+    Capnp.copyAnyPointer (Capnp.getPointerBuilder b.struct 0) v.payload
+
+
+end
+
+
+mutual
+  def Echo.foo_Params.ofReader (r : Echo.foo_Params.Reader) : Echo.foo_Params :=
+    { payload := r.getPayload
+    }
+
+
+  def Echo.foo_Results.ofReader (r : Echo.foo_Results.Reader) : Echo.foo_Results :=
+    { payload := r.getPayload
+    }
+
+
+  def Echo.bar_Params.ofReader (r : Echo.bar_Params.Reader) : Echo.bar_Params :=
+    { payload := r.getPayload
+    }
+
+
+  def Echo.bar_Results.ofReader (r : Echo.bar_Results.Reader) : Echo.bar_Results :=
+    { payload := r.getPayload
+    }
+
+
+end
+
 end Capnp.Gen.test.lean4.fixtures.rpc_echo
