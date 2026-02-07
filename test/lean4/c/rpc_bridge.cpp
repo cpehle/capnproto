@@ -434,6 +434,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueRetainTarget(uint32_t target) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedRetainTarget{target, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueConnectTarget(std::string address,
                                                                  uint32_t portHint) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
@@ -715,6 +729,11 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedRetainTarget {
+    uint32_t target;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedConnectTarget {
     std::string address;
     uint32_t portHint;
@@ -809,7 +828,7 @@ class RuntimeLoop {
 
   using QueuedOperation =
       std::variant<QueuedRawCall, QueuedRegisterEchoTarget, QueuedRegisterHandlerTarget,
-                   QueuedReleaseTarget,
+                   QueuedReleaseTarget, QueuedRetainTarget,
                    QueuedConnectTarget, QueuedListenEcho, QueuedAcceptEcho,
                    QueuedReleaseListener, QueuedNewClient, QueuedReleaseClient,
                    QueuedClientBootstrap, QueuedClientOnDisconnect, QueuedClientSetFlowLimit,
@@ -840,6 +859,47 @@ class RuntimeLoop {
     capnp::Capability::Client bootstrap;
     kj::Vector<kj::Own<NetworkServerPeer>> peers;
   };
+
+  void retainPeerOwnership(
+      uint32_t sourceTarget, uint32_t retainedTarget,
+      std::unordered_map<uint32_t, uint32_t>& ownerByTarget,
+      std::unordered_map<uint32_t, uint32_t>& ownerRefCounts) {
+    auto ownerIt = ownerByTarget.find(sourceTarget);
+    if (ownerIt == ownerByTarget.end()) {
+      return;
+    }
+    auto owner = ownerIt->second;
+    ownerByTarget.emplace(retainedTarget, owner);
+    auto refIt = ownerRefCounts.find(owner);
+    if (refIt == ownerRefCounts.end()) {
+      ownerRefCounts.emplace(owner, 1);
+      refIt = ownerRefCounts.find(owner);
+    }
+    ++(refIt->second);
+  }
+
+  template <typename PeerMap>
+  void releasePeerOwnership(
+      uint32_t target, PeerMap& peers, std::unordered_map<uint32_t, uint32_t>& ownerByTarget,
+      std::unordered_map<uint32_t, uint32_t>& ownerRefCounts) {
+    auto ownerIt = ownerByTarget.find(target);
+    if (ownerIt == ownerByTarget.end()) {
+      return;
+    }
+    auto owner = ownerIt->second;
+    ownerByTarget.erase(ownerIt);
+
+    auto refIt = ownerRefCounts.find(owner);
+    if (refIt == ownerRefCounts.end()) {
+      return;
+    }
+    if (refIt->second > 1) {
+      --(refIt->second);
+      return;
+    }
+    ownerRefCounts.erase(refIt);
+    peers.erase(owner);
+  }
 
   class LeanCapabilityServer final : public capnp::Capability::Server {
    public:
@@ -1052,9 +1112,24 @@ class RuntimeLoop {
 
   bool dropTargetIfPresent(uint32_t target) {
     auto erased = targets_.erase(target);
-    loopbackEchoPeers_.erase(target);
-    networkClientPeers_.erase(target);
+    releasePeerOwnership(target, loopbackEchoPeers_, loopbackPeerOwnerByTarget_,
+                         loopbackPeerOwnerRefCount_);
+    releasePeerOwnership(target, networkClientPeers_, networkPeerOwnerByTarget_,
+                         networkPeerOwnerRefCount_);
     return erased > 0;
+  }
+
+  uint32_t retainTarget(uint32_t target) {
+    auto targetIt = targets_.find(target);
+    if (targetIt == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+    }
+    auto retainedTarget = addTarget(targetIt->second);
+    retainPeerOwnership(target, retainedTarget, loopbackPeerOwnerByTarget_,
+                        loopbackPeerOwnerRefCount_);
+    retainPeerOwnership(target, retainedTarget, networkPeerOwnerByTarget_,
+                        networkPeerOwnerRefCount_);
+    return retainedTarget;
   }
 
   void releaseTarget(uint32_t target) {
@@ -1119,6 +1194,8 @@ class RuntimeLoop {
 
     auto targetId = addTarget(kj::mv(cap));
     networkClientPeers_.emplace(targetId, kj::mv(peer));
+    networkPeerOwnerByTarget_.emplace(targetId, targetId);
+    networkPeerOwnerRefCount_.emplace(targetId, 1);
     return targetId;
   }
 
@@ -1295,6 +1372,8 @@ class RuntimeLoop {
 
     auto targetId = addTarget(kj::mv(cap));
     loopbackEchoPeers_.emplace(targetId, kj::mv(peer));
+    loopbackPeerOwnerByTarget_.emplace(targetId, targetId);
+    loopbackPeerOwnerRefCount_.emplace(targetId, 1);
     return targetId;
   }
 
@@ -1373,6 +1452,19 @@ class RuntimeLoop {
           } catch (...) {
             completeUnitFailure(release.completion,
                                 "unknown exception in capnp_lean_rpc_runtime_release_target");
+          }
+        } else if (std::holds_alternative<QueuedRetainTarget>(op)) {
+          auto retain = std::get<QueuedRetainTarget>(std::move(op));
+          try {
+            auto retained = retainTarget(retain.target);
+            completeRegisterSuccess(retain.completion, retained);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(retain.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(retain.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(retain.completion,
+                                    "unknown exception in capnp_lean_rpc_runtime_retain_target");
           }
         } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
           auto connect = std::get<QueuedConnectTarget>(std::move(op));
@@ -1605,6 +1697,10 @@ class RuntimeLoop {
       listeners_.clear();
       loopbackEchoPeers_.clear();
       networkClientPeers_.clear();
+      loopbackPeerOwnerByTarget_.clear();
+      loopbackPeerOwnerRefCount_.clear();
+      networkPeerOwnerByTarget_.clear();
+      networkPeerOwnerRefCount_.clear();
       networkServerPeers_.clear();
       clients_.clear();
       servers_.clear();
@@ -1651,6 +1747,8 @@ class RuntimeLoop {
         completeRegisterFailure(registration.completion, message);
       } else if (std::holds_alternative<QueuedReleaseTarget>(op)) {
         completeUnitFailure(std::get<QueuedReleaseTarget>(op).completion, message);
+      } else if (std::holds_alternative<QueuedRetainTarget>(op)) {
+        completeRegisterFailure(std::get<QueuedRetainTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedListenEcho>(op)) {
@@ -1705,6 +1803,10 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, kj::Own<kj::ConnectionReceiver>> listeners_;
   std::unordered_map<uint32_t, kj::Own<LoopbackEchoPeer>> loopbackEchoPeers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> networkClientPeers_;
+  std::unordered_map<uint32_t, uint32_t> loopbackPeerOwnerByTarget_;
+  std::unordered_map<uint32_t, uint32_t> loopbackPeerOwnerRefCount_;
+  std::unordered_map<uint32_t, uint32_t> networkPeerOwnerByTarget_;
+  std::unordered_map<uint32_t, uint32_t> networkPeerOwnerRefCount_;
   kj::Vector<kj::Own<NetworkServerPeer>> networkServerPeers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
@@ -1869,6 +1971,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_target(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_retain_target(
+    uint64_t runtimeId, uint32_t target) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueRetainTarget(target);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_retain_target");
   }
 }
 

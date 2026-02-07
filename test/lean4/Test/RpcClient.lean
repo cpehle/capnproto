@@ -240,6 +240,30 @@ def testRuntimeReleaseTarget : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeRetainTarget : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let retained ← runtime.retainTarget target
+
+    runtime.releaseTarget target
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM retained payload
+
+    runtime.releaseTarget retained
+    let failedAfterRelease ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM retained payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedAfterRelease true
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeConnectInvalidAddress : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try

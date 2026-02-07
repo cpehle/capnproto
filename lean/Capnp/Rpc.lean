@@ -71,6 +71,9 @@ opaque ffiRuntimeRegisterHandlerTargetImpl (runtime : UInt64) (handler : @& RawH
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_runtime_retain_target"]
+opaque ffiRuntimeRetainTargetImpl (runtime : UInt64) (target : UInt32) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_connect"]
 opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
 
@@ -201,6 +204,9 @@ namespace Runtime
 
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
+
+@[inline] def retainTarget (runtime : Runtime) (target : Client) : IO Client :=
+  ffiRuntimeRetainTargetImpl runtime.handle target
 
 @[inline] def releaseCapTable (runtime : Runtime) (capTable : Capnp.CapTable) : IO Unit := do
   for cap in capTable.caps do
@@ -340,6 +346,9 @@ namespace RuntimeM
 
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
+
+@[inline] def retainTarget (target : Client) : RuntimeM Client := do
+  Runtime.retainTarget (← runtime) target
 
 @[inline] def releaseCapTable (capTable : Capnp.CapTable) : RuntimeM Unit := do
   Runtime.releaseCapTable (← runtime) capTable
