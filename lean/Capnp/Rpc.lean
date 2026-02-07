@@ -23,6 +23,35 @@ structure Backend where
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO Payload :=
   backend.call target method payload
 
+abbrev Handler := Client -> Payload -> IO Payload
+
+structure Route where
+  method : Method
+  handler : Handler
+
+structure Dispatch where
+  routes : Array Route := #[]
+
+@[inline] def Dispatch.empty : Dispatch := { routes := #[] }
+
+@[inline] def Dispatch.register (d : Dispatch) (method : Method) (handler : Handler) : Dispatch :=
+  { routes := d.routes.push { method := method, handler := handler } }
+
+def Dispatch.findHandler? (d : Dispatch) (method : Method) : Option Handler := Id.run do
+  let mut found : Option Handler := none
+  for route in d.routes do
+    if route.method == method then
+      found := some route.handler
+  return found
+
+def Dispatch.toBackend (d : Dispatch)
+    (onMissing : Client -> Method -> Payload -> IO Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) :
+    Backend where
+  call := fun target method payload =>
+    match d.findHandler? method with
+    | some handler => handler target payload
+    | none => onMissing target method payload
+
 def echoBackend : Backend where
   call := fun _ _ payload => pure payload
 
