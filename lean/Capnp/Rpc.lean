@@ -11,6 +11,9 @@ structure Method where
   deriving Inhabited, BEq, Repr
 
 abbrev Client := Capnp.Capability
+abbrev Listener := UInt32
+abbrev RuntimeClient := UInt32
+abbrev RuntimeServer := UInt32
 
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
@@ -65,8 +68,69 @@ opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Uni
 @[extern "capnp_lean_rpc_runtime_connect"]
 opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_listen_echo"]
+opaque ffiRuntimeListenEchoImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_accept_echo"]
+opaque ffiRuntimeAcceptEchoImpl (runtime : UInt64) (listener : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_release_listener"]
+opaque ffiRuntimeReleaseListenerImpl (runtime : UInt64) (listener : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_new_client"]
+opaque ffiRuntimeNewClientImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_release_client"]
+opaque ffiRuntimeReleaseClientImpl (runtime : UInt64) (client : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_client_bootstrap"]
+opaque ffiRuntimeClientBootstrapImpl (runtime : UInt64) (client : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_client_on_disconnect"]
+opaque ffiRuntimeClientOnDisconnectImpl (runtime : UInt64) (client : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_client_set_flow_limit"]
+opaque ffiRuntimeClientSetFlowLimitImpl
+    (runtime : UInt64) (client : UInt32) (words : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_client_queue_size"]
+opaque ffiRuntimeClientQueueSizeImpl (runtime : UInt64) (client : UInt32) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_client_queue_count"]
+opaque ffiRuntimeClientQueueCountImpl (runtime : UInt64) (client : UInt32) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_client_outgoing_wait_nanos"]
+opaque ffiRuntimeClientOutgoingWaitNanosImpl (runtime : UInt64) (client : UInt32) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_new_server"]
+opaque ffiRuntimeNewServerImpl (runtime : UInt64) (bootstrap : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_release_server"]
+opaque ffiRuntimeReleaseServerImpl (runtime : UInt64) (server : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_server_listen"]
+opaque ffiRuntimeServerListenImpl
+    (runtime : UInt64) (server : UInt32) (address : @& String) (portHint : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_server_accept"]
+opaque ffiRuntimeServerAcceptImpl (runtime : UInt64) (server : UInt32) (listener : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_server_drain"]
+opaque ffiRuntimeServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
+
 structure Runtime where
   handle : UInt64
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeClientRef where
+  runtime : Runtime
+  handle : RuntimeClient
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeServerRef where
+  runtime : Runtime
+  handle : RuntimeServer
   deriving Inhabited, BEq, Repr
 
 namespace CapTable
@@ -107,6 +171,23 @@ namespace Runtime
 @[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
   ffiRuntimeConnectImpl runtime.handle address portHint
 
+@[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO Listener :=
+  ffiRuntimeListenEchoImpl runtime.handle address portHint
+
+@[inline] def acceptEcho (runtime : Runtime) (listener : Listener) : IO Unit :=
+  ffiRuntimeAcceptEchoImpl runtime.handle listener
+
+@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
+  ffiRuntimeReleaseListenerImpl runtime.handle listener
+
+@[inline] def newClient (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO RuntimeClientRef := do
+  return { runtime := runtime, handle := (← ffiRuntimeNewClientImpl runtime.handle address portHint) }
+
+@[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
+  return { runtime := runtime, handle := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) }
+
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
     ffiRawCallOnRuntimeImpl runtime.handle target method.interfaceId method.methodId request
@@ -127,6 +208,48 @@ def withRuntime (action : Runtime -> IO α) : IO α := do
     runtime.shutdown
 
 end Runtime
+
+namespace RuntimeClientRef
+
+@[inline] def release (client : RuntimeClientRef) : IO Unit :=
+  ffiRuntimeReleaseClientImpl client.runtime.handle client.handle
+
+@[inline] def bootstrap (client : RuntimeClientRef) : IO Client :=
+  ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle
+
+@[inline] def onDisconnect (client : RuntimeClientRef) : IO Unit :=
+  ffiRuntimeClientOnDisconnectImpl client.runtime.handle client.handle
+
+@[inline] def setFlowLimit (client : RuntimeClientRef) (words : UInt64) : IO Unit :=
+  ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle words
+
+@[inline] def queueSize (client : RuntimeClientRef) : IO UInt64 :=
+  ffiRuntimeClientQueueSizeImpl client.runtime.handle client.handle
+
+@[inline] def queueCount (client : RuntimeClientRef) : IO UInt64 :=
+  ffiRuntimeClientQueueCountImpl client.runtime.handle client.handle
+
+@[inline] def outgoingWaitNanos (client : RuntimeClientRef) : IO UInt64 :=
+  ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle
+
+end RuntimeClientRef
+
+namespace RuntimeServerRef
+
+@[inline] def release (server : RuntimeServerRef) : IO Unit :=
+  ffiRuntimeReleaseServerImpl server.runtime.handle server.handle
+
+@[inline] def listen (server : RuntimeServerRef) (address : String) (portHint : UInt32 := 0) :
+    IO Listener :=
+  ffiRuntimeServerListenImpl server.runtime.handle server.handle address portHint
+
+@[inline] def accept (server : RuntimeServerRef) (listener : Listener) : IO Unit :=
+  ffiRuntimeServerAcceptImpl server.runtime.handle server.handle listener
+
+@[inline] def drain (server : RuntimeServerRef) : IO Unit :=
+  ffiRuntimeServerDrainImpl server.runtime.handle server.handle
+
+end RuntimeServerRef
 
 abbrev RuntimeM := ReaderT Runtime IO
 
@@ -154,6 +277,21 @@ namespace RuntimeM
 
 @[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Client := do
   Runtime.connect (← runtime) address portHint
+
+@[inline] def listenEcho (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
+  Runtime.listenEcho (← runtime) address portHint
+
+@[inline] def acceptEcho (listener : Listener) : RuntimeM Unit := do
+  Runtime.acceptEcho (← runtime) listener
+
+@[inline] def releaseListener (listener : Listener) : RuntimeM Unit := do
+  Runtime.releaseListener (← runtime) listener
+
+@[inline] def newClient (address : String) (portHint : UInt32 := 0) : RuntimeM RuntimeClientRef := do
+  Runtime.newClient (← runtime) address portHint
+
+@[inline] def newServer (bootstrap : Client) : RuntimeM RuntimeServerRef := do
+  Runtime.newServer (← runtime) bootstrap
 
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
