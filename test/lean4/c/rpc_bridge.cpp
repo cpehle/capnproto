@@ -96,6 +96,14 @@ struct RegisterTargetCompletion {
   uint32_t targetId = 0;
 };
 
+struct UnitCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+};
+
 void completeSuccess(const std::shared_ptr<RawCallCompletion>& completion, RawCallResult result) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
@@ -129,6 +137,25 @@ void completeRegisterSuccess(const std::shared_ptr<RegisterTargetCompletion>& co
 
 void completeRegisterFailure(const std::shared_ptr<RegisterTargetCompletion>& completion,
                              std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeUnitSuccess(const std::shared_ptr<UnitCompletion>& completion) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeUnitFailure(const std::shared_ptr<UnitCompletion>& completion, std::string message) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;
@@ -194,6 +221,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueReleaseTarget(uint32_t target) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedReleaseTarget{target, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   void shutdown() {
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -222,7 +263,13 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
-  using QueuedOperation = std::variant<QueuedRawCall, QueuedRegisterEchoTarget>;
+  struct QueuedReleaseTarget {
+    uint32_t target;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  using QueuedOperation =
+      std::variant<QueuedRawCall, QueuedRegisterEchoTarget, QueuedReleaseTarget>;
 
   struct LoopbackEchoPeer {
     kj::Own<kj::AsyncCapabilityStream> clientStream;
@@ -306,6 +353,14 @@ class RuntimeLoop {
     return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
   }
 
+  void releaseTarget(uint32_t target) {
+    auto erased = targets_.erase(target);
+    loopbackEchoPeers_.erase(target);
+    if (erased == 0) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+    }
+  }
+
   uint32_t registerEchoTarget(kj::AsyncIoProvider& ioProvider) {
     auto pipe = ioProvider.newCapabilityPipe();
     auto server = kj::heap<capnp::TwoPartyServer>(
@@ -320,8 +375,9 @@ class RuntimeLoop {
     peer->server = kj::mv(server);
     peer->client = kj::mv(client);
 
-    loopbackEchoPeers_.add(kj::mv(peer));
-    return addTarget(kj::mv(cap));
+    auto targetId = addTarget(kj::mv(cap));
+    loopbackEchoPeers_.emplace(targetId, kj::mv(peer));
+    return targetId;
   }
 
   void run() {
@@ -360,7 +416,7 @@ class RuntimeLoop {
           } catch (...) {
             completeFailure(call.completion, "unknown exception in capnp_lean_rpc_raw_call");
           }
-        } else {
+        } else if (std::holds_alternative<QueuedRegisterEchoTarget>(op)) {
           auto registration = std::get<QueuedRegisterEchoTarget>(std::move(op));
           try {
             completeRegisterSuccess(registration.completion, registerEchoTarget(*io.provider));
@@ -371,6 +427,19 @@ class RuntimeLoop {
           } catch (...) {
             completeRegisterFailure(registration.completion,
                                     "unknown exception in capnp_lean_rpc_runtime_register_echo_target");
+          }
+        } else {
+          auto release = std::get<QueuedReleaseTarget>(std::move(op));
+          try {
+            releaseTarget(release.target);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(release.completion,
+                                "unknown exception in capnp_lean_rpc_runtime_release_target");
           }
         }
       }
@@ -413,8 +482,10 @@ class RuntimeLoop {
     for (auto& op : pending) {
       if (std::holds_alternative<QueuedRawCall>(op)) {
         completeFailure(std::get<QueuedRawCall>(op).completion, message);
-      } else {
+      } else if (std::holds_alternative<QueuedRegisterEchoTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRegisterEchoTarget>(op).completion, message);
+      } else {
+        completeUnitFailure(std::get<QueuedReleaseTarget>(op).completion, message);
       }
     }
   }
@@ -432,7 +503,7 @@ class RuntimeLoop {
   std::deque<QueuedOperation> queue_;
 
   std::unordered_map<uint32_t, capnp::Capability::Client> targets_;
-  kj::Vector<kj::Own<LoopbackEchoPeer>> loopbackEchoPeers_;
+  std::unordered_map<uint32_t, kj::Own<LoopbackEchoPeer>> loopbackEchoPeers_;
   uint32_t nextTargetId_ = 1;
 };
 
@@ -562,6 +633,35 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_raw_call_with_caps_on_runtime");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_target(
+    uint64_t runtimeId, uint32_t target) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueReleaseTarget(target);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_target");
   }
 }
 

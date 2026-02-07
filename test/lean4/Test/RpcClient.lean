@@ -109,3 +109,24 @@ def testFfiBackendRawRoundtrip : IO Unit := do
     catch _ =>
       pure true
   assertEqual failedAfterShutdown true
+
+@[test]
+def testRuntimeReleaseTarget : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      TestInterface.callFooM target payload
+
+    runtime.releaseTarget target
+    let failedAfterRelease ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          TestInterface.callFooM target payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedAfterRelease true
+  finally
+    runtime.shutdown
