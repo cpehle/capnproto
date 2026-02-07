@@ -11,10 +11,22 @@ structure Method where
   deriving Inhabited, BEq, Repr
 
 abbrev Client := Capnp.Capability
-abbrev Listener := UInt32
-abbrev RuntimeClient := UInt32
-abbrev RuntimeServer := UInt32
-abbrev RuntimePendingCall := UInt32
+
+structure Listener where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeClient where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeServer where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure RuntimePendingCall where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
 
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
@@ -114,6 +126,9 @@ opaque ffiRuntimeRegisterFdTargetImpl (runtime : UInt64) (fd : UInt32) : IO UInt
 
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_release_targets"]
+opaque ffiRuntimeReleaseTargetsImpl (runtime : UInt64) (targets : @& ByteArray) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_retain_target"]
 opaque ffiRuntimeRetainTargetImpl (runtime : UInt64) (target : UInt32) : IO UInt32
@@ -260,13 +275,29 @@ namespace CapTable
     i := i + 4
   return { caps := caps }
 
+@[inline] def ofBytesChecked (bytes : ByteArray) : Except String Capnp.CapTable :=
+  if bytes.size % 4 != 0 then
+    Except.error "capability table payload must be a multiple of 4 bytes"
+  else
+    Except.ok (CapTable.ofBytes bytes)
+
 end CapTable
+
+@[inline] private def expectChecked (what : String) (value : Except String α) : IO α :=
+  match value with
+  | Except.ok v => pure v
+  | Except.error e => throw (IO.userError s!"{what}: {e}")
+
+@[inline] private def decodePayloadChecked (msgBytes capBytes : ByteArray) : IO Payload := do
+  let opts : Capnp.ReaderOptions := {}
+  let msg ← expectChecked "invalid RPC message" (Capnp.readMessageChecked opts msgBytes)
+  let capTable ← expectChecked "invalid RPC capability table" (CapTable.ofBytesChecked capBytes)
+  return { msg := msg, capTable := capTable }
 
 @[inline] private def toRawHandlerCall
     (handler : Client -> Method -> Payload -> IO Payload) : RawHandlerCall :=
   fun target interfaceId methodId requestBytes requestCaps => do
-    let request : Payload :=
-      { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+    let request ← decodePayloadChecked requestBytes requestCaps
     let response ← handler target { interfaceId := interfaceId, methodId := methodId } request
     return (response.toBytes, CapTable.toBytes response.capTable)
 
@@ -301,28 +332,30 @@ namespace Runtime
   ffiRuntimeRetainTargetImpl runtime.handle target
 
 @[inline] def releaseCapTable (runtime : Runtime) (capTable : Capnp.CapTable) : IO Unit := do
-  for cap in capTable.caps do
-    runtime.releaseTarget cap
+  ffiRuntimeReleaseTargetsImpl runtime.handle (CapTable.toBytes capTable)
 
 @[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
   ffiRuntimeConnectImpl runtime.handle address portHint
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
-  ffiRuntimeListenEchoImpl runtime.handle address portHint
+  return { raw := (← ffiRuntimeListenEchoImpl runtime.handle address portHint) }
 
 @[inline] def acceptEcho (runtime : Runtime) (listener : Listener) : IO Unit :=
-  ffiRuntimeAcceptEchoImpl runtime.handle listener
+  ffiRuntimeAcceptEchoImpl runtime.handle listener.raw
 
 @[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
-  ffiRuntimeReleaseListenerImpl runtime.handle listener
+  ffiRuntimeReleaseListenerImpl runtime.handle listener.raw
 
 @[inline] def newClient (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO RuntimeClientRef := do
-  return { runtime := runtime, handle := (← ffiRuntimeNewClientImpl runtime.handle address portHint) }
+  return {
+    runtime := runtime
+    handle := { raw := (← ffiRuntimeNewClientImpl runtime.handle address portHint) }
+  }
 
 @[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
-  return { runtime := runtime, handle := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) }
+  return { runtime := runtime, handle := { raw := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
 
 @[inline] def withClient (runtime : Runtime) (address : String)
     (action : RuntimeClientRef -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -330,7 +363,7 @@ namespace Runtime
   try
     action client
   finally
-    ffiRuntimeReleaseClientImpl runtime.handle client.handle
+    ffiRuntimeReleaseClientImpl runtime.handle client.handle.raw
 
 @[inline] def withServer (runtime : Runtime) (bootstrap : Client)
     (action : RuntimeServerRef -> IO α) : IO α := do
@@ -338,7 +371,7 @@ namespace Runtime
   try
     action server
   finally
-    ffiRuntimeReleaseServerImpl runtime.handle server.handle
+    ffiRuntimeReleaseServerImpl runtime.handle server.handle.raw
 
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
@@ -350,7 +383,7 @@ namespace Runtime
     let requestCaps := CapTable.toBytes payload.capTable
     let (responseBytes, responseCaps) ← ffiRawCallWithCapsOnRuntimeImpl
       runtime.handle target method.interfaceId method.methodId requestBytes requestCaps
-    return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+    decodePayloadChecked responseBytes responseCaps
 
 @[inline] def startCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
@@ -358,21 +391,23 @@ namespace Runtime
   let requestCaps := CapTable.toBytes payload.capTable
   return {
     runtime := runtime
-    handle := (← ffiRuntimeStartCallWithCapsImpl runtime.handle target method.interfaceId
-      method.methodId requestBytes requestCaps)
+    handle := {
+      raw := (← ffiRuntimeStartCallWithCapsImpl runtime.handle target method.interfaceId
+        method.methodId requestBytes requestCaps)
+    }
   }
 
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : IO Payload := do
   let (responseBytes, responseCaps) ←
-    ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle
-  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+    ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.raw
+  decodePayloadChecked responseBytes responseCaps
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : IO Unit :=
-  ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle
+  ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle.raw
 
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client := do
-  ffiRuntimePendingCallGetPipelinedCapImpl pendingCall.runtime.handle pendingCall.handle
+  ffiRuntimePendingCallGetPipelinedCapImpl pendingCall.runtime.handle pendingCall.handle.raw
     (PipelinePath.toBytes pointerPath)
 
 @[inline] def streamingCall (runtime : Runtime) (target : Client) (method : Method)
@@ -414,42 +449,44 @@ end Runtime
 namespace RuntimeClientRef
 
 @[inline] def release (client : RuntimeClientRef) : IO Unit :=
-  ffiRuntimeReleaseClientImpl client.runtime.handle client.handle
+  ffiRuntimeReleaseClientImpl client.runtime.handle client.handle.raw
 
 @[inline] def bootstrap (client : RuntimeClientRef) : IO Client :=
-  ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle
+  ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle.raw
 
 @[inline] def onDisconnect (client : RuntimeClientRef) : IO Unit :=
-  ffiRuntimeClientOnDisconnectImpl client.runtime.handle client.handle
+  ffiRuntimeClientOnDisconnectImpl client.runtime.handle client.handle.raw
 
 @[inline] def setFlowLimit (client : RuntimeClientRef) (words : UInt64) : IO Unit :=
-  ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle words
+  ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle.raw words
 
 @[inline] def queueSize (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientQueueSizeImpl client.runtime.handle client.handle
+  ffiRuntimeClientQueueSizeImpl client.runtime.handle client.handle.raw
 
 @[inline] def queueCount (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientQueueCountImpl client.runtime.handle client.handle
+  ffiRuntimeClientQueueCountImpl client.runtime.handle client.handle.raw
 
 @[inline] def outgoingWaitNanos (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle
+  ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle.raw
 
 end RuntimeClientRef
 
 namespace RuntimeServerRef
 
 @[inline] def release (server : RuntimeServerRef) : IO Unit :=
-  ffiRuntimeReleaseServerImpl server.runtime.handle server.handle
+  ffiRuntimeReleaseServerImpl server.runtime.handle server.handle.raw
 
 @[inline] def listen (server : RuntimeServerRef) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
-  ffiRuntimeServerListenImpl server.runtime.handle server.handle address portHint
+  return {
+    raw := (← ffiRuntimeServerListenImpl server.runtime.handle server.handle.raw address portHint)
+  }
 
 @[inline] def accept (server : RuntimeServerRef) (listener : Listener) : IO Unit :=
-  ffiRuntimeServerAcceptImpl server.runtime.handle server.handle listener
+  ffiRuntimeServerAcceptImpl server.runtime.handle server.handle.raw listener.raw
 
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
-  ffiRuntimeServerDrainImpl server.runtime.handle server.handle
+  ffiRuntimeServerDrainImpl server.runtime.handle server.handle.raw
 
 @[inline] def withListener (server : RuntimeServerRef) (address : String)
     (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -697,16 +734,17 @@ namespace Interop
   let requestCaps := CapTable.toBytes payload.capTable
   let (responseBytes, responseCaps) ←
     ffiCppCallOneShotImpl address portHint method.interfaceId method.methodId requestBytes requestCaps
-  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+  decodePayloadChecked responseBytes responseCaps
 
 @[inline] def cppCallWithAccept (runtime : Runtime) (server : RuntimeServerRef) (listener : Listener)
     (address : String) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
   let requestBytes := payload.toBytes
   let requestCaps := CapTable.toBytes payload.capTable
-  let (responseBytes, responseCaps) ← ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle
-    listener address portHint method.interfaceId method.methodId requestBytes requestCaps
-  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+  let (responseBytes, responseCaps) ←
+    ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle.raw listener.raw
+      address portHint method.interfaceId method.methodId requestBytes requestCaps
+  decodePayloadChecked responseBytes responseCaps
 
 @[inline] def cppCallPipelinedWithAccept (runtime : Runtime) (server : RuntimeServerRef)
     (listener : Listener) (address : String) (method : Method)
@@ -718,28 +756,28 @@ namespace Interop
   let pipelinedRequestBytes := pipelinedRequest.toBytes
   let pipelinedRequestCaps := CapTable.toBytes pipelinedRequest.capTable
   let (responseBytes, responseCaps) ← ffiRuntimeCppCallPipelinedWithAcceptImpl
-    runtime.handle server.handle listener address portHint method.interfaceId method.methodId
+    runtime.handle server.handle.raw listener.raw address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
-  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+  decodePayloadChecked responseBytes responseCaps
 
 @[inline] def cppServeEchoOnce (address : String) (method : Method)
     (portHint : UInt32 := 0) : IO Payload := do
   let (requestBytes, requestCaps) ←
     ffiCppServeEchoOnceImpl address portHint method.interfaceId method.methodId
-  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+  decodePayloadChecked requestBytes requestCaps
 
 @[inline] def cppServeThrowOnce (address : String) (method : Method)
     (withDetail : Bool := false) (portHint : UInt32 := 0) : IO Payload := do
   let detailFlag : UInt8 := if withDetail then 1 else 0
   let (requestBytes, requestCaps) ←
     ffiCppServeThrowOnceImpl address portHint method.interfaceId method.methodId detailFlag
-  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+  decodePayloadChecked requestBytes requestCaps
 
 @[inline] def cppServeDelayedEchoOnce (address : String) (method : Method)
     (delayMillis : UInt32) (portHint : UInt32 := 0) : IO Payload := do
   let (requestBytes, requestCaps) ← ffiCppServeDelayedEchoOnceImpl
     address portHint method.interfaceId method.methodId delayMillis
-  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+  decodePayloadChecked requestBytes requestCaps
 
 @[inline] def cppCallPipelinedCapOneShot (address : String) (method : Method)
     (request : Payload := Capnp.emptyRpcEnvelope)
@@ -752,7 +790,7 @@ namespace Interop
   let (responseBytes, responseCaps) ← ffiCppCallPipelinedCapOneShotImpl
     address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
-  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+  decodePayloadChecked responseBytes responseCaps
 
 end Interop
 

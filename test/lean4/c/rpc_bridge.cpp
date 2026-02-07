@@ -97,6 +97,13 @@ std::vector<uint32_t> decodeCapTable(const uint8_t* data, size_t size) {
   return caps;
 }
 
+std::vector<uint32_t> decodeCapTable(b_lean_obj_arg bytes) {
+  const auto size = lean_sarray_size(bytes);
+  const auto* data =
+      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  return decodeCapTable(data, size);
+}
+
 std::vector<uint16_t> decodePipelineOps(const uint8_t* data, size_t size) {
   if ((size % 2) != 0) {
     throw std::runtime_error("RPC pipeline ops payload must be a multiple of 2 bytes");
@@ -109,10 +116,22 @@ std::vector<uint16_t> decodePipelineOps(const uint8_t* data, size_t size) {
   return ops;
 }
 
+std::vector<uint16_t> decodePipelineOps(b_lean_obj_arg bytes) {
+  const auto size = lean_sarray_size(bytes);
+  const auto* data =
+      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  return decodePipelineOps(data, size);
+}
+
 std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes) {
   const auto size = lean_sarray_size(bytes);
-  const auto* data = reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
-  return std::vector<uint8_t>(data, data + size);
+  const auto* data =
+      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  std::vector<uint8_t> out(size);
+  if (size != 0) {
+    std::memcpy(out.data(), data, size);
+  }
+  return out;
 }
 
 struct RawCallResult {
@@ -887,6 +906,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueReleaseTargets(std::vector<uint32_t> targets) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedReleaseTargets{std::move(targets), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueRetainTarget(uint32_t target) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
     {
@@ -1277,6 +1310,11 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedReleaseTargets {
+    std::vector<uint32_t> targets;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   struct QueuedRetainTarget {
     uint32_t target;
     std::shared_ptr<RegisterTargetCompletion> completion;
@@ -1382,7 +1420,7 @@ class RuntimeLoop {
                    QueuedCppCallPipelinedWithAccept,
                    QueuedRegisterLoopbackTarget, QueuedRegisterHandlerTarget,
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
-                   QueuedReleaseTarget, QueuedRetainTarget,
+                   QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
                    QueuedConnectTarget, QueuedListenLoopback, QueuedAcceptLoopback,
                    QueuedReleaseListener, QueuedNewClient, QueuedReleaseClient,
                    QueuedClientBootstrap, QueuedClientOnDisconnect, QueuedClientSetFlowLimit,
@@ -2052,6 +2090,17 @@ class RuntimeLoop {
     }
   }
 
+  void releaseTargets(const std::vector<uint32_t>& targets) {
+    for (auto target : targets) {
+      if (target == 0) {
+        continue;
+      }
+      if (!dropTargetIfPresent(target)) {
+        throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+      }
+    }
+  }
+
   uint32_t addListener(kj::Own<kj::ConnectionReceiver>&& listener) {
     uint32_t listenerId = nextListenerId_++;
     while (listeners_.find(listenerId) != listeners_.end()) {
@@ -2601,6 +2650,19 @@ class RuntimeLoop {
             completeUnitFailure(release.completion,
                                 "unknown exception in capnp_lean_rpc_runtime_release_target");
           }
+        } else if (std::holds_alternative<QueuedReleaseTargets>(op)) {
+          auto release = std::get<QueuedReleaseTargets>(std::move(op));
+          try {
+            releaseTargets(release.targets);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(release.completion,
+                                "unknown exception in capnp_lean_rpc_runtime_release_targets");
+          }
         } else if (std::holds_alternative<QueuedRetainTarget>(op)) {
           auto retain = std::get<QueuedRetainTarget>(std::move(op));
           try {
@@ -2929,6 +2991,8 @@ class RuntimeLoop {
         completeRegisterFailure(std::get<QueuedRegisterFdTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleaseTarget>(op)) {
         completeUnitFailure(std::get<QueuedReleaseTarget>(op).completion, message);
+      } else if (std::holds_alternative<QueuedReleaseTargets>(op)) {
+        completeUnitFailure(std::get<QueuedReleaseTargets>(op).completion, message);
       } else if (std::holds_alternative<QueuedRetainTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRetainTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
@@ -3140,8 +3204,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_caps(
 
   try {
     auto requestBytes = copyByteArray(request);
-    auto requestCapsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto completion = runtime->enqueueStartPendingCall(
         target, interfaceId, methodId, std::move(requestBytes), std::move(requestCapIds));
     {
@@ -3223,8 +3286,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_get_pipe
   }
 
   try {
-    auto pipelineOpsBytes = copyByteArray(pipelineOps);
-    auto pointerPath = decodePipelineOps(pipelineOpsBytes.data(), pipelineOpsBytes.size());
+    auto pointerPath = decodePipelineOps(pipelineOps);
     auto completion =
         runtime->enqueueGetPipelinedCap(pendingCallId, std::move(pointerPath));
     {
@@ -3255,8 +3317,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_streaming_call_with_c
 
   try {
     auto requestBytes = copyByteArray(request);
-    auto requestCapsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto completion = runtime->enqueueStreamingCall(
         target, interfaceId, methodId, std::move(requestBytes), std::move(requestCapIds));
     {
@@ -3444,6 +3505,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_target(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_targets(
+    uint64_t runtimeId, b_lean_obj_arg targets) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto targetIds = decodeCapTable(targets);
+    auto completion = runtime->enqueueReleaseTargets(std::move(targetIds));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_targets");
   }
 }
 
@@ -4097,8 +4188,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_call_one_shot(
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
     auto requestBytes = copyByteArray(request);
-    auto requestCapsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto result =
         cppCallOneShot(addressCopy, portHint, interfaceId, methodId, requestBytes, requestCapIds);
     return mkIoOkRawCallResult(result);
@@ -4165,12 +4255,9 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_call_pipelined_cap_one_sh
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
     auto requestBytes = copyByteArray(request);
-    auto requestCapIdsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapIdsBytes.data(), requestCapIdsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto pipelinedRequestBytes = copyByteArray(pipelinedRequest);
-    auto pipelinedRequestCapIdsBytes = copyByteArray(pipelinedRequestCaps);
-    auto pipelinedRequestCapIds =
-        decodeCapTable(pipelinedRequestCapIdsBytes.data(), pipelinedRequestCapIdsBytes.size());
+    auto pipelinedRequestCapIds = decodeCapTable(pipelinedRequestCaps);
     auto result = cppCallPipelinedCapOneShot(
         addressCopy, portHint, interfaceId, methodId, requestBytes, requestCapIds,
         pipelinedRequestBytes, pipelinedRequestCapIds);
@@ -4196,8 +4283,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_with_accept(
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
     auto requestBytes = copyByteArray(request);
-    auto requestCapsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto completion = runtime->enqueueCppCallWithAccept(
         serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
         std::move(requestBytes), std::move(requestCapIds));
@@ -4231,12 +4317,9 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_pipelined_wi
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
     auto requestBytes = copyByteArray(request);
-    auto requestCapsBytes = copyByteArray(requestCaps);
-    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto requestCapIds = decodeCapTable(requestCaps);
     auto pipelinedRequestBytes = copyByteArray(pipelinedRequest);
-    auto pipelinedRequestCapsBytes = copyByteArray(pipelinedRequestCaps);
-    auto pipelinedRequestCapIds =
-        decodeCapTable(pipelinedRequestCapsBytes.data(), pipelinedRequestCapsBytes.size());
+    auto pipelinedRequestCapIds = decodeCapTable(pipelinedRequestCaps);
     auto completion = runtime->enqueueCppCallPipelinedWithAccept(
         serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
         std::move(requestBytes), std::move(requestCapIds), std::move(pipelinedRequestBytes),
