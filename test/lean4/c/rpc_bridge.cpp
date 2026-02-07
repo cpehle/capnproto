@@ -1,6 +1,7 @@
 #include <lean/lean.h>
 
 #include <capnp/any.h>
+#include <capnp/capability.h>
 #include <capnp/serialize.h>
 #include <kj/async.h>
 #include <kj/async-io.h>
@@ -73,6 +74,19 @@ void completeFailure(const std::shared_ptr<RawCallCompletion>& completion, std::
   completion->cv.notify_one();
 }
 
+class EchoCapabilityServer final : public capnp::Capability::Server {
+ public:
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>
+                                      context) override {
+    (void)interfaceId;
+    (void)methodId;
+
+    context.getResults().setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+    return {kj::READY_NOW, false};
+  }
+};
+
 class RuntimeLoop {
  public:
   RuntimeLoop() : worker_(&RuntimeLoop::run, this) {
@@ -123,34 +137,42 @@ class RuntimeLoop {
     std::shared_ptr<RawCallCompletion> completion;
   };
 
-  static std::vector<uint8_t> processRawCall(uint32_t target, uint64_t interfaceId,
-                                             uint16_t methodId,
-                                             const std::vector<uint8_t>& request) {
-    (void)target;
-    (void)interfaceId;
-    (void)methodId;
-
-    if (request.empty()) {
-      return request;
+  std::vector<uint8_t> processRawCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
+                                      const std::vector<uint8_t>& request,
+                                      kj::WaitScope& waitScope) {
+    auto targetIt = targets_.find(target);
+    if (targetIt == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
     }
 
-    // Parse as a standard (unpacked) Cap'n Proto stream message to validate wire format.
-    kj::ArrayPtr<const kj::byte> reqBytes(reinterpret_cast<const kj::byte*>(request.data()),
-                                          request.size());
-    kj::ArrayInputStream input(reqBytes);
-    capnp::ReaderOptions options;
-    options.traversalLimitInWords = 1ull << 30;
-    capnp::InputStreamMessageReader reader(input, options);
-    auto root = reader.getRoot<capnp::AnyPointer>();
-    (void)root;
+    auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
+    if (!request.empty()) {
+      kj::ArrayPtr<const kj::byte> reqBytes(reinterpret_cast<const kj::byte*>(request.data()),
+                                            request.size());
+      kj::ArrayInputStream input(reqBytes);
+      capnp::ReaderOptions options;
+      options.traversalLimitInWords = 1ull << 30;
+      capnp::InputStreamMessageReader reader(input, options);
+      requestBuilder.setAs<capnp::AnyPointer>(reader.getRoot<capnp::AnyPointer>());
+    }
 
-    // Current bridge behavior is pass-through: return original bytes after validation.
-    return request;
+    auto response = requestBuilder.send().wait(waitScope);
+    capnp::MallocMessageBuilder responseMessage;
+    responseMessage.setRoot(response.getAs<capnp::AnyPointer>());
+    auto responseWords = capnp::messageToFlatArray(responseMessage);
+    auto responseBytes = responseWords.asBytes();
+    return std::vector<uint8_t>(responseBytes.begin(), responseBytes.end());
+  }
+
+  void initTargets() {
+    capnp::Capability::Client echoClient(kj::heap<EchoCapabilityServer>());
+    targets_.emplace(0u, kj::mv(echoClient));
   }
 
   void run() {
     try {
       auto io = kj::setupAsyncIo();
+      initTargets();
       {
         std::lock_guard<std::mutex> lock(startupMutex_);
         startupComplete_ = true;
@@ -170,8 +192,9 @@ class RuntimeLoop {
         }
 
         try {
-          auto promise = kj::evalNow([&call]() {
-            return processRawCall(call.target, call.interfaceId, call.methodId, call.request);
+          auto promise = kj::evalNow([&]() {
+            return processRawCall(call.target, call.interfaceId, call.methodId, call.request,
+                                  io.waitScope);
           });
           completeSuccess(call.completion, promise.wait(io.waitScope));
         } catch (const kj::Exception& e) {
@@ -230,6 +253,8 @@ class RuntimeLoop {
   std::condition_variable queueCv_;
   bool stopping_ = false;
   std::deque<QueuedRawCall> queue_;
+
+  std::unordered_map<uint32_t, capnp::Capability::Client> targets_;
 };
 
 std::mutex gRuntimeRegistryMutex;

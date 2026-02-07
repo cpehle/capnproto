@@ -59,10 +59,11 @@ def testBackendOfRawCall : IO Unit := do
 
 @[test]
 def testFfiBackendRawRoundtrip : IO Unit := do
-  let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
+  let payload : Capnp.Rpc.Payload :=
+    Capnp.Rpc.Payload.ofBytes (ByteArray.mk #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
   let response ← Capnp.Rpc.RuntimeM.runWithNewRuntime do
     assertEqual (← Capnp.Rpc.RuntimeM.isAlive) true
-    TestInterface.callFooM (UInt32.ofNat 99) payload
+    TestInterface.callFooM (UInt32.ofNat 0) payload
   assertEqual (response == payload) true
 
   let runtime ← Capnp.Rpc.Runtime.init
@@ -72,7 +73,7 @@ def testFfiBackendRawRoundtrip : IO Unit := do
   let failedAfterShutdown ←
     try
       let _ ← Capnp.Rpc.RuntimeM.run runtime do
-        TestInterface.callFooM (UInt32.ofNat 99) payload
+        TestInterface.callFooM (UInt32.ofNat 0) payload
       pure false
     catch _ =>
       pure true
