@@ -1,3 +1,4 @@
 capnp bin
 capnpc-capnp bin
 capnpc-c++ bin
+capnpc-lean4 bin

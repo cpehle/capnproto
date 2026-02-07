@@ -208,7 +208,13 @@ if(NOT CAPNP_LITE)
   target_link_libraries(capnpc_capnp capnp kj)
   set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
 
-  install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
+  add_executable(capnpc_lean4
+    compiler/capnpc-lean4.c++
+  )
+  target_link_libraries(capnpc_lean4 capnp kj)
+  set_target_properties(capnpc_lean4 PROPERTIES OUTPUT_NAME capnpc-lean4)
+
+  install(TARGETS capnp_tool capnpc_cpp capnpc_capnp capnpc_lean4 ${INSTALL_TARGETS_DEFAULT_ARGS})
 
   if(WIN32)
     # On Windows platforms symlinks are not guaranteed to support. Also different version of CMake handle create_symlink in a different way.
@@ -313,6 +319,23 @@ if(BUILD_TESTING)
     target_link_libraries(capnp-evolution-tests capnpc capnp kj)
     add_dependencies(check capnp-evolution-tests)
     add_test(NAME capnp-evolution-tests-run COMMAND capnp-evolution-tests)
+
+    if(CAPNP_ENABLE_LEAN4_TESTS)
+      find_program(LAKE_EXECUTABLE lake)
+      if(NOT LAKE_EXECUTABLE)
+        message(WARNING "CAPNP_ENABLE_LEAN4_TESTS is ON, but `lake` was not found. Skipping Lean4 tests.")
+      else()
+        add_test(NAME capnp-lean4-tests
+          COMMAND "${CMAKE_COMMAND}"
+            "-DCAPNP_EXECUTABLE=$<TARGET_FILE:capnp_tool>"
+            "-DCAPNPC_LEAN4_EXECUTABLE=$<TARGET_FILE:capnpc_lean4>"
+            "-DLAKE_EXECUTABLE=${LAKE_EXECUTABLE}"
+            "-DSOURCE_ROOT=${CMAKE_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/run-lean4-tests.cmake"
+        )
+        add_dependencies(check capnp_tool capnpc_lean4)
+      endif()
+    endif()
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING
 

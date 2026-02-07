@@ -219,3 +219,8 @@ add_executable(CapnProto::capnpc_capnp IMPORTED)
 set_target_properties(CapnProto::capnpc_capnp PROPERTIES
   IMPORTED_LOCATION "${_IMPORT_PREFIX}/bin/capnpc-capnp${CMAKE_EXECUTABLE_SUFFIX}"
 )
+
+add_executable(CapnProto::capnpc_lean4 IMPORTED)
+set_target_properties(CapnProto::capnpc_lean4 PROPERTIES
+  IMPORTED_LOCATION "${_IMPORT_PREFIX}/bin/capnpc-lean4${CMAKE_EXECUTABLE_SUFFIX}"
+)

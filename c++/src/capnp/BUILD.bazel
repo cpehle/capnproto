@@ -174,6 +174,17 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "capnpc-lean4",
+    srcs = [
+        "compiler/capnpc-lean4.c++",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnpc",
+    ],
+)
+
 # capnp files that are implicitly available for import to any .capnp.
 filegroup(
     name = "capnp_system_library",
