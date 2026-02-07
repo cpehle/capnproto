@@ -1945,6 +1945,8 @@ def callMethodId : UInt16 := UInt16.ofNat 0
 def callMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callMethodId }
 def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callMethod payload
+def callCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callMethod payload
 
 end TestGenerics.Inner2.DeepNest.DeepNestInterface
 abbrev TestGenerics.Interface := Capnp.Rpc.Client
@@ -1957,6 +1959,8 @@ def callMethodId : UInt16 := UInt16.ofNat 0
 def callMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callMethodId }
 def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callMethod payload
+def callCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callMethod payload
 
 end TestGenerics.Interface
 opaque ann : Capnp.AnyPointer
@@ -1970,6 +1974,8 @@ def callMethodId : UInt16 := UInt16.ofNat 0
 def callMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callMethodId }
 def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callMethod payload
+def callCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callMethod payload
 
 end TestImplicitMethodParams
 abbrev TestImplicitMethodParamsInGeneric := Capnp.Rpc.Client
@@ -1982,6 +1988,8 @@ def callMethodId : UInt16 := UInt16.ofNat 0
 def callMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callMethodId }
 def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callMethod payload
+def callCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callMethod payload
 
 end TestImplicitMethodParamsInGeneric
 abbrev TestInterface := Capnp.Rpc.Client
@@ -1994,36 +2002,50 @@ def fooMethodId : UInt16 := UInt16.ofNat 0
 def fooMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := fooMethodId }
 def callFoo (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target fooMethod payload
+def callFooM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
 def callBar (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target barMethod payload
+def callBarM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target barMethod payload
 
 def bazMethodId : UInt16 := UInt16.ofNat 2
 def bazMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := bazMethodId }
 def callBaz (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target bazMethod payload
+def callBazM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target bazMethod payload
 
 def getTestPipelineMethodId : UInt16 := UInt16.ofNat 3
 def getTestPipelineMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestPipelineMethodId }
 def callGetTestPipeline (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getTestPipelineMethod payload
+def callGetTestPipelineM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
 
 def getTestTailCalleeMethodId : UInt16 := UInt16.ofNat 4
 def getTestTailCalleeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCalleeMethodId }
 def callGetTestTailCallee (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getTestTailCalleeMethod payload
+def callGetTestTailCalleeM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
 
 def getTestTailCallerMethodId : UInt16 := UInt16.ofNat 5
 def getTestTailCallerMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCallerMethodId }
 def callGetTestTailCaller (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getTestTailCallerMethod payload
+def callGetTestTailCallerM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
 
 def getTestMoreStuffMethodId : UInt16 := UInt16.ofNat 6
 def getTestMoreStuffMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestMoreStuffMethodId }
 def callGetTestMoreStuff (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getTestMoreStuffMethod payload
+def callGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
 
 end TestInterface
 abbrev TestExtends := Capnp.Rpc.Client
@@ -2036,16 +2058,22 @@ def quxMethodId : UInt16 := UInt16.ofNat 0
 def quxMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := quxMethodId }
 def callQux (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target quxMethod payload
+def callQuxM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target quxMethod payload
 
 def corgeMethodId : UInt16 := UInt16.ofNat 1
 def corgeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := corgeMethodId }
 def callCorge (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target corgeMethod payload
+def callCorgeM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target corgeMethod payload
 
 def graultMethodId : UInt16 := UInt16.ofNat 2
 def graultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := graultMethodId }
 def callGrault (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target graultMethod payload
+def callGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target graultMethod payload
 
 end TestExtends
 abbrev TestExtends2 := Capnp.Rpc.Client
@@ -2065,21 +2093,29 @@ def getCapMethodId : UInt16 := UInt16.ofNat 0
 def getCapMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCapMethodId }
 def callGetCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getCapMethod payload
+def callGetCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getCapMethod payload
 
 def testPointersMethodId : UInt16 := UInt16.ofNat 1
 def testPointersMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := testPointersMethodId }
 def callTestPointers (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target testPointersMethod payload
+def callTestPointersM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target testPointersMethod payload
 
 def getAnyCapMethodId : UInt16 := UInt16.ofNat 2
 def getAnyCapMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getAnyCapMethodId }
 def callGetAnyCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getAnyCapMethod payload
+def callGetAnyCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
 
 def getCapPipelineOnlyMethodId : UInt16 := UInt16.ofNat 3
 def getCapPipelineOnlyMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCapPipelineOnlyMethodId }
 def callGetCapPipelineOnly (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getCapPipelineOnlyMethod payload
+def callGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
 
 end TestPipeline
 abbrev TestCallOrder := Capnp.Rpc.Client
@@ -2092,6 +2128,8 @@ def getCallSequenceMethodId : UInt16 := UInt16.ofNat 0
 def getCallSequenceMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCallSequenceMethodId }
 def callGetCallSequence (backend : Capnp.Rpc.Backend) (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getCallSequenceMethod payload
+def callGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
 
 end TestCallOrder
 abbrev TestTailCallee := Capnp.Rpc.Client
@@ -2107,6 +2145,8 @@ def fooMethodId : UInt16 := UInt16.ofNat 0
 def fooMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := fooMethodId }
 def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target fooMethod payload
+def callFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
 
 end TestTailCallee
 abbrev TestTailCaller := Capnp.Rpc.Client
@@ -2119,6 +2159,8 @@ def fooMethodId : UInt16 := UInt16.ofNat 0
 def fooMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := fooMethodId }
 def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target fooMethod payload
+def callFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
 
 end TestTailCaller
 abbrev TestStreaming := Capnp.Rpc.Client
@@ -2134,16 +2176,22 @@ def doStreamIMethodId : UInt16 := UInt16.ofNat 0
 def doStreamIMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := doStreamIMethodId }
 def callDoStreamI (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target doStreamIMethod payload
+def callDoStreamIM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
 
 def doStreamJMethodId : UInt16 := UInt16.ofNat 1
 def doStreamJMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := doStreamJMethodId }
 def callDoStreamJ (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target doStreamJMethod payload
+def callDoStreamJM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
 
 def finishStreamMethodId : UInt16 := UInt16.ofNat 2
 def finishStreamMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := finishStreamMethodId }
 def callFinishStream (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target finishStreamMethod payload
+def callFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
 
 end TestStreaming
 abbrev TestHandle := Capnp.Rpc.Client
@@ -2163,16 +2211,22 @@ def callFooMethodId : UInt16 := UInt16.ofNat 0
 def callFooMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callFooMethodId }
 def callCallFoo (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callFooMethod payload
+def callCallFooM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callFooMethod payload
 
 def callFooWhenResolvedMethodId : UInt16 := UInt16.ofNat 1
 def callFooWhenResolvedMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callFooWhenResolvedMethodId }
 def callCallFooWhenResolved (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callFooWhenResolvedMethod payload
+def callCallFooWhenResolvedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
 
 def neverReturnMethodId : UInt16 := UInt16.ofNat 2
 def neverReturnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := neverReturnMethodId }
 def callNeverReturn (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target neverReturnMethod payload
+def callNeverReturnM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
 
 def TestMoreStuff.neverReturnMethod._ann_allowCancellation : Unit := ()
 
@@ -2180,26 +2234,36 @@ def holdMethodId : UInt16 := UInt16.ofNat 3
 def holdMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := holdMethodId }
 def callHold (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target holdMethod payload
+def callHoldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target holdMethod payload
 
 def callHeldMethodId : UInt16 := UInt16.ofNat 4
 def callHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callHeldMethodId }
 def callCallHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callHeldMethod payload
+def callCallHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callHeldMethod payload
 
 def getHeldMethodId : UInt16 := UInt16.ofNat 5
 def getHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHeldMethodId }
 def callGetHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getHeldMethod payload
+def callGetHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getHeldMethod payload
 
 def echoMethodId : UInt16 := UInt16.ofNat 6
 def echoMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := echoMethodId }
 def callEcho (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target echoMethod payload
+def callEchoM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target echoMethod payload
 
 def expectCancelMethodId : UInt16 := UInt16.ofNat 7
 def expectCancelMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := expectCancelMethodId }
 def callExpectCancel (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target expectCancelMethod payload
+def callExpectCancelM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
 
 def TestMoreStuff.expectCancelMethod._ann_allowCancellation : Unit := ()
 
@@ -2207,46 +2271,64 @@ def methodWithDefaultsMethodId : UInt16 := UInt16.ofNat 8
 def methodWithDefaultsMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := methodWithDefaultsMethodId }
 def callMethodWithDefaults (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target methodWithDefaultsMethod payload
+def callMethodWithDefaultsM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
 
 def getHandleMethodId : UInt16 := UInt16.ofNat 9
 def getHandleMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHandleMethodId }
 def callGetHandle (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getHandleMethod payload
+def callGetHandleM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getHandleMethod payload
 
 def getNullMethodId : UInt16 := UInt16.ofNat 10
 def getNullMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getNullMethodId }
 def callGetNull (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getNullMethod payload
+def callGetNullM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getNullMethod payload
 
 def getEnormousStringMethodId : UInt16 := UInt16.ofNat 11
 def getEnormousStringMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getEnormousStringMethodId }
 def callGetEnormousString (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getEnormousStringMethod payload
+def callGetEnormousStringM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
 
 def methodWithNullDefaultMethodId : UInt16 := UInt16.ofNat 12
 def methodWithNullDefaultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := methodWithNullDefaultMethodId }
 def callMethodWithNullDefault (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target methodWithNullDefaultMethod payload
+def callMethodWithNullDefaultM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
 
 def writeToFdMethodId : UInt16 := UInt16.ofNat 13
 def writeToFdMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := writeToFdMethodId }
 def callWriteToFd (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target writeToFdMethod payload
+def callWriteToFdM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
 
 def throwExceptionMethodId : UInt16 := UInt16.ofNat 14
 def throwExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionMethodId }
 def callThrowException (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target throwExceptionMethod payload
+def callThrowExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
 
 def throwRemoteExceptionMethodId : UInt16 := UInt16.ofNat 15
 def throwRemoteExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwRemoteExceptionMethodId }
 def callThrowRemoteException (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target throwRemoteExceptionMethod payload
+def callThrowRemoteExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
 
 def throwExceptionWithDetailMethodId : UInt16 := UInt16.ofNat 16
 def throwExceptionWithDetailMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionWithDetailMethodId }
 def callThrowExceptionWithDetail (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target throwExceptionWithDetailMethod payload
+def callThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
 
 end TestMoreStuff
 abbrev TestMembrane := Capnp.Rpc.Client
@@ -2259,26 +2341,36 @@ def makeThingMethodId : UInt16 := UInt16.ofNat 0
 def makeThingMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := makeThingMethodId }
 def callMakeThing (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target makeThingMethod payload
+def callMakeThingM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target makeThingMethod payload
 
 def callPassThroughMethodId : UInt16 := UInt16.ofNat 1
 def callPassThroughMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callPassThroughMethodId }
 def callCallPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callPassThroughMethod payload
+def callCallPassThroughM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
 
 def callInterceptMethodId : UInt16 := UInt16.ofNat 2
 def callInterceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callInterceptMethodId }
 def callCallIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target callInterceptMethod payload
+def callCallInterceptM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
 
 def loopbackMethodId : UInt16 := UInt16.ofNat 3
 def loopbackMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := loopbackMethodId }
 def callLoopback (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target loopbackMethod payload
+def callLoopbackM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target loopbackMethod payload
 
 def waitForeverMethodId : UInt16 := UInt16.ofNat 4
 def waitForeverMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := waitForeverMethodId }
 def callWaitForever (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target waitForeverMethod payload
+def callWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
 
 def TestMembrane.waitForeverMethod._ann_allowCancellation : Unit := ()
 
@@ -2293,11 +2385,15 @@ def passThroughMethodId : UInt16 := UInt16.ofNat 0
 def passThroughMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := passThroughMethodId }
 def callPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target passThroughMethod payload
+def callPassThroughM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target passThroughMethod payload
 
 def interceptMethodId : UInt16 := UInt16.ofNat 1
 def interceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := interceptMethodId }
 def callIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target interceptMethod payload
+def callInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target interceptMethod payload
 
 end TestMembrane.Thing
 abbrev TestKeywordMethods := Capnp.Rpc.Client
@@ -2310,21 +2406,29 @@ def deleteMethodId : UInt16 := UInt16.ofNat 0
 def deleteMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := deleteMethodId }
 def callDelete (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target deleteMethod payload
+def callDeleteM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target deleteMethod payload
 
 def _classMethodId : UInt16 := UInt16.ofNat 1
 def _classMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _classMethodId }
 def call_class (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target _classMethod payload
+def call_classM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target _classMethod payload
 
 def voidMethodId : UInt16 := UInt16.ofNat 2
 def voidMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := voidMethodId }
 def callVoid (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target voidMethod payload
+def callVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target voidMethod payload
 
 def returnMethodId : UInt16 := UInt16.ofNat 3
 def returnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := returnMethodId }
 def callReturn (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target returnMethod payload
+def callReturnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target returnMethod payload
 
 end TestKeywordMethods
 abbrev TestAuthenticatedBootstrap := Capnp.Rpc.Client
@@ -2337,6 +2441,8 @@ def getCallerIdMethodId : UInt16 := UInt16.ofNat 0
 def getCallerIdMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCallerIdMethodId }
 def callGetCallerId (backend : Capnp.Rpc.Backend) (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target getCallerIdMethod payload
+def callGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
 
 end TestAuthenticatedBootstrap
 inductive TestNameAnnotation.BadlyNamedEnum where
@@ -2400,6 +2506,8 @@ def badlyNamedMethodMethodId : UInt16 := UInt16.ofNat 0
 def badlyNamedMethodMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := badlyNamedMethodMethodId }
 def callBadlyNamedMethod (backend : Capnp.Rpc.Backend) (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
   Capnp.Rpc.call backend target badlyNamedMethodMethod payload
+def callBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
 
 def TestNameAnnotationInterface.badlyNamedMethodMethod._ann_name : Capnp.Text := "renamedMethod"
 

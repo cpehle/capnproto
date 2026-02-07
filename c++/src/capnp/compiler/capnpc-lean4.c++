@@ -3623,6 +3623,7 @@ private:
       auto methodIdName = uniqueName(methodBase + "MethodId", usedNames);
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
+      auto callMName = uniqueName("call" + std::string(cap.cStr()) + "M", usedNames);
 
       out += "\n";
       out += "def ";
@@ -3643,6 +3644,15 @@ private:
       out += name.cStr();
       out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do\n";
       out += "  Capnp.Rpc.call backend target ";
+      out += methodName;
+      out += " payload\n";
+
+      out += "def ";
+      out += callMName;
+      out += " (target : ";
+      out += name.cStr();
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do\n";
+      out += "  Capnp.Rpc.RuntimeM.call target ";
       out += methodName;
       out += " payload\n";
 
