@@ -332,7 +332,10 @@ namespace Runtime
   ffiRuntimeRetainTargetImpl runtime.handle target
 
 @[inline] def releaseCapTable (runtime : Runtime) (capTable : Capnp.CapTable) : IO Unit := do
-  ffiRuntimeReleaseTargetsImpl runtime.handle (CapTable.toBytes capTable)
+  if capTable.caps.isEmpty then
+    pure ()
+  else
+    ffiRuntimeReleaseTargetsImpl runtime.handle (CapTable.toBytes capTable)
 
 @[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
   ffiRuntimeConnectImpl runtime.handle address portHint
@@ -688,11 +691,10 @@ structure Dispatch where
   { routes := d.routes.push { method := method, handler := handler } }
 
 def Dispatch.findHandler? (d : Dispatch) (method : Method) : Option Handler := Id.run do
-  let mut found : Option Handler := none
   for route in d.routes do
     if route.method == method then
-      found := some route.handler
-  return found
+      return some route.handler
+  return none
 
 def Dispatch.toBackend (d : Dispatch)
     (onMissing : Client -> Method -> Payload -> IO Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) :

@@ -3859,10 +3859,25 @@ private:
     out += " (server : ";
     out += serverTypeName;
     out += ")\n";
-    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=\n";
-    out += "  (";
-    out += dispatchName;
-    out += " server).toBackend (onMissing := onMissing)\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend where\n";
+    out += "  call := fun target method payload => do\n";
+    if (rpcMethods.empty()) {
+      out += "    let _ := server\n";
+      out += "    onMissing target method payload\n";
+    } else {
+      bool first = true;
+      for (auto& methodOut: rpcMethods) {
+        out += first ? "    if method == " : "    else if method == ";
+        out += methodOut.methodName;
+        out += " then\n";
+        out += "      server.";
+        out += methodOut.fieldName;
+        out += " target payload\n";
+        first = false;
+      }
+      out += "    else\n";
+      out += "      onMissing target method payload\n";
+    }
 
     out += "\n";
     out += "def ";
@@ -3873,9 +3888,9 @@ private:
     out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO ";
     out += name.cStr();
     out += " := do\n";
-    out += "  Capnp.Rpc.Runtime.registerDispatchTarget runtime (";
-    out += dispatchName;
-    out += " server) (onMissing := onMissing)\n";
+    out += "  Capnp.Rpc.Runtime.registerBackendTarget runtime (";
+    out += backendName;
+    out += " server (onMissing := onMissing))\n";
 
     out += "\n";
     out += "def ";
@@ -3886,9 +3901,9 @@ private:
     out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
     out += name.cStr();
     out += " := do\n";
-    out += "  Capnp.Rpc.RuntimeM.registerDispatchTarget (";
-    out += dispatchName;
-    out += " server) (onMissing := onMissing)\n";
+    out += "  Capnp.Rpc.RuntimeM.registerBackendTarget (";
+    out += backendName;
+    out += " server (onMissing := onMissing))\n";
 
     out += "\n";
     out += "structure ";
@@ -3936,10 +3951,28 @@ private:
     out += " (server : ";
     out += typedServerTypeName;
     out += ")\n";
-    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=\n";
-    out += "  (";
-    out += typedDispatchName;
-    out += " server).toBackend (onMissing := onMissing)\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend where\n";
+    out += "  call := fun target method payload => do\n";
+    if (rpcMethods.empty()) {
+      out += "    let _ := server\n";
+      out += "    onMissing target method payload\n";
+    } else {
+      bool first = true;
+      for (auto& methodOut: rpcMethods) {
+        out += first ? "    if method == " : "    else if method == ";
+        out += methodOut.methodName;
+        out += " then do\n";
+        out += "      let (request, requestCaps) ← ";
+        out += methodOut.decodeRequestName;
+        out += " payload\n";
+        out += "      server.";
+        out += methodOut.fieldName;
+        out += " target request requestCaps\n";
+        first = false;
+      }
+      out += "    else\n";
+      out += "      onMissing target method payload\n";
+    }
 
     out += "\n";
     out += "def ";
@@ -3950,9 +3983,9 @@ private:
     out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO ";
     out += name.cStr();
     out += " := do\n";
-    out += "  Capnp.Rpc.Runtime.registerDispatchTarget runtime (";
-    out += typedDispatchName;
-    out += " server) (onMissing := onMissing)\n";
+    out += "  Capnp.Rpc.Runtime.registerBackendTarget runtime (";
+    out += typedBackendName;
+    out += " server (onMissing := onMissing))\n";
 
     out += "\n";
     out += "def ";
@@ -3963,9 +3996,9 @@ private:
     out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
     out += name.cStr();
     out += " := do\n";
-    out += "  Capnp.Rpc.RuntimeM.registerDispatchTarget (";
-    out += typedDispatchName;
-    out += " server) (onMissing := onMissing)\n";
+    out += "  Capnp.Rpc.RuntimeM.registerBackendTarget (";
+    out += typedBackendName;
+    out += " server (onMissing := onMissing))\n";
 
     out += "\nend ";
     out += name.cStr();

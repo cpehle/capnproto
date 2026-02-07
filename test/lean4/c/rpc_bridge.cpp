@@ -3516,6 +3516,11 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_targets(
   }
 
   try {
+    if (lean_sarray_size(targets) == 0) {
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
     auto targetIds = decodeCapTable(targets);
     auto completion = runtime->enqueueReleaseTargets(std::move(targetIds));
     {
