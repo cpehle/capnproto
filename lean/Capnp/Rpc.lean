@@ -14,6 +14,7 @@ abbrev Client := Capnp.Capability
 abbrev Listener := UInt32
 abbrev RuntimeClient := UInt32
 abbrev RuntimeServer := UInt32
+abbrev RuntimePendingCall := UInt32
 
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
@@ -52,6 +53,39 @@ opaque ffiRawCallWithCapsOnRuntimeImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
 
+@[extern "capnp_lean_rpc_runtime_start_call_with_caps"]
+opaque ffiRuntimeStartCallWithCapsImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_pending_call_await"]
+opaque ffiRuntimePendingCallAwaitImpl
+    (runtime : UInt64) (pendingCall : UInt32) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_runtime_pending_call_release"]
+opaque ffiRuntimePendingCallReleaseImpl (runtime : UInt64) (pendingCall : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_pending_call_get_pipelined_cap"]
+opaque ffiRuntimePendingCallGetPipelinedCapImpl
+    (runtime : UInt64) (pendingCall : UInt32) (pipelineOps : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_streaming_call_with_caps"]
+opaque ffiRuntimeStreamingCallWithCapsImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_target_get_fd"]
+opaque ffiRuntimeTargetGetFdImpl (runtime : UInt64) (target : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_target_when_resolved"]
+opaque ffiRuntimeTargetWhenResolvedImpl (runtime : UInt64) (target : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_enable_trace_encoder"]
+opaque ffiRuntimeEnableTraceEncoderImpl (runtime : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_disable_trace_encoder"]
+opaque ffiRuntimeDisableTraceEncoderImpl (runtime : UInt64) : IO Unit
+
 @[extern "capnp_lean_rpc_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
 
@@ -67,6 +101,12 @@ opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
 @[extern "capnp_lean_rpc_runtime_register_handler_target"]
 opaque ffiRuntimeRegisterHandlerTargetImpl (runtime : UInt64) (handler : @& RawHandlerCall) :
     IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_register_tailcall_target"]
+opaque ffiRuntimeRegisterTailCallTargetImpl (runtime : UInt64) (target : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_register_fd_target"]
+opaque ffiRuntimeRegisterFdTargetImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
@@ -158,6 +198,23 @@ structure RuntimeServerRef where
   handle : RuntimeServer
   deriving Inhabited, BEq, Repr
 
+structure RuntimePendingCallRef where
+  runtime : Runtime
+  handle : RuntimePendingCall
+  deriving Inhabited, BEq, Repr
+
+namespace PipelinePath
+
+@[inline] def toBytes (ops : Array UInt16) : ByteArray := Id.run do
+  let mut out := ByteArray.emptyWithCapacity (ops.size * 2)
+  for op in ops do
+    let n := op.toNat
+    out := out.push (UInt8.ofNat (n &&& 0xff))
+    out := out.push (UInt8.ofNat ((n >>> 8) &&& 0xff))
+  return out
+
+end PipelinePath
+
 namespace CapTable
 
 @[inline] def toBytes (t : Capnp.CapTable) : ByteArray := Id.run do
@@ -201,6 +258,12 @@ namespace Runtime
 @[inline] def registerHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO Payload) : IO Client :=
   ffiRuntimeRegisterHandlerTargetImpl runtime.handle (toRawHandlerCall handler)
+
+@[inline] def registerTailCallTarget (runtime : Runtime) (target : Client) : IO Client :=
+  ffiRuntimeRegisterTailCallTargetImpl runtime.handle target
+
+@[inline] def registerFdTarget (runtime : Runtime) (fd : UInt32) : IO Client :=
+  ffiRuntimeRegisterFdTargetImpl runtime.handle fd
 
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
@@ -259,6 +322,53 @@ namespace Runtime
     let (responseBytes, responseCaps) ← ffiRawCallWithCapsOnRuntimeImpl
       runtime.handle target method.interfaceId method.methodId requestBytes requestCaps
     return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
+@[inline] def startCall (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeStartCallWithCapsImpl runtime.handle target method.interfaceId
+      method.methodId requestBytes requestCaps)
+  }
+
+@[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : IO Payload := do
+  let (responseBytes, responseCaps) ←
+    ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle
+  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
+@[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : IO Unit :=
+  ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle
+
+@[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO Client := do
+  ffiRuntimePendingCallGetPipelinedCapImpl pendingCall.runtime.handle pendingCall.handle
+    (PipelinePath.toBytes pointerPath)
+
+@[inline] def streamingCall (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO Unit := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  ffiRuntimeStreamingCallWithCapsImpl runtime.handle target method.interfaceId method.methodId
+    requestBytes requestCaps
+
+@[inline] def targetGetFd? (runtime : Runtime) (target : Client) : IO (Option UInt32) := do
+  let noneSentinel := UInt32.ofNat 4294967295
+  let fd ← ffiRuntimeTargetGetFdImpl runtime.handle target
+  if fd == noneSentinel then
+    return none
+  else
+    return some fd
+
+@[inline] def targetWhenResolved (runtime : Runtime) (target : Client) : IO Unit :=
+  ffiRuntimeTargetWhenResolvedImpl runtime.handle target
+
+@[inline] def enableTraceEncoder (runtime : Runtime) : IO Unit :=
+  ffiRuntimeEnableTraceEncoderImpl runtime.handle
+
+@[inline] def disableTraceEncoder (runtime : Runtime) : IO Unit :=
+  ffiRuntimeDisableTraceEncoderImpl runtime.handle
 
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
@@ -319,6 +429,20 @@ namespace RuntimeServerRef
 
 end RuntimeServerRef
 
+namespace RuntimePendingCallRef
+
+@[inline] def await (pendingCall : RuntimePendingCallRef) : IO Payload :=
+  Runtime.pendingCallAwait pendingCall
+
+@[inline] def release (pendingCall : RuntimePendingCallRef) : IO Unit :=
+  Runtime.pendingCallRelease pendingCall
+
+@[inline] def getPipelinedCap (pendingCall : RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO Client :=
+  Runtime.pendingCallGetPipelinedCap pendingCall pointerPath
+
+end RuntimePendingCallRef
+
 abbrev RuntimeM := ReaderT Runtime IO
 
 namespace RuntimeM
@@ -343,6 +467,12 @@ namespace RuntimeM
 @[inline] def registerHandlerTarget
     (handler : Client -> Method -> Payload -> IO Payload) : RuntimeM Client := do
   Runtime.registerHandlerTarget (← runtime) handler
+
+@[inline] def registerTailCallTarget (target : Client) : RuntimeM Client := do
+  Runtime.registerTailCallTarget (← runtime) target
+
+@[inline] def registerFdTarget (fd : UInt32) : RuntimeM Client := do
+  Runtime.registerFdTarget (← runtime) fd
 
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
@@ -432,6 +562,36 @@ namespace RuntimeM
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
   Capnp.Rpc.call (← backend) target method payload
+
+@[inline] def startCall (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
+  Runtime.startCall (← runtime) target method payload
+
+@[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
+  Runtime.pendingCallAwait pendingCall
+
+@[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Unit := do
+  Runtime.pendingCallRelease pendingCall
+
+@[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : RuntimeM Client := do
+  Runtime.pendingCallGetPipelinedCap pendingCall pointerPath
+
+@[inline] def streamingCall (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Unit := do
+  Runtime.streamingCall (← runtime) target method payload
+
+@[inline] def targetGetFd? (target : Client) : RuntimeM (Option UInt32) := do
+  Runtime.targetGetFd? (← runtime) target
+
+@[inline] def targetWhenResolved (target : Client) : RuntimeM Unit := do
+  Runtime.targetWhenResolved (← runtime) target
+
+@[inline] def enableTraceEncoder : RuntimeM Unit := do
+  Runtime.enableTraceEncoder (← runtime)
+
+@[inline] def disableTraceEncoder : RuntimeM Unit := do
+  Runtime.disableTraceEncoder (← runtime)
 
 @[inline] def withBackend (f : Backend -> IO α) : RuntimeM α := do
   f (← backend)

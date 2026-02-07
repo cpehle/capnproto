@@ -821,6 +821,49 @@ def testInteropCppClientCallsLeanServer : IO Unit := do
       pure ()
 
 @[test]
+def testInteropCppClientCallsLeanServerWithCapabilities : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let localCap ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload localCap
+
+    let bootstrap ← runtime.registerHandlerTarget (fun _ _ req => pure req)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallWithAccept runtime server listener address Echo.fooMethod
+      capPayload
+
+    assertEqual response.capTable.caps.size 1
+    let returnedCap? := Capnp.readCapabilityFromTable response.capTable (Capnp.getRoot response.msg)
+    assertEqual returnedCap?.isSome true
+    match returnedCap? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap =>
+        let echoed ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM returnedCap payload
+        assertEqual echoed.capTable.caps.size 0
+        runtime.releaseCapTable response.capTable
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget localCap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testInteropLeanClientCallsCppServer : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -884,3 +927,255 @@ def testInteropLeanClientCallsCppServer : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimePendingCallPipeline : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let localCap ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload localCap
+    let pending ← runtime.startCall localCap Echo.fooMethod capPayload
+    let pipelinedCap ← pending.getPipelinedCap
+
+    let echoed ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload
+    assertEqual echoed.capTable.caps.size 0
+
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    runtime.releaseTarget pipelinedCap
+    runtime.releaseTarget localCap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeTargetWhenResolvedPipeline : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let localCap ← runtime.registerEchoTarget
+    let returnPayload := mkCapabilityPayload localCap
+    let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => pure returnPayload)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let pending ← runtime.startCall remoteTarget Echo.fooMethod payload
+    let pipelinedCap ← pending.getPipelinedCap
+    runtime.targetWhenResolved pipelinedCap
+
+    let echoed ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload
+    assertEqual echoed.capTable.caps.size 0
+
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    runtime.releaseTarget pipelinedCap
+    runtime.releaseTarget remoteTarget
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget localCap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimePendingCallRelease : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let pending ← runtime.startCall target Echo.fooMethod mkNullPayload
+    pending.release
+    let awaitFailed ←
+      try
+        let _ ← pending.await
+        pure false
+      catch _ =>
+        pure true
+    assertEqual awaitFailed true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeStreamingCall : IO Unit := do
+  let seen ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        seen.set true
+      pure req)
+    runtime.streamingCall target Echo.fooMethod mkNullPayload
+    assertEqual (← seen.get) true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeTraceEncoderToggle : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let runFailingCall (traceEnabled : Bool) : IO String := do
+    let (address, socketPath) ← mkUnixTestAddress
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      if traceEnabled then
+        runtime.enableTraceEncoder
+      else
+        runtime.disableTraceEncoder
+
+      let bootstrap ← runtime.registerHandlerTarget (fun _ method _ => do
+        if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+          throw (IO.userError "trace test exception")
+        pure mkNullPayload)
+      try
+        runtime.withServer bootstrap fun server => do
+          server.withListener address (fun listener => do
+            runtime.withClient address (fun client => do
+              server.accept listener
+              let target ← client.bootstrap
+              try
+                let _ ← Capnp.Rpc.RuntimeM.run runtime do
+                  Echo.callFooM target payload
+                pure ""
+              catch err =>
+                pure (toString err)
+              finally
+                runtime.releaseTarget target))
+      finally
+        runtime.releaseTarget bootstrap
+    finally
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+  try
+    let disabledMessage ← runFailingCall false
+    if !(disabledMessage.containsSubstr "remote exception:") then
+      throw (IO.userError s!"unexpected disabled error text: {disabledMessage}")
+    if disabledMessage.containsSubstr "remote trace:" then
+      throw (IO.userError s!"disabled call unexpectedly included remote trace: {disabledMessage}")
+
+    let enabledMessage ← runFailingCall true
+    if !(enabledMessage.containsSubstr "remote exception:") then
+      throw (IO.userError s!"unexpected enabled error text: {enabledMessage}")
+    if !(enabledMessage.containsSubstr "remote trace: lean4-rpc-trace:") then
+      throw (IO.userError s!"enabled call did not include encoded remote trace: {enabledMessage}")
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeTargetGetFdOption : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let fd? ← runtime.targetGetFd? target
+    assertEqual fd?.isNone true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeTailCallForwardingTarget : IO Unit := do
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerHandlerTarget (fun _ method req => do
+      seenMethod.set method
+      pure req)
+    let forwarder ← runtime.registerTailCallTarget sink
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder mkNullPayload
+    assertEqual response.capTable.caps.size 0
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeFdTargetLocalGetFd : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      let fdTarget ← runtime.registerFdTarget (UInt32.ofNat 0)
+      let fd? ← runtime.targetGetFd? fdTarget
+      assertEqual fd?.isSome true
+      runtime.releaseTarget fdTarget
+    finally
+      runtime.shutdown
+
+@[test]
+def testRuntimeFdPassingOverNetwork : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let payload : Capnp.Rpc.Payload := mkNullPayload
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let fdTarget ← runtime.registerFdTarget (UInt32.ofNat 0)
+      let returnPayload := mkCapabilityPayload fdTarget
+      let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => pure returnPayload)
+      let server ← runtime.newServer bootstrap
+      let listener ← server.listen address
+      let client ← runtime.newClient address
+      server.accept listener
+
+      let remoteTarget ← client.bootstrap
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM remoteTarget payload
+      let returnedCap? := Capnp.readCapabilityFromTable response.capTable (Capnp.getRoot response.msg)
+      assertEqual returnedCap?.isSome true
+      match returnedCap? with
+      | none =>
+          throw (IO.userError "RPC response is missing expected capability")
+      | some returnedCap =>
+          let fd? ← runtime.targetGetFd? returnedCap
+          assertEqual fd?.isSome true
+      runtime.releaseCapTable response.capTable
+      runtime.releaseTarget remoteTarget
+      client.release
+      server.release
+      runtime.releaseListener listener
+      runtime.releaseTarget bootstrap
+      runtime.releaseTarget fdTarget
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
