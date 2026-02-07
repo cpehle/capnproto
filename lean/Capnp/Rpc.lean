@@ -27,6 +27,8 @@ structure Backend where
   backend.call target method payload
 
 abbrev RawCall := Client -> Method -> ByteArray -> IO ByteArray
+abbrev RawHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
+    IO (ByteArray × ByteArray)
 
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
   Capnp.writeMessage payload.msg
@@ -61,6 +63,10 @@ opaque ffiRuntimeIsAliveImpl (runtime : UInt64) : IO Bool
 
 @[extern "capnp_lean_rpc_runtime_register_echo_target"]
 opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_register_handler_target"]
+opaque ffiRuntimeRegisterHandlerTargetImpl (runtime : UInt64) (handler : @& RawHandlerCall) :
+    IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
@@ -151,6 +157,14 @@ namespace CapTable
 
 end CapTable
 
+@[inline] private def toRawHandlerCall
+    (handler : Client -> Method -> Payload -> IO Payload) : RawHandlerCall :=
+  fun target interfaceId methodId requestBytes requestCaps => do
+    let request : Payload :=
+      { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+    let response ← handler target { interfaceId := interfaceId, methodId := methodId } request
+    return (response.toBytes, CapTable.toBytes response.capTable)
+
 namespace Runtime
 
 @[inline] def init : IO Runtime := do
@@ -164,6 +178,10 @@ namespace Runtime
 
 @[inline] def registerEchoTarget (runtime : Runtime) : IO Client :=
   ffiRuntimeRegisterEchoTargetImpl runtime.handle
+
+@[inline] def registerHandlerTarget (runtime : Runtime)
+    (handler : Client -> Method -> Payload -> IO Payload) : IO Client :=
+  ffiRuntimeRegisterHandlerTargetImpl runtime.handle (toRawHandlerCall handler)
 
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
@@ -296,6 +314,10 @@ namespace RuntimeM
 @[inline] def registerEchoTarget : RuntimeM Client := do
   Runtime.registerEchoTarget (← runtime)
 
+@[inline] def registerHandlerTarget
+    (handler : Client -> Method -> Payload -> IO Payload) : RuntimeM Client := do
+  Runtime.registerHandlerTarget (← runtime) handler
+
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
 
@@ -415,6 +437,30 @@ def Dispatch.toBackend (d : Dispatch)
     match d.findHandler? method with
     | some handler => handler target payload
     | none => onMissing target method payload
+
+namespace Runtime
+
+@[inline] def registerBackendTarget (runtime : Runtime) (backend : Backend) : IO Client :=
+  runtime.registerHandlerTarget (fun target method payload => backend.call target method payload)
+
+@[inline] def registerDispatchTarget (runtime : Runtime) (dispatch : Dispatch)
+    (onMissing : Client -> Method -> Payload -> IO Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) :
+    IO Client :=
+  runtime.registerBackendTarget (dispatch.toBackend (onMissing := onMissing))
+
+end Runtime
+
+namespace RuntimeM
+
+@[inline] def registerBackendTarget (backend : Backend) : RuntimeM Client := do
+  Runtime.registerBackendTarget (← runtime) backend
+
+@[inline] def registerDispatchTarget (dispatch : Dispatch)
+    (onMissing : Client -> Method -> Payload -> IO Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) :
+    RuntimeM Client := do
+  Runtime.registerDispatchTarget (← runtime) dispatch (onMissing := onMissing)
+
+end RuntimeM
 
 def echoBackend : Backend where
   call := fun _ _ payload => pure payload

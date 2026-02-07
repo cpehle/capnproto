@@ -72,6 +72,28 @@ namespace Dummy
 
 def interfaceId : UInt64 := UInt64.ofNat 14600654945541569631
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  unit : Unit := ()
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO Dummy := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Dummy := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end Dummy
 
 mutual

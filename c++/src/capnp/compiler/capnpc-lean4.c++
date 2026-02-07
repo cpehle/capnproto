@@ -3612,6 +3612,15 @@ private:
     out += std::to_string(schema.getProto().getId());
     out += "\n";
 
+    struct RpcMethodOut {
+      std::string fieldName;
+      std::string methodIdName;
+      std::string methodName;
+      std::string callName;
+      std::string callMName;
+    };
+    std::vector<RpcMethodOut> rpcMethods;
+
     std::unordered_set<std::string> usedNames;
     usedNames.insert(std::string("interfaceId"));
 
@@ -3620,10 +3629,12 @@ private:
       auto cap = capitalizeIdentifier(raw);
       auto methodBase = std::string(raw.cStr());
 
+      auto fieldName = uniqueName(methodBase, usedNames);
       auto methodIdName = uniqueName(methodBase + "MethodId", usedNames);
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
       auto callMName = uniqueName("call" + std::string(cap.cStr()) + "M", usedNames);
+      rpcMethods.push_back({fieldName, methodIdName, methodName, callName, callMName});
 
       out += "\n";
       out += "def ";
@@ -3667,6 +3678,90 @@ private:
         out += methodAnnOut;
       }
     }
+
+    auto handlerTypeName = uniqueName("Handler", usedNames);
+    auto serverTypeName = uniqueName("Server", usedNames);
+    auto dispatchName = uniqueName("dispatch", usedNames);
+    auto backendName = uniqueName("backend", usedNames);
+    auto registerTargetName = uniqueName("registerTarget", usedNames);
+    auto registerTargetMName = uniqueName("registerTargetM", usedNames);
+
+    out += "\n";
+    out += "abbrev ";
+    out += handlerTypeName;
+    out += " := Capnp.Rpc.Handler\n";
+
+    out += "\n";
+    out += "structure ";
+    out += serverTypeName;
+    out += " where\n";
+    if (rpcMethods.empty()) {
+      out += "  unit : Unit := ()\n";
+    } else {
+      for (auto& methodOut: rpcMethods) {
+        out += "  ";
+        out += methodOut.fieldName;
+        out += " : ";
+        out += handlerTypeName;
+        out += "\n";
+      }
+    }
+
+    out += "\n";
+    out += "def ";
+    out += dispatchName;
+    out += " (server : ";
+    out += serverTypeName;
+    out += ") : Capnp.Rpc.Dispatch := Id.run do\n";
+    out += "  let mut d := Capnp.Rpc.Dispatch.empty\n";
+    if (rpcMethods.empty()) {
+      out += "  let _ := server\n";
+    }
+    for (auto& methodOut: rpcMethods) {
+      out += "  d := Capnp.Rpc.Dispatch.register d ";
+      out += methodOut.methodName;
+      out += " server.";
+      out += methodOut.fieldName;
+      out += "\n";
+    }
+    out += "  return d\n";
+
+    out += "\n";
+    out += "def ";
+    out += backendName;
+    out += " (server : ";
+    out += serverTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=\n";
+    out += "  (";
+    out += dispatchName;
+    out += " server).toBackend (onMissing := onMissing)\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerTargetName;
+    out += " (runtime : Capnp.Rpc.Runtime) (server : ";
+    out += serverTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.Runtime.registerDispatchTarget runtime (";
+    out += dispatchName;
+    out += " server) (onMissing := onMissing)\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerTargetMName;
+    out += " (server : ";
+    out += serverTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.RuntimeM.registerDispatchTarget (";
+    out += dispatchName;
+    out += " server) (onMissing := onMissing)\n";
 
     out += "\nend ";
     out += name.cStr();

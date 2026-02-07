@@ -75,6 +75,12 @@ std::vector<uint32_t> decodeCapTable(const uint8_t* data, size_t size) {
   return caps;
 }
 
+std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes) {
+  const auto size = lean_sarray_size(bytes);
+  const auto* data = reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  return std::vector<uint8_t>(data, data + size);
+}
+
 struct RawCallResult {
   std::vector<uint8_t> response;
   std::vector<uint8_t> responseCaps;
@@ -250,6 +256,25 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedRegisterEchoTarget{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueRegisterHandlerTarget(
+      b_lean_obj_arg handler) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    auto* handlerObj = const_cast<lean_object*>(handler);
+    lean_mark_mt(handlerObj);
+    lean_inc(handlerObj);
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        lean_dec(handlerObj);
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedRegisterHandlerTarget{handlerObj, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -540,6 +565,11 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedRegisterHandlerTarget {
+    lean_object* handler;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedReleaseTarget {
     uint32_t target;
     std::shared_ptr<UnitCompletion> completion;
@@ -638,7 +668,8 @@ class RuntimeLoop {
   };
 
   using QueuedOperation =
-      std::variant<QueuedRawCall, QueuedRegisterEchoTarget, QueuedReleaseTarget,
+      std::variant<QueuedRawCall, QueuedRegisterEchoTarget, QueuedRegisterHandlerTarget,
+                   QueuedReleaseTarget,
                    QueuedConnectTarget, QueuedListenEcho, QueuedAcceptEcho,
                    QueuedReleaseListener, QueuedNewClient, QueuedReleaseClient,
                    QueuedClientBootstrap, QueuedClientOnDisconnect, QueuedClientSetFlowLimit,
@@ -670,12 +701,120 @@ class RuntimeLoop {
     kj::Vector<kj::Own<NetworkServerPeer>> peers;
   };
 
+  class LeanCapabilityServer final : public capnp::Capability::Server {
+   public:
+    LeanCapabilityServer(RuntimeLoop& runtime,
+                         std::shared_ptr<std::atomic<uint32_t>> targetId,
+                         lean_object* handler)
+        : runtime_(runtime), targetId_(kj::mv(targetId)), handler_(handler) {
+      lean_inc(handler_);
+    }
+
+    ~LeanCapabilityServer() { lean_dec(handler_); }
+
+    DispatchCallResult dispatchCall(
+        uint64_t interfaceId, uint16_t methodId,
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
+      capnp::MallocMessageBuilder requestMessage;
+      capnp::BuilderCapabilityTable requestCapTable;
+      requestCapTable
+          .imbue(requestMessage.getRoot<capnp::AnyPointer>())
+          .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+
+      auto requestWords = capnp::messageToFlatArray(requestMessage);
+      auto requestBytes = requestWords.asBytes();
+      auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
+                                        requestBytes.size());
+
+      std::vector<uint8_t> requestCaps;
+      auto requestCapEntries = requestCapTable.getTable();
+      requestCaps.reserve(requestCapEntries.size() * 4);
+      for (auto& maybeHook : requestCapEntries) {
+        KJ_IF_SOME(hook, maybeHook) {
+          auto cap = capnp::Capability::Client(hook->addRef());
+          appendUint32Le(requestCaps, runtime_.addTarget(kj::mv(cap)));
+        } else {
+          appendUint32Le(requestCaps, 0);
+        }
+      }
+      auto requestCapsObj = mkByteArrayCopy(requestCaps.data(), requestCaps.size());
+
+      auto targetId = targetId_->load(std::memory_order_relaxed);
+      lean_inc(handler_);
+      auto ioResult = lean_apply_6(handler_, lean_box_uint32(targetId), lean_box_uint64(interfaceId),
+                                   lean_box(static_cast<size_t>(methodId)), requestObj,
+                                   requestCapsObj, lean_box(0));
+      if (lean_io_result_is_error(ioResult)) {
+        lean_dec(ioResult);
+        throw std::runtime_error("Lean RPC handler returned IO error");
+      }
+
+      auto resultPair = lean_io_result_take_value(ioResult);
+      auto responseObj = lean_ctor_get(resultPair, 0);
+      lean_inc(responseObj);
+      auto responseCapsObj = lean_ctor_get(resultPair, 1);
+      lean_inc(responseCapsObj);
+      lean_dec(resultPair);
+
+      auto responseBytesCopy = copyByteArray(responseObj);
+      auto responseCapsCopy = copyByteArray(responseCapsObj);
+      lean_dec(responseObj);
+      lean_dec(responseCapsObj);
+
+      kj::ArrayPtr<const kj::byte> responseBytes(
+          reinterpret_cast<const kj::byte*>(responseBytesCopy.data()), responseBytesCopy.size());
+      kj::ArrayInputStream input(responseBytes);
+      capnp::ReaderOptions options;
+      options.traversalLimitInWords = 1ull << 30;
+      capnp::InputStreamMessageReader reader(input, options);
+      auto responseRoot = reader.getRoot<capnp::AnyPointer>();
+
+      auto responseCapIds = decodeCapTable(responseCapsCopy.data(), responseCapsCopy.size());
+      if (responseCapIds.empty()) {
+        context.getResults().setAs<capnp::AnyPointer>(responseRoot);
+      } else {
+        auto capTableBuilder =
+            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
+        for (auto capId : responseCapIds) {
+          if (capId == 0) {
+            capTableBuilder.add(kj::none);
+            continue;
+          }
+          auto capIt = runtime_.targets_.find(capId);
+          if (capIt == runtime_.targets_.end()) {
+            throw std::runtime_error("unknown RPC response capability id from Lean handler: " +
+                                     std::to_string(capId));
+          }
+          capnp::Capability::Client cap = capIt->second;
+          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
+        }
+        capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
+        context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
+      }
+
+      return {kj::READY_NOW, false};
+    }
+
+   private:
+    RuntimeLoop& runtime_;
+    std::shared_ptr<std::atomic<uint32_t>> targetId_;
+    lean_object* handler_;
+  };
+
   uint32_t addTarget(capnp::Capability::Client cap) {
     uint32_t targetId = nextTargetId_++;
     while (targets_.find(targetId) != targets_.end()) {
       targetId = nextTargetId_++;
     }
     targets_.emplace(targetId, kj::mv(cap));
+    return targetId;
+  }
+
+  uint32_t registerHandlerTarget(lean_object* handler) {
+    auto targetIdRef = std::make_shared<std::atomic<uint32_t>>(0);
+    auto server = kj::heap<LeanCapabilityServer>(*this, targetIdRef, handler);
+    auto targetId = addTarget(capnp::Capability::Client(kj::mv(server)));
+    targetIdRef->store(targetId, std::memory_order_relaxed);
     return targetId;
   }
 
@@ -1038,6 +1177,21 @@ class RuntimeLoop {
             completeRegisterFailure(registration.completion,
                                     "unknown exception in capnp_lean_rpc_runtime_register_echo_target");
           }
+        } else if (std::holds_alternative<QueuedRegisterHandlerTarget>(op)) {
+          auto registration = std::get<QueuedRegisterHandlerTarget>(std::move(op));
+          try {
+            auto targetId = registerHandlerTarget(registration.handler);
+            completeRegisterSuccess(registration.completion, targetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(registration.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(registration.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                registration.completion,
+                "unknown exception in capnp_lean_rpc_runtime_register_handler_target");
+          }
+          lean_dec(registration.handler);
         } else if (std::holds_alternative<QueuedReleaseTarget>(op)) {
           auto release = std::get<QueuedReleaseTarget>(std::move(op));
           try {
@@ -1322,6 +1476,10 @@ class RuntimeLoop {
         completeFailure(std::get<QueuedRawCall>(op).completion, message);
       } else if (std::holds_alternative<QueuedRegisterEchoTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRegisterEchoTarget>(op).completion, message);
+      } else if (std::holds_alternative<QueuedRegisterHandlerTarget>(op)) {
+        auto& registration = std::get<QueuedRegisterHandlerTarget>(op);
+        lean_dec(registration.handler);
+        completeRegisterFailure(registration.completion, message);
       } else if (std::holds_alternative<QueuedReleaseTarget>(op)) {
         completeUnitFailure(std::get<QueuedReleaseTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
@@ -2082,5 +2240,31 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_echo_target(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_register_echo_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_handler_target(
+    uint64_t runtimeId, b_lean_obj_arg handler) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueRegisterHandlerTarget(handler);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_register_handler_target");
   }
 }

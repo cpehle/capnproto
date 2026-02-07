@@ -65,6 +65,70 @@ def testDispatchOnMissingReceivesMethod : IO Unit := do
   assertEqual (response == payload) true
 
 @[test]
+def testGeneratedServerBackendDispatch : IO Unit := do
+  let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
+  let seenFoo ← IO.mkRef false
+  let seenBar ← IO.mkRef false
+  let server : Echo.Server := {
+    foo := fun _ req => do
+      seenFoo.set true
+      pure req
+    bar := fun _ req => do
+      seenBar.set true
+      pure req
+  }
+  let backend := Echo.backend server
+  let response ← Echo.callBar backend (UInt32.ofNat 5) payload
+  assertEqual (response == payload) true
+  assertEqual (← seenFoo.get) false
+  assertEqual (← seenBar.get) true
+
+@[test]
+def testGeneratedRegisterTargetNetwork : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let seenBar ← IO.mkRef false
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let handler : Echo.Server := {
+      foo := fun _ req => do
+        seenFoo.set true
+        pure req
+      bar := fun _ req => do
+        seenBar.set true
+        pure req
+    }
+    let bootstrap ← Echo.registerTarget runtime handler
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM remoteTarget payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← seenFoo.get) true
+    assertEqual (← seenBar.get) false
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testBackendOfRawCall : IO Unit := do
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
   let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
@@ -616,6 +680,49 @@ def testRuntimeScopedResourcesExplicitPortHintArgOrder : IO Unit := do
             0)
         0
     assertEqual response.capTable.caps.size 0
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeRegisterHandlerTargetNetwork : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenTarget ← IO.mkRef (UInt32.ofNat 0)
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerHandlerTarget (fun target method req => do
+      seenTarget.set target
+      seenMethod.set method
+      pure req)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM remoteTarget payload
+    assertEqual response.capTable.caps.size 0
+
+    assertEqual (← seenTarget.get) bootstrap
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
   finally
     runtime.shutdown
     try

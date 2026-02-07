@@ -1948,6 +1948,28 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.DeepNes
 def callCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  call : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod server.call
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestGenerics.Inner2.DeepNest.DeepNestInterface
 abbrev TestGenerics.Interface := Capnp.Rpc.Client
 
@@ -1961,6 +1983,28 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface) (pa
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  call : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod server.call
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestGenerics.Interface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestGenerics.Interface
 opaque ann : Capnp.AnyPointer
@@ -1977,6 +2021,28 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParams) (
 def callCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  call : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod server.call
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestImplicitMethodParams := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestImplicitMethodParams
 abbrev TestImplicitMethodParamsInGeneric := Capnp.Rpc.Client
 
@@ -1990,6 +2056,28 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParamsInG
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  call : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callMethod server.call
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestImplicitMethodParamsInGeneric
 abbrev TestInterface := Capnp.Rpc.Client
@@ -2047,6 +2135,40 @@ def callGetTestMoreStuff (backend : Capnp.Rpc.Backend) (target : TestInterface) 
 def callGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  foo : Handler
+  bar : Handler
+  baz : Handler
+  getTestPipeline : Handler
+  getTestTailCallee : Handler
+  getTestTailCaller : Handler
+  getTestMoreStuff : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod server.foo
+  d := Capnp.Rpc.Dispatch.register d barMethod server.bar
+  d := Capnp.Rpc.Dispatch.register d bazMethod server.baz
+  d := Capnp.Rpc.Dispatch.register d getTestPipelineMethod server.getTestPipeline
+  d := Capnp.Rpc.Dispatch.register d getTestTailCalleeMethod server.getTestTailCallee
+  d := Capnp.Rpc.Dispatch.register d getTestTailCallerMethod server.getTestTailCaller
+  d := Capnp.Rpc.Dispatch.register d getTestMoreStuffMethod server.getTestMoreStuff
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestInterface
 abbrev TestExtends := Capnp.Rpc.Client
 
@@ -2075,12 +2197,60 @@ def callGrault (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : C
 def callGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target graultMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  qux : Handler
+  corge : Handler
+  grault : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d quxMethod server.qux
+  d := Capnp.Rpc.Dispatch.register d corgeMethod server.corge
+  d := Capnp.Rpc.Dispatch.register d graultMethod server.grault
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestExtends := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestExtends
 abbrev TestExtends2 := Capnp.Rpc.Client
 
 namespace TestExtends2
 
 def interfaceId : UInt64 := UInt64.ofNat 11013518732491786115
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  unit : Unit := ()
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestExtends2 := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends2 := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestExtends2
 abbrev TestPipeline := Capnp.Rpc.Client
@@ -2117,6 +2287,34 @@ def callGetCapPipelineOnly (backend : Capnp.Rpc.Backend) (target : TestPipeline)
 def callGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  getCap : Handler
+  testPointers : Handler
+  getAnyCap : Handler
+  getCapPipelineOnly : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCapMethod server.getCap
+  d := Capnp.Rpc.Dispatch.register d testPointersMethod server.testPointers
+  d := Capnp.Rpc.Dispatch.register d getAnyCapMethod server.getAnyCap
+  d := Capnp.Rpc.Dispatch.register d getCapPipelineOnlyMethod server.getCapPipelineOnly
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestPipeline := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestPipeline := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestPipeline
 abbrev TestCallOrder := Capnp.Rpc.Client
 
@@ -2130,6 +2328,28 @@ def callGetCallSequence (backend : Capnp.Rpc.Backend) (target : TestCallOrder) (
   Capnp.Rpc.call backend target getCallSequenceMethod payload
 def callGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  getCallSequence : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCallSequenceMethod server.getCallSequence
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestCallOrder := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestCallOrder := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestCallOrder
 abbrev TestTailCallee := Capnp.Rpc.Client
@@ -2148,6 +2368,28 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payload : C
 def callFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  foo : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod server.foo
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestTailCallee := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCallee := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestTailCallee
 abbrev TestTailCaller := Capnp.Rpc.Client
 
@@ -2161,6 +2403,28 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payload : C
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  foo : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d fooMethod server.foo
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestTailCaller := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCaller := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestTailCaller
 abbrev TestStreaming := Capnp.Rpc.Client
@@ -2193,12 +2457,60 @@ def callFinishStream (backend : Capnp.Rpc.Backend) (target : TestStreaming) (pay
 def callFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  doStreamI : Handler
+  doStreamJ : Handler
+  finishStream : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d doStreamIMethod server.doStreamI
+  d := Capnp.Rpc.Dispatch.register d doStreamJMethod server.doStreamJ
+  d := Capnp.Rpc.Dispatch.register d finishStreamMethod server.finishStream
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestStreaming := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestStreaming := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestStreaming
 abbrev TestHandle := Capnp.Rpc.Client
 
 namespace TestHandle
 
 def interfaceId : UInt64 := UInt64.ofNat 11785461720995412501
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  unit : Unit := ()
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  let _ := server
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestHandle := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestHandle := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestHandle
 abbrev TestMoreStuff := Capnp.Rpc.Client
@@ -2330,6 +2642,60 @@ def callThrowExceptionWithDetail (backend : Capnp.Rpc.Backend) (target : TestMor
 def callThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  callFoo : Handler
+  callFooWhenResolved : Handler
+  neverReturn : Handler
+  hold : Handler
+  callHeld : Handler
+  getHeld : Handler
+  echo : Handler
+  expectCancel : Handler
+  methodWithDefaults : Handler
+  getHandle : Handler
+  getNull : Handler
+  getEnormousString : Handler
+  methodWithNullDefault : Handler
+  writeToFd : Handler
+  throwException : Handler
+  throwRemoteException : Handler
+  throwExceptionWithDetail : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d callFooMethod server.callFoo
+  d := Capnp.Rpc.Dispatch.register d callFooWhenResolvedMethod server.callFooWhenResolved
+  d := Capnp.Rpc.Dispatch.register d neverReturnMethod server.neverReturn
+  d := Capnp.Rpc.Dispatch.register d holdMethod server.hold
+  d := Capnp.Rpc.Dispatch.register d callHeldMethod server.callHeld
+  d := Capnp.Rpc.Dispatch.register d getHeldMethod server.getHeld
+  d := Capnp.Rpc.Dispatch.register d echoMethod server.echo
+  d := Capnp.Rpc.Dispatch.register d expectCancelMethod server.expectCancel
+  d := Capnp.Rpc.Dispatch.register d methodWithDefaultsMethod server.methodWithDefaults
+  d := Capnp.Rpc.Dispatch.register d getHandleMethod server.getHandle
+  d := Capnp.Rpc.Dispatch.register d getNullMethod server.getNull
+  d := Capnp.Rpc.Dispatch.register d getEnormousStringMethod server.getEnormousString
+  d := Capnp.Rpc.Dispatch.register d methodWithNullDefaultMethod server.methodWithNullDefault
+  d := Capnp.Rpc.Dispatch.register d writeToFdMethod server.writeToFd
+  d := Capnp.Rpc.Dispatch.register d throwExceptionMethod server.throwException
+  d := Capnp.Rpc.Dispatch.register d throwRemoteExceptionMethod server.throwRemoteException
+  d := Capnp.Rpc.Dispatch.register d throwExceptionWithDetailMethod server.throwExceptionWithDetail
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMoreStuff := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMoreStuff := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestMoreStuff
 abbrev TestMembrane := Capnp.Rpc.Client
 
@@ -2374,6 +2740,36 @@ def callWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Cap
 
 def TestMembrane.waitForeverMethod._ann_allowCancellation : Unit := ()
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  makeThing : Handler
+  callPassThrough : Handler
+  callIntercept : Handler
+  loopback : Handler
+  waitForever : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d makeThingMethod server.makeThing
+  d := Capnp.Rpc.Dispatch.register d callPassThroughMethod server.callPassThrough
+  d := Capnp.Rpc.Dispatch.register d callInterceptMethod server.callIntercept
+  d := Capnp.Rpc.Dispatch.register d loopbackMethod server.loopback
+  d := Capnp.Rpc.Dispatch.register d waitForeverMethod server.waitForever
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMembrane := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestMembrane
 abbrev TestMembrane.Thing := Capnp.Rpc.Client
 
@@ -2394,6 +2790,30 @@ def callIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (p
   Capnp.Rpc.call backend target interceptMethod payload
 def callInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target interceptMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  passThrough : Handler
+  intercept : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d passThroughMethod server.passThrough
+  d := Capnp.Rpc.Dispatch.register d interceptMethod server.intercept
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestMembrane.Thing := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestMembrane.Thing
 abbrev TestKeywordMethods := Capnp.Rpc.Client
@@ -2430,6 +2850,34 @@ def callReturn (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payl
 def callReturnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target returnMethod payload
 
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  delete : Handler
+  _class : Handler
+  void : Handler
+  return : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d deleteMethod server.delete
+  d := Capnp.Rpc.Dispatch.register d _classMethod server._class
+  d := Capnp.Rpc.Dispatch.register d voidMethod server.void
+  d := Capnp.Rpc.Dispatch.register d returnMethod server.return
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestKeywordMethods := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
+
 end TestKeywordMethods
 abbrev TestAuthenticatedBootstrap := Capnp.Rpc.Client
 
@@ -2443,6 +2891,28 @@ def callGetCallerId (backend : Capnp.Rpc.Backend) (target : TestAuthenticatedBoo
   Capnp.Rpc.call backend target getCallerIdMethod payload
 def callGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  getCallerId : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d getCallerIdMethod server.getCallerId
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestAuthenticatedBootstrap := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestAuthenticatedBootstrap
 inductive TestNameAnnotation.BadlyNamedEnum where
@@ -2510,6 +2980,28 @@ def callBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capn
   Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
 
 def TestNameAnnotationInterface.badlyNamedMethodMethod._ann_name : Capnp.Text := "renamedMethod"
+
+abbrev Handler := Capnp.Rpc.Handler
+
+structure Server where
+  badlyNamedMethod : Handler
+
+def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
+  let mut d := Capnp.Rpc.Dispatch.empty
+  d := Capnp.Rpc.Dispatch.register d badlyNamedMethodMethod server.badlyNamedMethod
+  return d
+
+def backend (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.Backend :=
+  (dispatch server).toBackend (onMissing := onMissing)
+
+def registerTarget (runtime : Capnp.Rpc.Runtime) (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : IO TestNameAnnotationInterface := do
+  Capnp.Rpc.Runtime.registerDispatchTarget runtime (dispatch server) (onMissing := onMissing)
+
+def registerTargetM (server : Server)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
+  Capnp.Rpc.RuntimeM.registerDispatchTarget (dispatch server) (onMissing := onMissing)
 
 end TestNameAnnotationInterface
 inductive TestUnion.Union0Group.Which where
