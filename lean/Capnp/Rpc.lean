@@ -42,6 +42,11 @@ opaque ffiRawCallOnRuntimeImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) : IO ByteArray
 
+@[extern "capnp_lean_rpc_raw_call_with_caps_on_runtime"]
+opaque ffiRawCallWithCapsOnRuntimeImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
+
 @[extern "capnp_lean_rpc_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
 
@@ -57,6 +62,24 @@ opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
 structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
+
+namespace CapTable
+
+@[inline] def toBytes (t : Capnp.CapTable) : ByteArray := Id.run do
+  let mut out := ByteArray.emptyWithCapacity (t.caps.size * 4)
+  for cap in t.caps do
+    out := Capnp.appendUInt32LE out cap
+  return out
+
+@[inline] def ofBytes (bytes : ByteArray) : Capnp.CapTable := Id.run do
+  let mut caps : Array Capnp.Capability := #[]
+  let mut i := 0
+  while i + 4 ≤ bytes.size do
+    caps := caps.push (Capnp.readUInt32LE bytes i)
+    i := i + 4
+  return { caps := caps }
+
+end CapTable
 
 namespace Runtime
 
@@ -76,8 +99,13 @@ namespace Runtime
   fun target method request =>
     ffiRawCallOnRuntimeImpl runtime.handle target method.interfaceId method.methodId request
 
-@[inline] def backend (runtime : Runtime) : Backend :=
-  Backend.ofRawCall runtime.rawCall
+@[inline] def backend (runtime : Runtime) : Backend where
+  call := fun target method payload => do
+    let requestBytes := payload.toBytes
+    let requestCaps := CapTable.toBytes payload.capTable
+    let (responseBytes, responseCaps) ← ffiRawCallWithCapsOnRuntimeImpl
+      runtime.handle target method.interfaceId method.methodId requestBytes requestCaps
+    return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
 
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init

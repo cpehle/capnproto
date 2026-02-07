@@ -5,6 +5,22 @@ import Capnp.Gen.c__.src.capnp.test
 open LeanTest
 open Capnp.Gen.c__.src.capnp.test
 
+def mkCapabilityPayload (cap : Capnp.Capability) : Capnp.Rpc.Payload := Id.run do
+  let (capTable, builder) :=
+    (do
+      let root ← Capnp.getRootPointer
+      Capnp.writeCapabilityWithTable Capnp.emptyCapTable root cap
+    ).run (Capnp.initMessageBuilder 16)
+  { msg := Capnp.buildMessage builder, capTable := capTable }
+
+def mkNullPayload : Capnp.Rpc.Payload := Id.run do
+  let (_, builder) :=
+    (do
+      let root ← Capnp.getRootPointer
+      Capnp.clearPointer root
+    ).run (Capnp.initMessageBuilder 16)
+  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
+
 @[test]
 def testGeneratedMethodMetadata : IO Unit := do
   assertEqual TestInterface.fooMethodId (UInt16.ofNat 0)
@@ -59,13 +75,26 @@ def testBackendOfRawCall : IO Unit := do
 
 @[test]
 def testFfiBackendRawRoundtrip : IO Unit := do
-  let payload : Capnp.Rpc.Payload :=
-    Capnp.Rpc.Payload.ofBytes (ByteArray.mk #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+  let payload : Capnp.Rpc.Payload := mkNullPayload
   let response ← Capnp.Rpc.RuntimeM.runWithNewRuntime do
     assertEqual (← Capnp.Rpc.RuntimeM.isAlive) true
     let target ← Capnp.Rpc.RuntimeM.registerEchoTarget
-    TestInterface.callFooM target payload
-  assertEqual (response == payload) true
+    let echoed ← TestInterface.callFooM target payload
+    assertEqual echoed.capTable.caps.size 0
+
+    let capPayload := mkCapabilityPayload target
+    let capResponse ← TestInterface.callFooM target capPayload
+    assertEqual capResponse.capTable.caps.size 1
+
+    let returnedCap? := Capnp.readCapabilityFromTable capResponse.capTable (Capnp.getRoot capResponse.msg)
+    assertEqual returnedCap?.isSome true
+    match returnedCap? with
+    | some returnedTarget =>
+        assertEqual (returnedTarget == (UInt32.ofNat 0)) false
+        TestInterface.callFooM returnedTarget payload
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+  assertEqual response.capTable.caps.size 0
 
   let runtime ← Capnp.Rpc.Runtime.init
   let target ← runtime.registerEchoTarget
