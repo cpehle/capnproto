@@ -591,3 +591,34 @@ def testRuntimeScopedResources : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimeScopedResourcesExplicitPortHintArgOrder : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let response ← runtime.withServer bootstrap fun server => do
+      server.withListener address
+        (fun listener => do
+          runtime.withClient address
+            (fun client => do
+              server.accept listener
+              let target ← client.bootstrap
+              Capnp.Rpc.RuntimeM.run runtime do
+                Echo.callFooM target payload)
+            0)
+        0
+    assertEqual response.capTable.caps.size 0
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
