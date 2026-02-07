@@ -12,6 +12,7 @@
 #include <kj/vector.h>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -57,6 +58,10 @@ std::string describeKjException(const kj::Exception& e) {
   if (remoteTrace != nullptr) {
     message += "\nremote trace: ";
     message += remoteTrace.cStr();
+  }
+  KJ_IF_SOME(detail, e.getDetail(1)) {
+    message += "\nremote detail[1]: ";
+    message.append(reinterpret_cast<const char*>(detail.begin()), detail.size());
   }
   return message;
 }
@@ -118,10 +123,15 @@ struct RawCallResult {
 class OneShotCaptureServer final : public capnp::Capability::Server {
  public:
   OneShotCaptureServer(uint64_t expectedInterfaceId, uint16_t expectedMethodId,
-                           kj::Own<kj::PromiseFulfiller<RawCallResult>> fulfiller)
+                       kj::Own<kj::PromiseFulfiller<RawCallResult>> fulfiller,
+                       uint32_t delayMillis = 0, bool throwException = false,
+                       bool throwWithDetail = false)
       : expectedInterfaceId_(expectedInterfaceId),
         expectedMethodId_(expectedMethodId),
-        fulfiller_(kj::mv(fulfiller)) {}
+        fulfiller_(kj::mv(fulfiller)),
+        delayMillis_(delayMillis),
+        throwException_(throwException),
+        throwWithDetail_(throwWithDetail) {}
 
   DispatchCallResult dispatchCall(
       uint64_t interfaceId, uint16_t methodId,
@@ -152,12 +162,29 @@ class OneShotCaptureServer final : public capnp::Capability::Server {
       }
     }
 
-    if (!fulfilled_) {
-      fulfiller_->fulfill(RawCallResult{std::move(requestCopy), std::move(requestCaps)});
-      fulfilled_ = true;
+    RawCallResult captured{std::move(requestCopy), std::move(requestCaps)};
+    auto fulfillCaptured = [&]() {
+      if (!fulfilled_) {
+        fulfiller_->fulfill(kj::mv(captured));
+        fulfilled_ = true;
+      }
+    };
+
+    if (delayMillis_ != 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(delayMillis_));
+    }
+
+    if (throwException_) {
+      fulfillCaptured();
+      auto ex = KJ_EXCEPTION(FAILED, "test exception");
+      if (throwWithDetail_) {
+        ex.setDetail(1, kj::heapArray("cpp-detail-1"_kj.asBytes()));
+      }
+      throw kj::mv(ex);
     }
 
     context.getResults().setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+    fulfillCaptured();
     return {kj::READY_NOW, false};
   }
 
@@ -166,6 +193,9 @@ class OneShotCaptureServer final : public capnp::Capability::Server {
   uint16_t expectedMethodId_;
   kj::Own<kj::PromiseFulfiller<RawCallResult>> fulfiller_;
   bool fulfilled_ = false;
+  uint32_t delayMillis_ = 0;
+  bool throwException_ = false;
+  bool throwWithDetail_ = false;
 };
 
 RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
@@ -228,21 +258,116 @@ RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint
   return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
 }
 
-RawCallResult cppServeOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
-                               uint16_t methodId) {
+void setRequestPayloadNoCaps(capnp::Request<capnp::AnyPointer, capnp::AnyPointer>& requestBuilder,
+                             const std::vector<uint8_t>& requestBytes,
+                             const std::vector<uint32_t>& requestCapIds,
+                             const char* context) {
+  for (auto capId : requestCapIds) {
+    if (capId != 0) {
+      throw std::runtime_error(std::string(context) + " does not support non-zero capability ids");
+    }
+  }
+  if (!requestBytes.empty()) {
+    kj::ArrayPtr<const kj::byte> reqBytes(reinterpret_cast<const kj::byte*>(requestBytes.data()),
+                                          requestBytes.size());
+    kj::ArrayInputStream input(reqBytes);
+    capnp::ReaderOptions options;
+    options.traversalLimitInWords = 1ull << 30;
+    capnp::InputStreamMessageReader reader(input, options);
+    requestBuilder.setAs<capnp::AnyPointer>(reader.getRoot<capnp::AnyPointer>());
+  }
+}
+
+RawCallResult serializeResponseNoCaps(capnp::Response<capnp::AnyPointer>& response,
+                                      const char* context) {
+  capnp::MallocMessageBuilder responseMessage;
+  capnp::BuilderCapabilityTable responseCapTable;
+  responseCapTable
+      .imbue(responseMessage.getRoot<capnp::AnyPointer>())
+      .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
+
+  auto responseWords = capnp::messageToFlatArray(responseMessage);
+  auto responseBytes = responseWords.asBytes();
+  std::vector<uint8_t> responseCopy(responseBytes.begin(), responseBytes.end());
+
+  std::vector<uint8_t> responseCaps;
+  auto responseCapEntries = responseCapTable.getTable();
+  responseCaps.reserve(responseCapEntries.size() * 4);
+  for (auto& maybeHook : responseCapEntries) {
+    KJ_IF_SOME(_hook, maybeHook) {
+      throw std::runtime_error(std::string(context) + " does not support capability results");
+    } else {
+      appendUint32Le(responseCaps, 0);
+    }
+  }
+
+  return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+}
+
+RawCallResult cppCallPipelinedCapOneShot(const std::string& address, uint32_t portHint,
+                                         uint64_t interfaceId, uint16_t methodId,
+                                         const std::vector<uint8_t>& requestBytes,
+                                         const std::vector<uint32_t>& requestCapIds,
+                                         const std::vector<uint8_t>& pipelinedRequestBytes,
+                                         const std::vector<uint32_t>& pipelinedRequestCapIds) {
+  auto io = kj::setupAsyncIo();
+  auto addr = io.provider->getNetwork().parseAddress(address.c_str(), portHint).wait(io.waitScope);
+  auto stream = addr->connect().wait(io.waitScope).downcast<kj::AsyncCapabilityStream>();
+  auto network = kj::heap<capnp::TwoPartyVatNetwork>(
+      *stream, 16, capnp::rpc::twoparty::Side::CLIENT);
+  auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
+
+  capnp::word scratch[4];
+  memset(&scratch, 0, sizeof(scratch));
+  capnp::MallocMessageBuilder message(scratch);
+  auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
+  vatId.setSide(capnp::rpc::twoparty::Side::SERVER);
+  auto target = rpcSystem->bootstrap(vatId);
+
+  auto firstRequest = target.typelessRequest(interfaceId, methodId, kj::none, {});
+  setRequestPayloadNoCaps(firstRequest, requestBytes, requestCapIds,
+                          "capnp_lean_rpc_cpp_call_pipelined_cap_one_shot(first call)");
+  auto firstPromise = firstRequest.send();
+
+  auto pipelinedTarget = capnp::Capability::Client(firstPromise.noop().asCap());
+  auto pipelinedRequest = pipelinedTarget.typelessRequest(interfaceId, methodId, kj::none, {});
+  setRequestPayloadNoCaps(pipelinedRequest, pipelinedRequestBytes, pipelinedRequestCapIds,
+                          "capnp_lean_rpc_cpp_call_pipelined_cap_one_shot(pipelined call)");
+  auto pipelinedResponse = pipelinedRequest.send().wait(io.waitScope);
+
+  // Ensure the original call eventually settles as well.
+  (void)kj::mv(firstPromise).wait(io.waitScope);
+  return serializeResponseNoCaps(
+      pipelinedResponse, "capnp_lean_rpc_cpp_call_pipelined_cap_one_shot");
+}
+
+RawCallResult cppServeOneShotEx(const std::string& address, uint32_t portHint, uint64_t interfaceId,
+                                uint16_t methodId, uint32_t delayMillis, bool throwException,
+                                bool throwWithDetail, bool waitForDisconnect = true) {
   auto io = kj::setupAsyncIo();
   auto addr = io.provider->getNetwork().parseAddress(address.c_str(), portHint).wait(io.waitScope);
   auto listener = addr->listen();
 
   auto paf = kj::newPromiseAndFulfiller<RawCallResult>();
   auto server = kj::heap<capnp::TwoPartyServer>(capnp::Capability::Client(
-      kj::heap<OneShotCaptureServer>(interfaceId, methodId, kj::mv(paf.fulfiller))));
+      kj::heap<OneShotCaptureServer>(interfaceId, methodId, kj::mv(paf.fulfiller), delayMillis,
+                                     throwException, throwWithDetail)));
 
   auto connection = listener->accept().wait(io.waitScope);
   server->accept(kj::mv(connection));
   auto result = paf.promise.wait(io.waitScope);
-  server->drain().wait(io.waitScope);
+  if (waitForDisconnect) {
+    server->drain().wait(io.waitScope);
+  } else {
+    // Keep the server alive briefly so the first response can flush before closing.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
   return result;
+}
+
+RawCallResult cppServeOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
+                              uint16_t methodId) {
+  return cppServeOneShotEx(address, portHint, interfaceId, methodId, 0, false, false, true);
 }
 
 lean_obj_res mkIoOkRawCallResult(const RawCallResult& result) {
@@ -629,6 +754,24 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueSetTraceEncoder(b_lean_obj_arg encoder) {
+    auto completion = std::make_shared<UnitCompletion>();
+    auto* encoderObj = const_cast<lean_object*>(encoder);
+    lean_mark_mt(encoderObj);
+    lean_inc(encoderObj);
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        lean_dec(encoderObj);
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedSetTraceEncoder{encoderObj, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
       uint32_t serverId, uint32_t listenerId, std::string address, uint32_t portHint,
       uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
@@ -643,6 +786,27 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedCppCallWithAccept{
           serverId, listenerId, std::move(address), portHint, interfaceId, methodId,
           std::move(request), std::move(requestCaps), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<RawCallCompletion> enqueueCppCallPipelinedWithAccept(
+      uint32_t serverId, uint32_t listenerId, std::string address, uint32_t portHint,
+      uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+      std::vector<uint32_t> requestCaps, std::vector<uint8_t> pipelinedRequest,
+      std::vector<uint32_t> pipelinedRequestCaps) {
+    auto completion = std::make_shared<RawCallCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedCppCallPipelinedWithAccept{
+          serverId, listenerId, std::move(address), portHint, interfaceId, methodId,
+          std::move(request), std::move(requestCaps), std::move(pipelinedRequest),
+          std::move(pipelinedRequestCaps), completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -1058,6 +1222,11 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedSetTraceEncoder {
+    lean_object* encoder;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   struct QueuedCppCallWithAccept {
     uint32_t serverId;
     uint32_t listenerId;
@@ -1067,6 +1236,20 @@ class RuntimeLoop {
     uint16_t methodId;
     std::vector<uint8_t> request;
     std::vector<uint32_t> requestCaps;
+    std::shared_ptr<RawCallCompletion> completion;
+  };
+
+  struct QueuedCppCallPipelinedWithAccept {
+    uint32_t serverId;
+    uint32_t listenerId;
+    std::string address;
+    uint32_t portHint;
+    uint64_t interfaceId;
+    uint16_t methodId;
+    std::vector<uint8_t> request;
+    std::vector<uint32_t> requestCaps;
+    std::vector<uint8_t> pipelinedRequest;
+    std::vector<uint32_t> pipelinedRequestCaps;
     std::shared_ptr<RawCallCompletion> completion;
   };
 
@@ -1195,7 +1378,8 @@ class RuntimeLoop {
       std::variant<QueuedRawCall, QueuedStartPendingCall, QueuedAwaitPendingCall,
                    QueuedReleasePendingCall, QueuedGetPipelinedCap, QueuedStreamingCall,
                    QueuedTargetGetFd, QueuedTargetWhenResolved, QueuedEnableTraceEncoder,
-                   QueuedDisableTraceEncoder, QueuedCppCallWithAccept,
+                   QueuedDisableTraceEncoder, QueuedSetTraceEncoder, QueuedCppCallWithAccept,
+                   QueuedCppCallPipelinedWithAccept,
                    QueuedRegisterLoopbackTarget, QueuedRegisterHandlerTarget,
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
                    QueuedReleaseTarget, QueuedRetainTarget,
@@ -1209,7 +1393,9 @@ class RuntimeLoop {
 
   struct LoopbackPeer {
     kj::Own<kj::AsyncCapabilityStream> clientStream;
-    kj::Own<capnp::TwoPartyServer> server;
+    kj::Own<kj::AsyncCapabilityStream> serverStream;
+    kj::Own<capnp::TwoPartyVatNetwork> serverNetwork;
+    kj::Own<TwoPartyRpcSystem> serverRpcSystem;
     kj::Own<capnp::TwoPartyClient> client;
   };
 
@@ -1220,7 +1406,10 @@ class RuntimeLoop {
   };
 
   struct NetworkServerPeer {
-    kj::Own<capnp::TwoPartyServer> server;
+    kj::Maybe<kj::Own<kj::AsyncIoStream>> ioConnection;
+    kj::Maybe<kj::Own<kj::AsyncCapabilityStream>> capConnection;
+    kj::Own<capnp::TwoPartyVatNetwork> network;
+    kj::Own<TwoPartyRpcSystem> rpcSystem;
   };
 
   struct RuntimeServer {
@@ -1552,10 +1741,14 @@ class RuntimeLoop {
   }
 
   void releasePendingCall(uint32_t pendingCallId) {
-    auto erased = pendingCalls_.erase(pendingCallId);
-    if (erased == 0) {
+    auto pendingIt = pendingCalls_.find(pendingCallId);
+    if (pendingIt == pendingCalls_.end()) {
       throw std::runtime_error("unknown pending RPC call id: " + std::to_string(pendingCallId));
     }
+    // Keep canceled calls alive until shutdown to avoid destroying unresolved remote
+    // promises while running this operation on the runtime event loop thread.
+    releasedPendingCalls_.add(kj::mv(pendingIt->second.promiseAndPipeline));
+    pendingCalls_.erase(pendingIt);
   }
 
   uint32_t getPipelinedCap(uint32_t pendingCallId, const std::vector<uint16_t>& pointerPath) {
@@ -1614,35 +1807,89 @@ class RuntimeLoop {
     targetIt->second.whenResolved().wait(waitScope);
   }
 
-  static kj::Function<kj::String(const kj::Exception&)> makeTraceEncoder() {
-    return [](const kj::Exception& e) {
-      return kj::str("lean4-rpc-trace: ", e.getDescription());
-    };
+  kj::String encodeTraceWithLean(const kj::Exception& e) {
+    if (traceEncoderHandler_ == nullptr) {
+      return kj::String();
+    }
+    lean_inc(traceEncoderHandler_);
+    auto ioResult = lean_apply_2(traceEncoderHandler_, lean_mk_string(e.getDescription().cStr()),
+                                 lean_box(0));
+    if (lean_io_result_is_error(ioResult)) {
+      lean_dec(ioResult);
+      return kj::String();
+    }
+    auto traceObj = lean_io_result_take_value(ioResult);
+    auto traceCStr = lean_string_cstr(traceObj);
+    lean_dec(traceObj);
+    return kj::str(traceCStr);
   }
 
+  kj::String encodeTrace(const kj::Exception& e) {
+    if (traceEncoderHandler_ != nullptr) {
+      return encodeTraceWithLean(e);
+    }
+    if (traceEncoderEnabled_) {
+      return kj::str("lean4-rpc-trace: ", e.getDescription());
+    }
+    return kj::String();
+  }
+
+  bool traceEncoderActive() const { return traceEncoderEnabled_ || traceEncoderHandler_ != nullptr; }
+
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> makeTraceEncoderMaybe() {
-    if (!traceEncoderEnabled_) {
+    if (!traceEncoderActive()) {
       return kj::none;
     }
-    return makeTraceEncoder();
+    return kj::Function<kj::String(const kj::Exception&)>(
+        [this](const kj::Exception& e) { return encodeTrace(e); });
   }
 
   void applyTraceEncoder(TwoPartyRpcSystem& rpcSystem) {
-    if (traceEncoderEnabled_) {
-      rpcSystem.setTraceEncoder(makeTraceEncoder());
-    } else {
+    if (!traceEncoderActive()) {
       rpcSystem.setTraceEncoder([](const kj::Exception&) { return kj::String(); });
+      return;
     }
+    rpcSystem.setTraceEncoder([this](const kj::Exception& e) { return encodeTrace(e); });
   }
 
-  void setTraceEncoderEnabled(bool enabled) {
-    traceEncoderEnabled_ = enabled;
+  void applyTraceEncoderToAllActiveConnections() {
     for (auto& entry : clients_) {
       applyTraceEncoder(*entry.second->rpcSystem);
     }
     for (auto& entry : networkClientPeers_) {
       applyTraceEncoder(*entry.second->rpcSystem);
     }
+    for (auto& loopback : loopbackPeers_) {
+      applyTraceEncoder(*loopback.second->serverRpcSystem);
+    }
+    for (auto& peer : networkServerPeers_) {
+      applyTraceEncoder(*peer->rpcSystem);
+    }
+    for (auto& server : servers_) {
+      for (auto& peer : server.second->peers) {
+        applyTraceEncoder(*peer->rpcSystem);
+      }
+    }
+  }
+
+  void clearTraceEncoderHandler() {
+    if (traceEncoderHandler_ != nullptr) {
+      lean_dec(traceEncoderHandler_);
+      traceEncoderHandler_ = nullptr;
+    }
+  }
+
+  void setTraceEncoderEnabled(bool enabled) {
+    clearTraceEncoderHandler();
+    traceEncoderEnabled_ = enabled;
+    applyTraceEncoderToAllActiveConnections();
+  }
+
+  void setTraceEncoderFromLean(lean_object* encoder) {
+    clearTraceEncoderHandler();
+    traceEncoderEnabled_ = false;
+    traceEncoderHandler_ = encoder;
+    applyTraceEncoderToAllActiveConnections();
   }
 
   RawCallResult processRawCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
@@ -1681,11 +1928,7 @@ class RuntimeLoop {
     auto connection = acceptPromise.wait(waitScope).downcast<kj::AsyncCapabilityStream>();
 
     // Accept the incoming client connection and keep the server peer alive in runtime-owned state.
-    auto serverPeer = kj::heap<NetworkServerPeer>();
-    serverPeer->server = kj::heap<capnp::TwoPartyServer>(
-        serverIt->second->bootstrap, makeTraceEncoderMaybe());
-    serverPeer->server->accept(kj::mv(connection), kMaxFdsPerMessage);
-    networkServerPeers_.add(kj::mv(serverPeer));
+    networkServerPeers_.add(makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection)));
     std::vector<uint8_t> responseCopy;
     std::vector<uint8_t> responseCaps;
     {
@@ -1729,6 +1972,56 @@ class RuntimeLoop {
       }
     }
     return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+  }
+
+  RawCallResult processCppPipelinedCallWithAccept(
+      kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t serverId,
+      uint32_t listenerId, const std::string& address, uint32_t portHint,
+      uint64_t interfaceId, uint16_t methodId, const std::vector<uint8_t>& request,
+      const std::vector<uint32_t>& requestCaps, const std::vector<uint8_t>& pipelinedRequest,
+      const std::vector<uint32_t>& pipelinedRequestCaps) {
+    auto serverIt = servers_.find(serverId);
+    if (serverIt == servers_.end()) {
+      throw std::runtime_error("unknown RPC server id: " + std::to_string(serverId));
+    }
+    auto listenerIt = listeners_.find(listenerId);
+    if (listenerIt == listeners_.end()) {
+      throw std::runtime_error("unknown RPC listener id: " + std::to_string(listenerId));
+    }
+
+    auto addr = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
+    auto connectPromise = addr->connect();
+    auto acceptPromise = listenerIt->second->accept();
+    auto stream = connectPromise.wait(waitScope).downcast<kj::AsyncCapabilityStream>();
+    auto connection = acceptPromise.wait(waitScope).downcast<kj::AsyncCapabilityStream>();
+
+    // Accept the incoming client connection and keep the server peer alive in runtime-owned state.
+    networkServerPeers_.add(makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection)));
+
+    auto network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *stream, kMaxFdsPerMessage, capnp::rpc::twoparty::Side::CLIENT);
+    auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
+    applyTraceEncoder(*rpcSystem);
+
+    capnp::word scratch[4];
+    memset(&scratch, 0, sizeof(scratch));
+    capnp::MallocMessageBuilder message(scratch);
+    auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
+    vatId.setSide(network->getSide() == capnp::rpc::twoparty::Side::CLIENT
+                      ? capnp::rpc::twoparty::Side::SERVER
+                      : capnp::rpc::twoparty::Side::CLIENT);
+    auto target = rpcSystem->bootstrap(vatId);
+
+    auto firstRequest = target.typelessRequest(interfaceId, methodId, kj::none, {});
+    setRequestPayload(firstRequest, request, requestCaps);
+    auto firstPromise = firstRequest.send();
+
+    auto pipelinedTarget = capnp::Capability::Client(firstPromise.noop().asCap());
+    auto pipelinedRequestBuilder =
+        pipelinedTarget.typelessRequest(interfaceId, methodId, kj::none, {});
+    setRequestPayload(pipelinedRequestBuilder, pipelinedRequest, pipelinedRequestCaps);
+    auto pipelinedResponse = pipelinedRequestBuilder.send().wait(waitScope);
+    return serializeResponse(pipelinedResponse);
   }
 
   bool dropTargetIfPresent(uint32_t target) {
@@ -1894,6 +2187,32 @@ class RuntimeLoop {
     clientIt->second->rpcSystem->setFlowLimit(static_cast<size_t>(words));
   }
 
+  kj::Own<NetworkServerPeer> makeServerPeer(capnp::Capability::Client bootstrap,
+                                            kj::Own<kj::AsyncIoStream>&& connection) {
+    auto peer = kj::heap<NetworkServerPeer>();
+    peer->ioConnection = kj::mv(connection);
+    auto& ioConnection = KJ_ASSERT_NONNULL(peer->ioConnection);
+    peer->network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *ioConnection, capnp::rpc::twoparty::Side::SERVER);
+    peer->rpcSystem = kj::heap<TwoPartyRpcSystem>(
+        capnp::makeRpcServer(*peer->network, kj::mv(bootstrap)));
+    applyTraceEncoder(*peer->rpcSystem);
+    return peer;
+  }
+
+  kj::Own<NetworkServerPeer> makeServerPeerWithFds(capnp::Capability::Client bootstrap,
+                                                    kj::Own<kj::AsyncCapabilityStream>&& connection) {
+    auto peer = kj::heap<NetworkServerPeer>();
+    peer->capConnection = kj::mv(connection);
+    auto& capConnection = KJ_ASSERT_NONNULL(peer->capConnection);
+    peer->network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *capConnection, kMaxFdsPerMessage, capnp::rpc::twoparty::Side::SERVER);
+    peer->rpcSystem = kj::heap<TwoPartyRpcSystem>(
+        capnp::makeRpcServer(*peer->network, kj::mv(bootstrap)));
+    applyTraceEncoder(*peer->rpcSystem);
+    return peer;
+  }
+
   uint32_t listenLoopback(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
                       const std::string& address, uint32_t portHint) {
     auto addr = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
@@ -1907,13 +2226,8 @@ class RuntimeLoop {
       throw std::runtime_error("unknown RPC listener id: " + std::to_string(listenerId));
     }
     auto connection = listenerIt->second->accept().wait(waitScope);
-    auto server = kj::heap<capnp::TwoPartyServer>(
-        capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>()), makeTraceEncoderMaybe());
-    server->accept(kj::mv(connection));
-
-    auto peer = kj::heap<NetworkServerPeer>();
-    peer->server = kj::mv(server);
-    networkServerPeers_.add(kj::mv(peer));
+    networkServerPeers_.add(makeServerPeer(
+        capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>()), kj::mv(connection)));
   }
 
   void releaseListener(uint32_t listenerId) {
@@ -1962,10 +2276,7 @@ class RuntimeLoop {
     }
 
     auto connection = listenerIt->second->accept().wait(waitScope).downcast<kj::AsyncCapabilityStream>();
-    auto peer = kj::heap<NetworkServerPeer>();
-    peer->server = kj::heap<capnp::TwoPartyServer>(
-        serverIt->second->bootstrap, makeTraceEncoderMaybe());
-    peer->server->accept(kj::mv(connection), kMaxFdsPerMessage);
+    auto peer = makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection));
     serverIt->second->peers.add(kj::mv(peer));
   }
 
@@ -1975,22 +2286,27 @@ class RuntimeLoop {
       throw std::runtime_error("unknown RPC server id: " + std::to_string(serverId));
     }
     for (auto& peer : serverIt->second->peers) {
-      peer->server->drain().wait(waitScope);
+      peer->network->onDisconnect().wait(waitScope);
     }
   }
 
   uint32_t registerLoopbackTarget(kj::AsyncIoProvider& ioProvider) {
     auto pipe = ioProvider.newCapabilityPipe();
-    auto server = kj::heap<capnp::TwoPartyServer>(
-        capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>()), makeTraceEncoderMaybe());
-    server->accept(kj::mv(pipe.ends[0]), 2);
+    auto serverStream = kj::mv(pipe.ends[0]);
+    auto serverNetwork = kj::heap<capnp::TwoPartyVatNetwork>(
+        *serverStream, 2, capnp::rpc::twoparty::Side::SERVER);
+    auto serverRpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcServer(
+        *serverNetwork, capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>())));
+    applyTraceEncoder(*serverRpcSystem);
 
     auto client = kj::heap<capnp::TwoPartyClient>(*pipe.ends[1], 2);
     auto cap = client->bootstrap();
 
     auto peer = kj::heap<LoopbackPeer>();
     peer->clientStream = kj::mv(pipe.ends[1]);
-    peer->server = kj::mv(server);
+    peer->serverStream = kj::mv(serverStream);
+    peer->serverNetwork = kj::mv(serverNetwork);
+    peer->serverRpcSystem = kj::mv(serverRpcSystem);
     peer->client = kj::mv(client);
 
     auto targetId = addTarget(kj::mv(cap));
@@ -2165,6 +2481,23 @@ class RuntimeLoop {
                 disable.completion,
                 "unknown exception in capnp_lean_rpc_runtime_disable_trace_encoder");
           }
+        } else if (std::holds_alternative<QueuedSetTraceEncoder>(op)) {
+          auto setTrace = std::get<QueuedSetTraceEncoder>(std::move(op));
+          try {
+            setTraceEncoderFromLean(setTrace.encoder);
+            completeUnitSuccess(setTrace.completion);
+          } catch (const kj::Exception& e) {
+            lean_dec(setTrace.encoder);
+            completeUnitFailure(setTrace.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            lean_dec(setTrace.encoder);
+            completeUnitFailure(setTrace.completion, e.what());
+          } catch (...) {
+            lean_dec(setTrace.encoder);
+            completeUnitFailure(
+                setTrace.completion,
+                "unknown exception in capnp_lean_rpc_runtime_set_trace_encoder");
+          }
         } else if (std::holds_alternative<QueuedCppCallWithAccept>(op)) {
           auto call = std::get<QueuedCppCallWithAccept>(std::move(op));
           try {
@@ -2181,6 +2514,25 @@ class RuntimeLoop {
           } catch (...) {
             completeFailure(call.completion,
                             "unknown exception in capnp_lean_rpc_runtime_cpp_call_with_accept");
+          }
+        } else if (std::holds_alternative<QueuedCppCallPipelinedWithAccept>(op)) {
+          auto call = std::get<QueuedCppCallPipelinedWithAccept>(std::move(op));
+          try {
+            auto promise = kj::evalNow([&]() {
+              return processCppPipelinedCallWithAccept(
+                  *io.provider, io.waitScope, call.serverId, call.listenerId, call.address,
+                  call.portHint, call.interfaceId, call.methodId, call.request, call.requestCaps,
+                  call.pipelinedRequest, call.pipelinedRequestCaps);
+            });
+            completeSuccess(call.completion, promise.wait(io.waitScope));
+          } catch (const kj::Exception& e) {
+            completeFailure(call.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeFailure(call.completion, e.what());
+          } catch (...) {
+            completeFailure(call.completion,
+                            "unknown exception in "
+                            "capnp_lean_rpc_runtime_cpp_call_pipelined_with_accept");
           }
         } else if (std::holds_alternative<QueuedRegisterLoopbackTarget>(op)) {
           auto registration = std::get<QueuedRegisterLoopbackTarget>(std::move(op));
@@ -2499,8 +2851,11 @@ class RuntimeLoop {
       networkPeerOwnerRefCount_.clear();
       networkServerPeers_.clear();
       pendingCalls_.clear();
+      releasedPendingCalls_.clear();
       clients_.clear();
       servers_.clear();
+      clearTraceEncoderHandler();
+      traceEncoderEnabled_ = false;
 
       failPendingCalls("Capnp.Rpc runtime shut down");
     } catch (const kj::Exception& e) {
@@ -2554,8 +2909,14 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedEnableTraceEncoder>(op).completion, message);
       } else if (std::holds_alternative<QueuedDisableTraceEncoder>(op)) {
         completeUnitFailure(std::get<QueuedDisableTraceEncoder>(op).completion, message);
+      } else if (std::holds_alternative<QueuedSetTraceEncoder>(op)) {
+        auto& setTrace = std::get<QueuedSetTraceEncoder>(op);
+        lean_dec(setTrace.encoder);
+        completeUnitFailure(setTrace.completion, message);
       } else if (std::holds_alternative<QueuedCppCallWithAccept>(op)) {
         completeFailure(std::get<QueuedCppCallWithAccept>(op).completion, message);
+      } else if (std::holds_alternative<QueuedCppCallPipelinedWithAccept>(op)) {
+        completeFailure(std::get<QueuedCppCallPipelinedWithAccept>(op).completion, message);
       } else if (std::holds_alternative<QueuedRegisterLoopbackTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRegisterLoopbackTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedRegisterHandlerTarget>(op)) {
@@ -2630,9 +2991,11 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, uint32_t> networkPeerOwnerRefCount_;
   kj::Vector<kj::Own<NetworkServerPeer>> networkServerPeers_;
   std::unordered_map<uint32_t, PendingCall> pendingCalls_;
+  kj::Vector<capnp::RemotePromise<capnp::AnyPointer>> releasedPendingCalls_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
   bool traceEncoderEnabled_ = false;
+  lean_object* traceEncoderHandler_ = nullptr;
   uint32_t nextTargetId_ = 1;
   uint32_t nextListenerId_ = 1;
   uint32_t nextClientId_ = 1;
@@ -3024,6 +3387,34 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_disable_trace_encoder
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_disable_trace_encoder");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_set_trace_encoder(
+    uint64_t runtimeId, b_lean_obj_arg encoder) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueSetTraceEncoder(encoder);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_set_trace_encoder");
   }
 }
 
@@ -3735,6 +4126,64 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_serve_echo_once(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_serve_throw_once(
+    b_lean_obj_arg address, uint32_t portHint, uint64_t interfaceId, uint16_t methodId,
+    uint8_t withDetail) {
+  try {
+    auto result = cppServeOneShotEx(std::string(lean_string_cstr(address)), portHint, interfaceId,
+                                    methodId, 0, true, withDetail != 0, true);
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_serve_throw_once");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_serve_delayed_echo_once(
+    b_lean_obj_arg address, uint32_t portHint, uint64_t interfaceId, uint16_t methodId,
+    uint32_t delayMillis) {
+  try {
+    auto result = cppServeOneShotEx(std::string(lean_string_cstr(address)), portHint, interfaceId,
+                                    methodId, delayMillis, false, false, false);
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_serve_delayed_echo_once");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_call_pipelined_cap_one_shot(
+    b_lean_obj_arg address, uint32_t portHint, uint64_t interfaceId, uint16_t methodId,
+    b_lean_obj_arg request, b_lean_obj_arg requestCaps, b_lean_obj_arg pipelinedRequest,
+    b_lean_obj_arg pipelinedRequestCaps) {
+  try {
+    auto addressCopy = std::string(lean_string_cstr(address));
+    auto requestBytes = copyByteArray(request);
+    auto requestCapIdsBytes = copyByteArray(requestCaps);
+    auto requestCapIds = decodeCapTable(requestCapIdsBytes.data(), requestCapIdsBytes.size());
+    auto pipelinedRequestBytes = copyByteArray(pipelinedRequest);
+    auto pipelinedRequestCapIdsBytes = copyByteArray(pipelinedRequestCaps);
+    auto pipelinedRequestCapIds =
+        decodeCapTable(pipelinedRequestCapIdsBytes.data(), pipelinedRequestCapIdsBytes.size());
+    auto result = cppCallPipelinedCapOneShot(
+        addressCopy, portHint, interfaceId, methodId, requestBytes, requestCapIds,
+        pipelinedRequestBytes, pipelinedRequestCapIds);
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_call_pipelined_cap_one_shot");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_with_accept(
     uint64_t runtimeId, uint32_t serverId, uint32_t listenerId, b_lean_obj_arg address,
     uint32_t portHint, uint64_t interfaceId, uint16_t methodId, b_lean_obj_arg request,
@@ -3766,5 +4215,46 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_with_accept(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_cpp_call_with_accept");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_pipelined_with_accept(
+    uint64_t runtimeId, uint32_t serverId, uint32_t listenerId, b_lean_obj_arg address,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, b_lean_obj_arg request,
+    b_lean_obj_arg requestCaps, b_lean_obj_arg pipelinedRequest,
+    b_lean_obj_arg pipelinedRequestCaps) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto addressCopy = std::string(lean_string_cstr(address));
+    auto requestBytes = copyByteArray(request);
+    auto requestCapsBytes = copyByteArray(requestCaps);
+    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto pipelinedRequestBytes = copyByteArray(pipelinedRequest);
+    auto pipelinedRequestCapsBytes = copyByteArray(pipelinedRequestCaps);
+    auto pipelinedRequestCapIds =
+        decodeCapTable(pipelinedRequestCapsBytes.data(), pipelinedRequestCapsBytes.size());
+    auto completion = runtime->enqueueCppCallPipelinedWithAccept(
+        serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
+        std::move(requestBytes), std::move(requestCapIds), std::move(pipelinedRequestBytes),
+        std::move(pipelinedRequestCapIds));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    return mkIoOkRawCallResult(completion->result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_cpp_call_pipelined_with_accept");
   }
 }

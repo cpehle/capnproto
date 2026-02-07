@@ -30,6 +30,7 @@ structure Backend where
 abbrev RawCall := Client -> Method -> ByteArray -> IO ByteArray
 abbrev RawHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO (ByteArray × ByteArray)
+abbrev RawTraceEncoder := String -> IO String
 
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
   Capnp.writeMessage payload.msg
@@ -85,6 +86,9 @@ opaque ffiRuntimeEnableTraceEncoderImpl (runtime : UInt64) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_disable_trace_encoder"]
 opaque ffiRuntimeDisableTraceEncoderImpl (runtime : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_set_trace_encoder"]
+opaque ffiRuntimeSetTraceEncoderImpl (runtime : UInt64) (encoder : @& RawTraceEncoder) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
@@ -179,9 +183,34 @@ opaque ffiRuntimeCppCallWithAcceptImpl
     (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
 
+@[extern "capnp_lean_rpc_runtime_cpp_call_pipelined_with_accept"]
+opaque ffiRuntimeCppCallPipelinedWithAcceptImpl
+    (runtime : UInt64) (server : UInt32) (listener : UInt32)
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray)
+    (pipelinedRequest : @& ByteArray) (pipelinedRequestCaps : @& ByteArray) :
+    IO (ByteArray × ByteArray)
+
 @[extern "capnp_lean_rpc_cpp_serve_echo_once"]
 opaque ffiCppServeEchoOnceImpl
     (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16) :
+    IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_cpp_serve_throw_once"]
+opaque ffiCppServeThrowOnceImpl
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (withDetail : UInt8) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_cpp_serve_delayed_echo_once"]
+opaque ffiCppServeDelayedEchoOnceImpl
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (delayMillis : UInt32) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_cpp_call_pipelined_cap_one_shot"]
+opaque ffiCppCallPipelinedCapOneShotImpl
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray)
+    (pipelinedRequest : @& ByteArray) (pipelinedRequestCaps : @& ByteArray) :
     IO (ByteArray × ByteArray)
 
 structure Runtime where
@@ -369,6 +398,9 @@ namespace Runtime
 
 @[inline] def disableTraceEncoder (runtime : Runtime) : IO Unit :=
   ffiRuntimeDisableTraceEncoderImpl runtime.handle
+
+@[inline] def setTraceEncoder (runtime : Runtime) (encoder : RawTraceEncoder) : IO Unit :=
+  ffiRuntimeSetTraceEncoderImpl runtime.handle encoder
 
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
@@ -593,6 +625,9 @@ namespace RuntimeM
 @[inline] def disableTraceEncoder : RuntimeM Unit := do
   Runtime.disableTraceEncoder (← runtime)
 
+@[inline] def setTraceEncoder (encoder : RawTraceEncoder) : RuntimeM Unit := do
+  Runtime.setTraceEncoder (← runtime) encoder
+
 @[inline] def withBackend (f : Backend -> IO α) : RuntimeM α := do
   f (← backend)
 
@@ -673,11 +708,51 @@ namespace Interop
     listener address portHint method.interfaceId method.methodId requestBytes requestCaps
   return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
 
+@[inline] def cppCallPipelinedWithAccept (runtime : Runtime) (server : RuntimeServerRef)
+    (listener : Listener) (address : String) (method : Method)
+    (request : Payload := Capnp.emptyRpcEnvelope)
+    (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
+    IO Payload := do
+  let requestBytes := request.toBytes
+  let requestCaps := CapTable.toBytes request.capTable
+  let pipelinedRequestBytes := pipelinedRequest.toBytes
+  let pipelinedRequestCaps := CapTable.toBytes pipelinedRequest.capTable
+  let (responseBytes, responseCaps) ← ffiRuntimeCppCallPipelinedWithAcceptImpl
+    runtime.handle server.handle listener address portHint method.interfaceId method.methodId
+    requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
+  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
 @[inline] def cppServeEchoOnce (address : String) (method : Method)
     (portHint : UInt32 := 0) : IO Payload := do
   let (requestBytes, requestCaps) ←
     ffiCppServeEchoOnceImpl address portHint method.interfaceId method.methodId
   return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+
+@[inline] def cppServeThrowOnce (address : String) (method : Method)
+    (withDetail : Bool := false) (portHint : UInt32 := 0) : IO Payload := do
+  let detailFlag : UInt8 := if withDetail then 1 else 0
+  let (requestBytes, requestCaps) ←
+    ffiCppServeThrowOnceImpl address portHint method.interfaceId method.methodId detailFlag
+  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+
+@[inline] def cppServeDelayedEchoOnce (address : String) (method : Method)
+    (delayMillis : UInt32) (portHint : UInt32 := 0) : IO Payload := do
+  let (requestBytes, requestCaps) ← ffiCppServeDelayedEchoOnceImpl
+    address portHint method.interfaceId method.methodId delayMillis
+  return { msg := Capnp.readMessage requestBytes, capTable := CapTable.ofBytes requestCaps }
+
+@[inline] def cppCallPipelinedCapOneShot (address : String) (method : Method)
+    (request : Payload := Capnp.emptyRpcEnvelope)
+    (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope)
+    (portHint : UInt32 := 0) : IO Payload := do
+  let requestBytes := request.toBytes
+  let requestCaps := CapTable.toBytes request.capTable
+  let pipelinedRequestBytes := pipelinedRequest.toBytes
+  let pipelinedRequestCaps := CapTable.toBytes pipelinedRequest.capTable
+  let (responseBytes, responseCaps) ← ffiCppCallPipelinedCapOneShotImpl
+    address portHint method.interfaceId method.methodId
+    requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
+  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
 
 end Interop
 
