@@ -51,6 +51,9 @@ opaque ffiRuntimeReleaseImpl (runtime : UInt64) : IO Unit
 @[extern "capnp_lean_rpc_runtime_is_alive"]
 opaque ffiRuntimeIsAliveImpl (runtime : UInt64) : IO Bool
 
+@[extern "capnp_lean_rpc_runtime_register_echo_target"]
+opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
+
 structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
@@ -65,6 +68,9 @@ namespace Runtime
 
 @[inline] def isAlive (runtime : Runtime) : IO Bool :=
   ffiRuntimeIsAliveImpl runtime.handle
+
+@[inline] def registerEchoTarget (runtime : Runtime) : IO Client :=
+  ffiRuntimeRegisterEchoTargetImpl runtime.handle
 
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
@@ -99,6 +105,9 @@ namespace RuntimeM
 
 @[inline] def isAlive : RuntimeM Bool := do
   Runtime.isAlive (← runtime)
+
+@[inline] def registerEchoTarget : RuntimeM Client := do
+  Runtime.registerEchoTarget (← runtime)
 
 @[inline] def call (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do

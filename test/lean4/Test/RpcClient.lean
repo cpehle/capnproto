@@ -63,17 +63,19 @@ def testFfiBackendRawRoundtrip : IO Unit := do
     Capnp.Rpc.Payload.ofBytes (ByteArray.mk #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
   let response ← Capnp.Rpc.RuntimeM.runWithNewRuntime do
     assertEqual (← Capnp.Rpc.RuntimeM.isAlive) true
-    TestInterface.callFooM (UInt32.ofNat 0) payload
+    let target ← Capnp.Rpc.RuntimeM.registerEchoTarget
+    TestInterface.callFooM target payload
   assertEqual (response == payload) true
 
   let runtime ← Capnp.Rpc.Runtime.init
+  let target ← runtime.registerEchoTarget
   runtime.shutdown
   assertEqual (← runtime.isAlive) false
 
   let failedAfterShutdown ←
     try
       let _ ← Capnp.Rpc.RuntimeM.run runtime do
-        TestInterface.callFooM (UInt32.ofNat 0) payload
+        TestInterface.callFooM target payload
       pure false
     catch _ =>
       pure true

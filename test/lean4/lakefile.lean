@@ -9,7 +9,7 @@ def capnpBridgeLinkArgs : Array String :=
       "-L../../build-lean4-apple/c++/src/kj",
       "-L../../build-lean4/c++/src/capnp",
       "-L../../build-lean4/c++/src/kj",
-      "-lcapnp", "-lkj-async", "-lkj", "-lc++"
+      "-lcapnp-rpc", "-lcapnp", "-lkj-async", "-lkj", "-lc++"
     ]
   else
     #[
@@ -17,7 +17,7 @@ def capnpBridgeLinkArgs : Array String :=
       "-L../../build-lean4/c++/src/kj",
       "-L../../build-lean4-apple/c++/src/capnp",
       "-L../../build-lean4-apple/c++/src/kj",
-      "-lcapnp", "-lkj-async", "-lkj", "-lstdc++", "-pthread"
+      "-lcapnp-rpc", "-lcapnp", "-lkj-async", "-lkj", "-lstdc++", "-pthread"
     ]
 
 def capnpBridgeCompileArgs : Array String :=
