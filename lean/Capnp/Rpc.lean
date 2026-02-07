@@ -37,6 +37,16 @@ def Backend.ofRawCall (rawCall : RawCall) : Backend where
     let responseBytes ← rawCall target method requestBytes
     return Payload.ofBytes responseBytes
 
+@[extern "capnp_lean_rpc_raw_call"]
+opaque ffiRawCallImpl (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) : IO ByteArray
+
+@[inline] def ffiRawCall : RawCall :=
+  fun target method request => ffiRawCallImpl target method.interfaceId method.methodId request
+
+@[inline] def ffiBackend : Backend :=
+  Backend.ofRawCall ffiRawCall
+
 abbrev Handler := Client -> Payload -> IO Payload
 
 structure Route where

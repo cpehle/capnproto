@@ -56,3 +56,9 @@ def testBackendOfRawCall : IO Unit := do
   assertEqual method.interfaceId TestInterface.interfaceId
   assertEqual method.methodId TestInterface.fooMethodId
   assertEqual (response == payload) true
+
+@[test]
+def testFfiBackendRawRoundtrip : IO Unit := do
+  let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
+  let response ← TestInterface.callFoo Capnp.Rpc.ffiBackend (UInt32.ofNat 99) payload
+  assertEqual (response == payload) true
