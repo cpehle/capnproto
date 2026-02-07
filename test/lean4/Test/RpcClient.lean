@@ -403,6 +403,22 @@ def testRuntimeClientReleaseErrors : IO Unit := do
         pure true
     assertEqual failedDoubleRelease true
 
+    let failedQueueSizeAfterRelease ←
+      try
+        let _ ← client.queueSize
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedQueueSizeAfterRelease true
+
+    let failedOnDisconnectAfterRelease ←
+      try
+        client.onDisconnect
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedOnDisconnectAfterRelease true
+
     server.release
     runtime.releaseListener listener
   finally
@@ -445,6 +461,14 @@ def testRuntimeServerReleaseErrors : IO Unit := do
       catch _ =>
         pure true
     assertEqual failedDoubleRelease true
+
+    let failedAcceptAfterRelease ←
+      try
+        server.accept listener
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedAcceptAfterRelease true
 
     client.release
     runtime.releaseListener listener

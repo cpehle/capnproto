@@ -185,3 +185,76 @@ def testRpcDisembargoSenderLoopback : IO Unit := do
       assertEqual v (UInt32.ofNat 77)
     | _ => assertEqual true false
   | _ => assertEqual true false
+
+@[test]
+def testRpcFinishMessageRoundtrip : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let fin ← Message.Builder.initFinish m
+    Finish.Builder.setQuestionId fin (UInt32.ofNat 17)
+    Finish.Builder.setReleaseResultCaps fin true
+    Finish.Builder.setRequireEarlyCancellationWorkaround fin true)
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.finish fin => do
+    assertEqual fin.getQuestionId (UInt32.ofNat 17)
+    assertEqual fin.getReleaseResultCaps true
+    assertEqual fin.getRequireEarlyCancellationWorkaround true
+  | _ => assertEqual true false
+
+@[test]
+def testRpcResolveCapRoundtrip : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let resolve ← Message.Builder.initResolve m
+    Resolve.Builder.setPromiseId resolve (UInt32.ofNat 12)
+    let cap ← Resolve.Builder.initCap resolve
+    CapDescriptor.Builder.setAttachedFd cap (UInt8.ofNat 5)
+    CapDescriptor.Builder.setSenderHosted cap (UInt32.ofNat 88))
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.resolve resolve => do
+    assertEqual resolve.getPromiseId (UInt32.ofNat 12)
+    match resolve.which with
+    | Resolve.Which.cap cap => do
+      assertEqual cap.getAttachedFd (UInt8.ofNat 5)
+      match cap.which with
+      | CapDescriptor.Which.senderHosted v => assertEqual v (UInt32.ofNat 88)
+      | _ => assertEqual true false
+    | _ => assertEqual true false
+  | _ => assertEqual true false
+
+@[test]
+def testRpcResolveExceptionRoundtrip : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let resolve ← Message.Builder.initResolve m
+    Resolve.Builder.setPromiseId resolve (UInt32.ofNat 44)
+    let exc ← Resolve.Builder.initException resolve
+    Exception.Builder.setReason exc "rpc failure"
+    Exception.Builder.setType exc Exception.Type.disconnected)
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.resolve resolve => do
+    assertEqual resolve.getPromiseId (UInt32.ofNat 44)
+    match resolve.which with
+    | Resolve.Which.exception exc => do
+      assertEqual exc.getReason "rpc failure"
+      assertTrue (exc.getType == Exception.Type.disconnected)
+        "resolve exception type mismatch"
+    | _ => assertEqual true false
+  | _ => assertEqual true false
+
+@[test]
+def testRpcReleaseMessageRoundtrip : IO Unit := do
+  let msg := buildMessage (do
+    let m ← Message.initRoot
+    let rel ← Message.Builder.initRelease m
+    Release.Builder.setId rel (UInt32.ofNat 9)
+    Release.Builder.setReferenceCount rel (UInt32.ofNat 3))
+  let r := Message.read (Capnp.getRoot msg)
+  match r.which with
+  | Message.Which.release rel => do
+    assertEqual rel.getId (UInt32.ofNat 9)
+    assertEqual rel.getReferenceCount (UInt32.ofNat 3)
+  | _ => assertEqual true false
