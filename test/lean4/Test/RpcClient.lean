@@ -478,3 +478,45 @@ def testRuntimeServerReleaseErrors : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimeClientOnDisconnectAfterServerRelease : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let target ← client.bootstrap
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+
+    server.release
+    client.onDisconnect
+
+    let failedCallAfterDisconnect ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM target payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedCallAfterDisconnect true
+
+    client.release
+    runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
