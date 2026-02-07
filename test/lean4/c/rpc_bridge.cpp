@@ -23,10 +23,13 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
 namespace {
+
+using TwoPartyRpcSystem = capnp::RpcSystem<capnp::rpc::twoparty::VatId>;
 
 lean_obj_res mkByteArrayCopy(const uint8_t* data, size_t size) {
   lean_object* out = lean_alloc_sarray(1, size, size);
@@ -85,6 +88,75 @@ struct RawCallResult {
   std::vector<uint8_t> response;
   std::vector<uint8_t> responseCaps;
 };
+
+RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
+                             uint16_t methodId, const std::vector<uint8_t>& requestBytes,
+                             const std::vector<uint32_t>& requestCapIds) {
+  for (auto capId : requestCapIds) {
+    if (capId != 0) {
+      throw std::runtime_error(
+          "capnp_lean_rpc_cpp_call_one_shot does not support non-zero capability ids");
+    }
+  }
+
+  auto io = kj::setupAsyncIo();
+  auto addr = io.provider->getNetwork().parseAddress(address.c_str(), portHint).wait(io.waitScope);
+  auto stream = addr->connect().wait(io.waitScope);
+  auto network = kj::heap<capnp::TwoPartyVatNetwork>(*stream, capnp::rpc::twoparty::Side::CLIENT);
+  auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
+
+  capnp::word scratch[4];
+  memset(&scratch, 0, sizeof(scratch));
+  capnp::MallocMessageBuilder message(scratch);
+  auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
+  vatId.setSide(capnp::rpc::twoparty::Side::SERVER);
+  auto target = rpcSystem->bootstrap(vatId);
+
+  auto requestBuilder = target.typelessRequest(interfaceId, methodId, kj::none, {});
+  if (!requestBytes.empty()) {
+    kj::ArrayPtr<const kj::byte> reqBytes(reinterpret_cast<const kj::byte*>(requestBytes.data()),
+                                          requestBytes.size());
+    kj::ArrayInputStream input(reqBytes);
+    capnp::ReaderOptions options;
+    options.traversalLimitInWords = 1ull << 30;
+    capnp::InputStreamMessageReader reader(input, options);
+    requestBuilder.setAs<capnp::AnyPointer>(reader.getRoot<capnp::AnyPointer>());
+  }
+
+  auto response = requestBuilder.send().wait(io.waitScope);
+  capnp::MallocMessageBuilder responseMessage;
+  capnp::BuilderCapabilityTable responseCapTable;
+  responseCapTable
+      .imbue(responseMessage.getRoot<capnp::AnyPointer>())
+      .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
+
+  auto responseWords = capnp::messageToFlatArray(responseMessage);
+  auto responseBytes = responseWords.asBytes();
+  std::vector<uint8_t> responseCopy(responseBytes.begin(), responseBytes.end());
+
+  std::vector<uint8_t> responseCaps;
+  auto responseCapEntries = responseCapTable.getTable();
+  responseCaps.reserve(responseCapEntries.size() * 4);
+  for (auto& maybeHook : responseCapEntries) {
+    KJ_IF_SOME(_hook, maybeHook) {
+      throw std::runtime_error(
+          "capnp_lean_rpc_cpp_call_one_shot does not support capability results");
+    } else {
+      appendUint32Le(responseCaps, 0);
+    }
+  }
+
+  return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+}
+
+lean_obj_res mkIoOkRawCallResult(const RawCallResult& result) {
+  auto responseObj = mkByteArrayCopy(result.response.data(), result.response.size());
+  auto responseCapsObj = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
+  auto out = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(out, 0, responseObj);
+  lean_ctor_set(out, 1, responseCapsObj);
+  return lean_io_result_mk_ok(out);
+}
 
 struct RawCallCompletion {
   std::mutex mutex;
@@ -215,8 +287,6 @@ class EchoCapabilityServer final : public capnp::Capability::Server {
     return {kj::READY_NOW, false};
   }
 };
-
-using TwoPartyRpcSystem = capnp::RpcSystem<capnp::rpc::twoparty::VatId>;
 
 class RuntimeLoop {
  public:
@@ -727,12 +797,16 @@ class RuntimeLoop {
                                         requestBytes.size());
 
       std::vector<uint8_t> requestCaps;
+      std::vector<uint32_t> requestCapIds;
       auto requestCapEntries = requestCapTable.getTable();
       requestCaps.reserve(requestCapEntries.size() * 4);
+      requestCapIds.reserve(requestCapEntries.size());
       for (auto& maybeHook : requestCapEntries) {
         KJ_IF_SOME(hook, maybeHook) {
           auto cap = capnp::Capability::Client(hook->addRef());
-          appendUint32Le(requestCaps, runtime_.addTarget(kj::mv(cap)));
+          auto capId = runtime_.addTarget(kj::mv(cap));
+          appendUint32Le(requestCaps, capId);
+          requestCapIds.push_back(capId);
         } else {
           appendUint32Le(requestCaps, 0);
         }
@@ -761,35 +835,56 @@ class RuntimeLoop {
       lean_dec(responseObj);
       lean_dec(responseCapsObj);
 
-      kj::ArrayPtr<const kj::byte> responseBytes(
-          reinterpret_cast<const kj::byte*>(responseBytesCopy.data()), responseBytesCopy.size());
-      kj::ArrayInputStream input(responseBytes);
-      capnp::ReaderOptions options;
-      options.traversalLimitInWords = 1ull << 30;
-      capnp::InputStreamMessageReader reader(input, options);
-      auto responseRoot = reader.getRoot<capnp::AnyPointer>();
-
-      auto responseCapIds = decodeCapTable(responseCapsCopy.data(), responseCapsCopy.size());
-      if (responseCapIds.empty()) {
-        context.getResults().setAs<capnp::AnyPointer>(responseRoot);
-      } else {
-        auto capTableBuilder =
-            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
-        for (auto capId : responseCapIds) {
-          if (capId == 0) {
-            capTableBuilder.add(kj::none);
-            continue;
+      auto cleanupRequestCaps = [&](const std::vector<uint32_t>& retainedCaps) {
+        std::unordered_set<uint32_t> retained;
+        retained.reserve(retainedCaps.size());
+        for (auto capId : retainedCaps) {
+          if (capId != 0) {
+            retained.insert(capId);
           }
-          auto capIt = runtime_.targets_.find(capId);
-          if (capIt == runtime_.targets_.end()) {
-            throw std::runtime_error("unknown RPC response capability id from Lean handler: " +
-                                     std::to_string(capId));
-          }
-          capnp::Capability::Client cap = capIt->second;
-          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
         }
-        capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
-        context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
+        for (auto capId : requestCapIds) {
+          if (retained.find(capId) == retained.end()) {
+            runtime_.dropTargetIfPresent(capId);
+          }
+        }
+      };
+
+      try {
+        kj::ArrayPtr<const kj::byte> responseBytes(
+            reinterpret_cast<const kj::byte*>(responseBytesCopy.data()), responseBytesCopy.size());
+        kj::ArrayInputStream input(responseBytes);
+        capnp::ReaderOptions options;
+        options.traversalLimitInWords = 1ull << 30;
+        capnp::InputStreamMessageReader reader(input, options);
+        auto responseRoot = reader.getRoot<capnp::AnyPointer>();
+
+        auto responseCapIds = decodeCapTable(responseCapsCopy.data(), responseCapsCopy.size());
+        cleanupRequestCaps(responseCapIds);
+        if (responseCapIds.empty()) {
+          context.getResults().setAs<capnp::AnyPointer>(responseRoot);
+        } else {
+          auto capTableBuilder =
+              kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
+          for (auto capId : responseCapIds) {
+            if (capId == 0) {
+              capTableBuilder.add(kj::none);
+              continue;
+            }
+            auto capIt = runtime_.targets_.find(capId);
+            if (capIt == runtime_.targets_.end()) {
+              throw std::runtime_error("unknown RPC response capability id from Lean handler: " +
+                                       std::to_string(capId));
+            }
+            capnp::Capability::Client cap = capIt->second;
+            capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
+          }
+          capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
+          context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
+        }
+      } catch (...) {
+        cleanupRequestCaps({});
+        throw;
       }
 
       return {kj::READY_NOW, false};
@@ -885,11 +980,15 @@ class RuntimeLoop {
     return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
   }
 
-  void releaseTarget(uint32_t target) {
+  bool dropTargetIfPresent(uint32_t target) {
     auto erased = targets_.erase(target);
     loopbackEchoPeers_.erase(target);
     networkClientPeers_.erase(target);
-    if (erased == 0) {
+    return erased > 0;
+  }
+
+  void releaseTarget(uint32_t target) {
+    if (!dropTargetIfPresent(target)) {
       throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
     }
   }
@@ -2266,5 +2365,102 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_handler_targ
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_register_handler_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_cpp_call_one_shot(
+    b_lean_obj_arg address, uint32_t portHint, uint64_t interfaceId, uint16_t methodId,
+    b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
+  try {
+    auto addressCopy = std::string(lean_string_cstr(address));
+    auto requestBytes = copyByteArray(request);
+    auto requestCapsBytes = copyByteArray(requestCaps);
+    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+    auto result =
+        cppCallOneShot(addressCopy, portHint, interfaceId, methodId, requestBytes, requestCapIds);
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_cpp_call_one_shot");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_with_accept(
+    uint64_t runtimeId, uint32_t serverId, uint32_t listenerId, b_lean_obj_arg address,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, b_lean_obj_arg request,
+    b_lean_obj_arg requestCaps) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto addressCopy = std::string(lean_string_cstr(address));
+    auto requestBytes = copyByteArray(request);
+    auto requestCapsBytes = copyByteArray(requestCaps);
+    auto requestCapIds = decodeCapTable(requestCapsBytes.data(), requestCapsBytes.size());
+
+    bool acceptOk = false;
+    std::string acceptError;
+    std::thread acceptThread([runtime, serverId, listenerId, &acceptOk, &acceptError]() {
+      try {
+        auto completion = runtime->enqueueServerAccept(serverId, listenerId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          acceptError = completion->error;
+          return;
+        }
+        acceptOk = true;
+
+        auto drainCompletion = runtime->enqueueServerDrain(serverId);
+        std::unique_lock<std::mutex> drainLock(drainCompletion->mutex);
+        drainCompletion->cv.wait(drainLock, [&drainCompletion]() { return drainCompletion->done; });
+        if (!drainCompletion->ok) {
+          acceptOk = false;
+          acceptError = drainCompletion->error;
+          return;
+        }
+      } catch (const kj::Exception& e) {
+        acceptError = describeKjException(e);
+      } catch (const std::exception& e) {
+        acceptError = e.what();
+      } catch (...) {
+        acceptError = "unknown exception while accepting runtime server connection";
+      }
+    });
+
+    RawCallResult result;
+    std::string callError;
+    try {
+      result =
+          cppCallOneShot(addressCopy, portHint, interfaceId, methodId, requestBytes, requestCapIds);
+    } catch (const kj::Exception& e) {
+      callError = describeKjException(e);
+    } catch (const std::exception& e) {
+      callError = e.what();
+    } catch (...) {
+      callError = "unknown exception in capnp_lean_rpc_cpp_call_one_shot";
+    }
+
+    if (acceptThread.joinable()) {
+      acceptThread.join();
+    }
+    if (!callError.empty()) {
+      return mkIoUserError(callError);
+    }
+    if (!acceptOk) {
+      return mkIoUserError(acceptError.empty() ? "runtime server accept failed" : acceptError);
+    }
+    return mkIoOkRawCallResult(result);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_cpp_call_with_accept");
   }
 }

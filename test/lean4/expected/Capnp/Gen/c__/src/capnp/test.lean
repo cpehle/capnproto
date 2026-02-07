@@ -1949,9 +1949,10 @@ def callCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev callHandler := Handler
 
 structure Server where
-  call : Handler
+  call : callHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -1985,9 +1986,10 @@ def callCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := 
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev callHandler := Handler
 
 structure Server where
-  call : Handler
+  call : callHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2022,9 +2024,10 @@ def callCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload :
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev callHandler := Handler
 
 structure Server where
-  call : Handler
+  call : callHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2058,9 +2061,10 @@ def callCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.
   Capnp.Rpc.RuntimeM.call target callMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev callHandler := Handler
 
 structure Server where
-  call : Handler
+  call : callHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2136,15 +2140,22 @@ def callGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload 
   Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev fooHandler := Handler
+abbrev barHandler := Handler
+abbrev bazHandler := Handler
+abbrev getTestPipelineHandler := Handler
+abbrev getTestTailCalleeHandler := Handler
+abbrev getTestTailCallerHandler := Handler
+abbrev getTestMoreStuffHandler := Handler
 
 structure Server where
-  foo : Handler
-  bar : Handler
-  baz : Handler
-  getTestPipeline : Handler
-  getTestTailCallee : Handler
-  getTestTailCaller : Handler
-  getTestMoreStuff : Handler
+  foo : fooHandler
+  bar : barHandler
+  baz : bazHandler
+  getTestPipeline : getTestPipelineHandler
+  getTestTailCallee : getTestTailCalleeHandler
+  getTestTailCaller : getTestTailCallerHandler
+  getTestMoreStuff : getTestMoreStuffHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2198,11 +2209,14 @@ def callGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emp
   Capnp.Rpc.RuntimeM.call target graultMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev quxHandler := Handler
+abbrev corgeHandler := Handler
+abbrev graultHandler := Handler
 
 structure Server where
-  qux : Handler
-  corge : Handler
-  grault : Handler
+  qux : quxHandler
+  corge : corgeHandler
+  grault : graultHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2288,12 +2302,16 @@ def callGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload
   Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev getCapHandler := Handler
+abbrev testPointersHandler := Handler
+abbrev getAnyCapHandler := Handler
+abbrev getCapPipelineOnlyHandler := Handler
 
 structure Server where
-  getCap : Handler
-  testPointers : Handler
-  getAnyCap : Handler
-  getCapPipelineOnly : Handler
+  getCap : getCapHandler
+  testPointers : testPointersHandler
+  getAnyCap : getAnyCapHandler
+  getCapPipelineOnly : getCapPipelineOnlyHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2330,9 +2348,10 @@ def callGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload :
   Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev getCallSequenceHandler := Handler
 
 structure Server where
-  getCallSequence : Handler
+  getCallSequence : getCallSequenceHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2369,9 +2388,10 @@ def callFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emp
   Capnp.Rpc.RuntimeM.call target fooMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev fooHandler := Handler
 
 structure Server where
-  foo : Handler
+  foo : fooHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2405,9 +2425,10 @@ def callFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emp
   Capnp.Rpc.RuntimeM.call target fooMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev fooHandler := Handler
 
 structure Server where
-  foo : Handler
+  foo : fooHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2458,11 +2479,14 @@ def callFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := C
   Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev doStreamIHandler := Handler
+abbrev doStreamJHandler := Handler
+abbrev finishStreamHandler := Handler
 
 structure Server where
-  doStreamI : Handler
-  doStreamJ : Handler
-  finishStream : Handler
+  doStreamI : doStreamIHandler
+  doStreamJ : doStreamJHandler
+  finishStream : finishStreamHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2643,25 +2667,42 @@ def callThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.
   Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev callFooHandler := Handler
+abbrev callFooWhenResolvedHandler := Handler
+abbrev neverReturnHandler := Handler
+abbrev holdHandler := Handler
+abbrev callHeldHandler := Handler
+abbrev getHeldHandler := Handler
+abbrev echoHandler := Handler
+abbrev expectCancelHandler := Handler
+abbrev methodWithDefaultsHandler := Handler
+abbrev getHandleHandler := Handler
+abbrev getNullHandler := Handler
+abbrev getEnormousStringHandler := Handler
+abbrev methodWithNullDefaultHandler := Handler
+abbrev writeToFdHandler := Handler
+abbrev throwExceptionHandler := Handler
+abbrev throwRemoteExceptionHandler := Handler
+abbrev throwExceptionWithDetailHandler := Handler
 
 structure Server where
-  callFoo : Handler
-  callFooWhenResolved : Handler
-  neverReturn : Handler
-  hold : Handler
-  callHeld : Handler
-  getHeld : Handler
-  echo : Handler
-  expectCancel : Handler
-  methodWithDefaults : Handler
-  getHandle : Handler
-  getNull : Handler
-  getEnormousString : Handler
-  methodWithNullDefault : Handler
-  writeToFd : Handler
-  throwException : Handler
-  throwRemoteException : Handler
-  throwExceptionWithDetail : Handler
+  callFoo : callFooHandler
+  callFooWhenResolved : callFooWhenResolvedHandler
+  neverReturn : neverReturnHandler
+  hold : holdHandler
+  callHeld : callHeldHandler
+  getHeld : getHeldHandler
+  echo : echoHandler
+  expectCancel : expectCancelHandler
+  methodWithDefaults : methodWithDefaultsHandler
+  getHandle : getHandleHandler
+  getNull : getNullHandler
+  getEnormousString : getEnormousStringHandler
+  methodWithNullDefault : methodWithNullDefaultHandler
+  writeToFd : writeToFdHandler
+  throwException : throwExceptionHandler
+  throwRemoteException : throwRemoteExceptionHandler
+  throwExceptionWithDetail : throwExceptionWithDetailHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2741,13 +2782,18 @@ def callWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Cap
 def TestMembrane.waitForeverMethod._ann_allowCancellation : Unit := ()
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev makeThingHandler := Handler
+abbrev callPassThroughHandler := Handler
+abbrev callInterceptHandler := Handler
+abbrev loopbackHandler := Handler
+abbrev waitForeverHandler := Handler
 
 structure Server where
-  makeThing : Handler
-  callPassThrough : Handler
-  callIntercept : Handler
-  loopback : Handler
-  waitForever : Handler
+  makeThing : makeThingHandler
+  callPassThrough : callPassThroughHandler
+  callIntercept : callInterceptHandler
+  loopback : loopbackHandler
+  waitForever : waitForeverHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2792,10 +2838,12 @@ def callInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload :=
   Capnp.Rpc.RuntimeM.call target interceptMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev passThroughHandler := Handler
+abbrev interceptHandler := Handler
 
 structure Server where
-  passThrough : Handler
-  intercept : Handler
+  passThrough : passThroughHandler
+  intercept : interceptHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2851,12 +2899,16 @@ def callReturnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Ca
   Capnp.Rpc.RuntimeM.call target returnMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev deleteHandler := Handler
+abbrev _classHandler := Handler
+abbrev voidHandler := Handler
+abbrev returnHandler := Handler
 
 structure Server where
-  delete : Handler
-  _class : Handler
-  void : Handler
-  return : Handler
+  delete : deleteHandler
+  _class : _classHandler
+  void : voidHandler
+  return : returnHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2893,9 +2945,10 @@ def callGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.
   Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev getCallerIdHandler := Handler
 
 structure Server where
-  getCallerId : Handler
+  getCallerId : getCallerIdHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
@@ -2982,9 +3035,10 @@ def callBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capn
 def TestNameAnnotationInterface.badlyNamedMethodMethod._ann_name : Capnp.Text := "renamedMethod"
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev badlyNamedMethodHandler := Handler
 
 structure Server where
-  badlyNamedMethod : Handler
+  badlyNamedMethod : badlyNamedMethodHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty

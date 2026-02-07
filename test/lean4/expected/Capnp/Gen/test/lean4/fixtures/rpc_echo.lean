@@ -30,10 +30,12 @@ def callBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvel
   Capnp.Rpc.RuntimeM.call target barMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
+abbrev fooHandler := Handler
+abbrev barHandler := Handler
 
 structure Server where
-  foo : Handler
-  bar : Handler
+  foo : fooHandler
+  bar : barHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty

@@ -180,6 +180,37 @@ def testFfiBackendRawRoundtrip : IO Unit := do
   assertEqual failedAfterShutdown true
 
 @[test]
+def testRuntimeReleaseCapTable : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+    let capResponse ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target capPayload
+    assertEqual capResponse.capTable.caps.size 1
+
+    let returnedCap? := Capnp.readCapabilityFromTable capResponse.capTable (Capnp.getRoot capResponse.msg)
+    assertEqual returnedCap?.isSome true
+    match returnedCap? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap =>
+        runtime.releaseCapTable capResponse.capTable
+        let failedAfterRelease ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              Echo.callFooM returnedCap payload
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedAfterRelease true
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeReleaseTarget : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -720,6 +751,41 @@ def testRuntimeRegisterHandlerTargetNetwork : IO Unit := do
     assertEqual method.methodId Echo.fooMethodId
 
     client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropCppClientCallsLeanServer : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerHandlerTarget (fun _ method req => do
+      seenMethod.set method
+      pure req)
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallWithAccept runtime server listener address Echo.fooMethod
+      payload
+
+    assertEqual response.capTable.caps.size 0
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+
     server.release
     runtime.releaseListener listener
     runtime.releaseTarget bootstrap

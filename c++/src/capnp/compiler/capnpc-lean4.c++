@@ -3614,6 +3614,7 @@ private:
 
     struct RpcMethodOut {
       std::string fieldName;
+      std::string handlerName;
       std::string methodIdName;
       std::string methodName;
       std::string callName;
@@ -3630,11 +3631,12 @@ private:
       auto methodBase = std::string(raw.cStr());
 
       auto fieldName = uniqueName(methodBase, usedNames);
+      auto handlerName = uniqueName(methodBase + "Handler", usedNames);
       auto methodIdName = uniqueName(methodBase + "MethodId", usedNames);
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
       auto callMName = uniqueName("call" + std::string(cap.cStr()) + "M", usedNames);
-      rpcMethods.push_back({fieldName, methodIdName, methodName, callName, callMName});
+      rpcMethods.push_back({fieldName, handlerName, methodIdName, methodName, callName, callMName});
 
       out += "\n";
       out += "def ";
@@ -3691,6 +3693,14 @@ private:
     out += handlerTypeName;
     out += " := Capnp.Rpc.Handler\n";
 
+    for (auto& methodOut: rpcMethods) {
+      out += "abbrev ";
+      out += methodOut.handlerName;
+      out += " := ";
+      out += handlerTypeName;
+      out += "\n";
+    }
+
     out += "\n";
     out += "structure ";
     out += serverTypeName;
@@ -3702,7 +3712,7 @@ private:
         out += "  ";
         out += methodOut.fieldName;
         out += " : ";
-        out += handlerTypeName;
+        out += methodOut.handlerName;
         out += "\n";
       }
     }

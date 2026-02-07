@@ -125,6 +125,17 @@ opaque ffiRuntimeServerAcceptImpl (runtime : UInt64) (server : UInt32) (listener
 @[extern "capnp_lean_rpc_runtime_server_drain"]
 opaque ffiRuntimeServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_cpp_call_one_shot"]
+opaque ffiCppCallOneShotImpl
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_runtime_cpp_call_with_accept"]
+opaque ffiRuntimeCppCallWithAcceptImpl
+    (runtime : UInt64) (server : UInt32) (listener : UInt32)
+    (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
+
 structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
@@ -185,6 +196,10 @@ namespace Runtime
 
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
+
+@[inline] def releaseCapTable (runtime : Runtime) (capTable : Capnp.CapTable) : IO Unit := do
+  for cap in capTable.caps do
+    runtime.releaseTarget cap
 
 @[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
   ffiRuntimeConnectImpl runtime.handle address portHint
@@ -320,6 +335,9 @@ namespace RuntimeM
 
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
+
+@[inline] def releaseCapTable (capTable : Capnp.CapTable) : RuntimeM Unit := do
+  Runtime.releaseCapTable (← runtime) capTable
 
 @[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Client := do
   Runtime.connect (← runtime) address portHint
@@ -461,6 +479,27 @@ namespace RuntimeM
   Runtime.registerDispatchTarget (← runtime) dispatch (onMissing := onMissing)
 
 end RuntimeM
+
+namespace Interop
+
+@[inline] def cppCall (address : String) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  let (responseBytes, responseCaps) ←
+    ffiCppCallOneShotImpl address portHint method.interfaceId method.methodId requestBytes requestCaps
+  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
+@[inline] def cppCallWithAccept (runtime : Runtime) (server : RuntimeServerRef) (listener : Listener)
+    (address : String) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  let (responseBytes, responseCaps) ← ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle
+    listener address portHint method.interfaceId method.methodId requestBytes requestCaps
+  return { msg := Capnp.readMessage responseBytes, capTable := CapTable.ofBytes responseCaps }
+
+end Interop
 
 def echoBackend : Backend where
   call := fun _ _ payload => pure payload
