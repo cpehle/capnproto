@@ -457,7 +457,7 @@ inductive Message.Which where
   | unimplemented (value : Message.Reader)
   | abort (value : Exception.Reader)
   | call (value : Call.Reader)
-  | return (value : Return.Reader)
+  | _return (value : Return.Reader)
   | finish (value : Finish.Reader)
   | resolve (value : Resolve.Reader)
   | release (value : Release.Reader)
@@ -477,7 +477,7 @@ instance : BEq Message.Which where
     | Message.Which.unimplemented va, Message.Which.unimplemented vb => va == vb
     | Message.Which.abort va, Message.Which.abort vb => va == vb
     | Message.Which.call va, Message.Which.call vb => va == vb
-    | Message.Which.return va, Message.Which.return vb => va == vb
+    | Message.Which._return va, Message.Which._return vb => va == vb
     | Message.Which.finish va, Message.Which.finish vb => va == vb
     | Message.Which.resolve va, Message.Which.resolve vb => va == vb
     | Message.Which.release va, Message.Which.release vb => va == vb
@@ -748,9 +748,9 @@ def Message.Reader.getCallChecked (r : Message.Reader) : Except String (Call.Rea
 def Message.Reader.hasCall (r : Message.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
 
 
-def Message.Reader.getReturn (r : Message.Reader) : Return.Reader := Return.read (Capnp.getPointer r.struct 0)
-def Message.Reader.getReturnChecked (r : Message.Reader) : Except String (Return.Reader) := Return.readChecked (Capnp.getPointer r.struct 0)
-def Message.Reader.hasReturn (r : Message.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
+def Message.Reader.get_return (r : Message.Reader) : Return.Reader := Return.read (Capnp.getPointer r.struct 0)
+def Message.Reader.get_returnChecked (r : Message.Reader) : Except String (Return.Reader) := Return.readChecked (Capnp.getPointer r.struct 0)
+def Message.Reader.has_return (r : Message.Reader) : Bool := !Capnp.isNullPointer (Capnp.getPointer r.struct 0)
 
 
 def Message.Reader.getFinish (r : Message.Reader) : Finish.Reader := Finish.read (Capnp.getPointer r.struct 0)
@@ -814,7 +814,7 @@ def Message.Reader.which (r : Message.Reader) : Message.Which :=
   | 0 => Message.Which.unimplemented (r.getUnimplemented)
   | 1 => Message.Which.abort (r.getAbort)
   | 2 => Message.Which.call (r.getCall)
-  | 3 => Message.Which.return (r.getReturn)
+  | 3 => Message.Which._return (r.get_return)
   | 4 => Message.Which.finish (r.getFinish)
   | 5 => Message.Which.resolve (r.getResolve)
   | 6 => Message.Which.release (r.getRelease)
@@ -841,8 +841,8 @@ def Message.Reader.whichChecked (r : Message.Reader) : Except String Message.Whi
     let v ← r.getCallChecked
     return Message.Which.call v
   | 3 => do
-    let v ← r.getReturnChecked
-    return Message.Which.return v
+    let v ← r.get_returnChecked
+    return Message.Which._return v
   | 4 => do
     let v ← r.getFinishChecked
     return Message.Which.finish v
@@ -906,10 +906,10 @@ def Message.Builder.initCall (b : Message.Builder) : Capnp.BuilderM Call.Builder
   let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 0) 3 3
   return Call.Builder.fromStruct sb
 
-def Message.Builder.clearReturn (b : Message.Builder) : Capnp.BuilderM Unit := do
+def Message.Builder.clear_return (b : Message.Builder) : Capnp.BuilderM Unit := do
   Capnp.clearPointer (Capnp.getPointerBuilder b.struct 0)
 
-def Message.Builder.initReturn (b : Message.Builder) : Capnp.BuilderM Return.Builder := do
+def Message.Builder.init_return (b : Message.Builder) : Capnp.BuilderM Return.Builder := do
   Capnp.setUInt16 b.struct 0 (UInt16.ofNat 3)
   let sb ← Capnp.initStructPointer (Capnp.getPointerBuilder b.struct 0) 2 1
   return Return.Builder.fromStruct sb

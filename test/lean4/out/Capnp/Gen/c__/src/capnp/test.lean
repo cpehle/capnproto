@@ -2891,31 +2891,31 @@ def callVoid (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payloa
 def callVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target voidMethod payload
 
-def returnMethodId : UInt16 := UInt16.ofNat 3
-def returnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := returnMethodId }
-def callReturn (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
-  Capnp.Rpc.call backend target returnMethod payload
-def callReturnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
-  Capnp.Rpc.RuntimeM.call target returnMethod payload
+def _returnMethodId : UInt16 := UInt16.ofNat 3
+def _returnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _returnMethodId }
+def call_return (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.Payload := do
+  Capnp.Rpc.call backend target _returnMethod payload
+def call_returnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  Capnp.Rpc.RuntimeM.call target _returnMethod payload
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev deleteHandler := Handler
 abbrev _classHandler := Handler
 abbrev voidHandler := Handler
-abbrev returnHandler := Handler
+abbrev _returnHandler := Handler
 
 structure Server where
   delete : deleteHandler
   _class : _classHandler
   void : voidHandler
-  return : returnHandler
+  _return : _returnHandler
 
 def dispatch (server : Server) : Capnp.Rpc.Dispatch := Id.run do
   let mut d := Capnp.Rpc.Dispatch.empty
   d := Capnp.Rpc.Dispatch.register d deleteMethod server.delete
   d := Capnp.Rpc.Dispatch.register d _classMethod server._class
   d := Capnp.Rpc.Dispatch.register d voidMethod server.void
-  d := Capnp.Rpc.Dispatch.register d returnMethod server.return
+  d := Capnp.Rpc.Dispatch.register d _returnMethod server._return
   return d
 
 def backend (server : Server)

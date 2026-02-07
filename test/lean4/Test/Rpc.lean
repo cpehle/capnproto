@@ -153,12 +153,12 @@ def testRpcCallPromisedAnswerTarget : IO Unit := do
 def testRpcReturnTakeFromOtherQuestion : IO Unit := do
   let msg := buildMessage (do
     let m ← Message.initRoot
-    let ret ← Message.Builder.initReturn m
+    let ret ← Message.Builder.init_return m
     Return.Builder.setAnswerId ret (UInt32.ofNat 100)
     Return.Builder.setTakeFromOtherQuestion ret (UInt32.ofNat 55))
   let r := Message.read (Capnp.getRoot msg)
   match r.which with
-  | Message.Which.return ret => do
+  | Message.Which._return ret => do
     assertEqual ret.getAnswerId (UInt32.ofNat 100)
     match ret.which with
     | Return.Which.takeFromOtherQuestion q => assertEqual q (UInt32.ofNat 55)
@@ -281,12 +281,12 @@ def testRpcCallSendResultsToYourself : IO Unit := do
 def testRpcReturnCanceled : IO Unit := do
   let msg := buildMessage (do
     let m ← Message.initRoot
-    let ret ← Message.Builder.initReturn m
+    let ret ← Message.Builder.init_return m
     Return.Builder.setAnswerId ret (UInt32.ofNat 77)
     Return.Builder.setCanceled ret)
   let r := Message.read (Capnp.getRoot msg)
   match r.which with
-  | Message.Which.return ret => do
+  | Message.Which._return ret => do
     assertEqual ret.getAnswerId (UInt32.ofNat 77)
     match ret.which with
     | Return.Which.canceled _ => pure ()
@@ -297,12 +297,12 @@ def testRpcReturnCanceled : IO Unit := do
 def testRpcReturnResultsSentElsewhere : IO Unit := do
   let msg := buildMessage (do
     let m ← Message.initRoot
-    let ret ← Message.Builder.initReturn m
+    let ret ← Message.Builder.init_return m
     Return.Builder.setAnswerId ret (UInt32.ofNat 91)
     Return.Builder.setResultsSentElsewhere ret)
   let r := Message.read (Capnp.getRoot msg)
   match r.which with
-  | Message.Which.return ret => do
+  | Message.Which._return ret => do
     assertEqual ret.getAnswerId (UInt32.ofNat 91)
     match ret.which with
     | Return.Which.resultsSentElsewhere _ => pure ()

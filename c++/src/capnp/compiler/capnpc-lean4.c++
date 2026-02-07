@@ -95,7 +95,7 @@ private:
       "abbrev", "attribute", "by", "class", "def", "derive", "do", "else", "end",
       "extends", "forall", "fun", "if", "import", "in", "inductive", "instance",
       "let", "match", "mutual", "namespace", "open", "partial", "private", "protected",
-      "section", "structure", "theorem", "then", "universe", "variable", "where"
+      "section", "structure", "theorem", "then", "universe", "variable", "where", "return"
     };
     for (auto kw: keywords) {
       if (ident == kw) return true;
