@@ -51,6 +51,28 @@ std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes) {
   return out;
 }
 
+uint32_t readUint32Le(const uint8_t* data) {
+  return static_cast<uint32_t>(data[0]) |
+         (static_cast<uint32_t>(data[1]) << 8) |
+         (static_cast<uint32_t>(data[2]) << 16) |
+         (static_cast<uint32_t>(data[3]) << 24);
+}
+
+std::vector<uint32_t> decodeUint32Array(b_lean_obj_arg bytes) {
+  const auto size = lean_sarray_size(bytes);
+  const auto* data =
+      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  if ((size % 4) != 0) {
+    throw std::runtime_error("uint32 array payload must be a multiple of 4 bytes");
+  }
+  std::vector<uint32_t> out;
+  out.reserve(size / 4);
+  for (size_t i = 0; i < size; i += 4) {
+    out.push_back(readUint32Le(data + i));
+  }
+  return out;
+}
+
 std::string describeKjException(const kj::Exception& e) {
   std::string message(e.getDescription().cStr());
   KJ_IF_SOME(detail, e.getDetail(0)) {
@@ -91,6 +113,54 @@ struct BytesCompletion {
   std::condition_variable cv;
   bool done = false;
   bool ok = false;
+  std::vector<uint8_t> bytes;
+  std::string error;
+};
+
+struct HandlePairCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  uint32_t first = 0;
+  uint32_t second = 0;
+  std::string error;
+};
+
+struct BoolCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  bool value = false;
+  std::string error;
+};
+
+struct UInt32Completion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  uint32_t value = 0;
+  std::string error;
+};
+
+struct OptionalStringCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  bool hasValue = false;
+  std::string value;
+  std::string error;
+};
+
+struct DatagramReceiveCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string sourceAddress;
   std::vector<uint8_t> bytes;
   std::string error;
 };
@@ -169,6 +239,121 @@ void completeBytesSuccess(const std::shared_ptr<BytesCompletion>& completion,
 }
 
 void completeBytesFailure(const std::shared_ptr<BytesCompletion>& completion, std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeHandlePairSuccess(const std::shared_ptr<HandlePairCompletion>& completion,
+                               uint32_t first, uint32_t second) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->first = first;
+    completion->second = second;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeHandlePairFailure(const std::shared_ptr<HandlePairCompletion>& completion,
+                               std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeBoolSuccess(const std::shared_ptr<BoolCompletion>& completion, bool value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = value;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeBoolFailure(const std::shared_ptr<BoolCompletion>& completion, std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeUInt32Success(const std::shared_ptr<UInt32Completion>& completion, uint32_t value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = value;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeUInt32Failure(const std::shared_ptr<UInt32Completion>& completion,
+                           std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalStringSuccess(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   kj::Maybe<std::string> value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    KJ_IF_SOME(v, value) {
+      completion->hasValue = true;
+      completion->value = kj::mv(v);
+    } else {
+      completion->hasValue = false;
+      completion->value.clear();
+    }
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalStringFailure(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeDatagramReceiveSuccess(const std::shared_ptr<DatagramReceiveCompletion>& completion,
+                                    std::string sourceAddress, std::vector<uint8_t> bytes) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->sourceAddress = std::move(sourceAddress);
+    completion->bytes = std::move(bytes);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeDatagramReceiveFailure(const std::shared_ptr<DatagramReceiveCompletion>& completion,
+                                    std::string message) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;
@@ -447,6 +632,278 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<PromiseIdCompletion> enqueuePromiseAllStart(std::vector<uint32_t> promiseIds) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPromiseAllStart{std::move(promiseIds), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<PromiseIdCompletion> enqueuePromiseRaceStart(std::vector<uint32_t> promiseIds) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPromiseRaceStart{std::move(promiseIds), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueTaskSetNew() {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetNew{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueTaskSetRelease(uint32_t taskSetId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetRelease{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueTaskSetAddPromise(uint32_t taskSetId, uint32_t promiseId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetAddPromise{taskSetId, promiseId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueTaskSetClear(uint32_t taskSetId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetClear{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<BoolCompletion> enqueueTaskSetIsEmpty(uint32_t taskSetId) {
+    auto completion = std::make_shared<BoolCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeBoolFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetIsEmpty{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<PromiseIdCompletion> enqueueTaskSetOnEmptyStart(uint32_t taskSetId) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetOnEmptyStart{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt32Completion> enqueueTaskSetErrorCount(uint32_t taskSetId) {
+    auto completion = std::make_shared<UInt32Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt32Failure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetErrorCount{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<OptionalStringCompletion> enqueueTaskSetTakeLastError(uint32_t taskSetId) {
+    auto completion = std::make_shared<OptionalStringCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeOptionalStringFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTaskSetTakeLastError{taskSetId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<PromiseIdCompletion> enqueueConnectionWhenWriteDisconnectedStart(
+      uint32_t connectionId) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectionWhenWriteDisconnectedStart{connectionId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueConnectionAbortRead(uint32_t connectionId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectionAbortRead{connectionId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueConnectionAbortWrite(uint32_t connectionId,
+                                                              std::string reason) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectionAbortWrite{connectionId, std::move(reason), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandlePairCompletion> enqueueNewTwoWayPipe() {
+    auto completion = std::make_shared<HandlePairCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandlePairFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewTwoWayPipe{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueDatagramBind(std::string address, uint32_t portHint) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedDatagramBind{std::move(address), portHint, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueDatagramReleasePort(uint32_t portId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedDatagramReleasePort{portId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueDatagramGetPort(uint32_t portId) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedDatagramGetPort{portId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt32Completion> enqueueDatagramSend(uint32_t portId, std::string address,
+                                                        uint32_t portHint,
+                                                        std::vector<uint8_t> bytes) {
+    auto completion = std::make_shared<UInt32Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt32Failure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedDatagramSend{portId, std::move(address), portHint, std::move(bytes), completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<DatagramReceiveCompletion> enqueueDatagramReceive(uint32_t portId,
+                                                                    uint32_t maxBytes) {
+    auto completion = std::make_shared<DatagramReceiveCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeDatagramReceiveFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedDatagramReceive{portId, maxBytes, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
  private:
   struct PendingPromise {
     PendingPromise(kj::Promise<void>&& promise, kj::Own<kj::Canceler>&& canceler)
@@ -473,6 +930,30 @@ class KjAsyncRuntimeLoop {
 
     kj::Promise<kj::Own<kj::AsyncIoStream>> promise;
     kj::Own<kj::Canceler> canceler;
+  };
+
+  struct RuntimeTaskSet {
+    class ErrorHandler final : public kj::TaskSet::ErrorHandler {
+     public:
+      explicit ErrorHandler(RuntimeTaskSet& state) : state_(state) {}
+
+      void taskFailed(kj::Exception&& exception) override {
+        std::lock_guard<std::mutex> lock(state_.mutex);
+        state_.errorCount += 1;
+        state_.lastError = describeKjException(exception);
+      }
+
+     private:
+      RuntimeTaskSet& state_;
+    };
+
+    RuntimeTaskSet() : errorHandler(*this), tasks(errorHandler) {}
+
+    std::mutex mutex;
+    uint32_t errorCount = 0;
+    std::string lastError;
+    ErrorHandler errorHandler;
+    kj::TaskSet tasks;
   };
 
   struct QueuedSleepNanos {
@@ -566,13 +1047,120 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedPromiseAllStart {
+    std::vector<uint32_t> promiseIds;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedPromiseRaceStart {
+    std::vector<uint32_t> promiseIds;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedTaskSetNew {
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedTaskSetRelease {
+    uint32_t taskSetId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedTaskSetAddPromise {
+    uint32_t taskSetId;
+    uint32_t promiseId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedTaskSetClear {
+    uint32_t taskSetId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedTaskSetIsEmpty {
+    uint32_t taskSetId;
+    std::shared_ptr<BoolCompletion> completion;
+  };
+
+  struct QueuedTaskSetOnEmptyStart {
+    uint32_t taskSetId;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedTaskSetErrorCount {
+    uint32_t taskSetId;
+    std::shared_ptr<UInt32Completion> completion;
+  };
+
+  struct QueuedTaskSetTakeLastError {
+    uint32_t taskSetId;
+    std::shared_ptr<OptionalStringCompletion> completion;
+  };
+
+  struct QueuedConnectionWhenWriteDisconnectedStart {
+    uint32_t connectionId;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedConnectionAbortRead {
+    uint32_t connectionId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedConnectionAbortWrite {
+    uint32_t connectionId;
+    std::string reason;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedNewTwoWayPipe {
+    std::shared_ptr<HandlePairCompletion> completion;
+  };
+
+  struct QueuedDatagramBind {
+    std::string address;
+    uint32_t portHint;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedDatagramReleasePort {
+    uint32_t portId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedDatagramGetPort {
+    uint32_t portId;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedDatagramSend {
+    uint32_t portId;
+    std::string address;
+    uint32_t portHint;
+    std::vector<uint8_t> bytes;
+    std::shared_ptr<UInt32Completion> completion;
+  };
+
+  struct QueuedDatagramReceive {
+    uint32_t portId;
+    uint32_t maxBytes;
+    std::shared_ptr<DatagramReceiveCompletion> completion;
+  };
+
   using QueuedOperation =
       std::variant<QueuedSleepNanos, QueuedAwaitPromise, QueuedCancelPromise,
                    QueuedReleasePromise, QueuedListen, QueuedReleaseListener, QueuedAccept,
                    QueuedAcceptStart, QueuedConnect, QueuedConnectStart,
                    QueuedAwaitConnectionPromise, QueuedCancelConnectionPromise,
                    QueuedReleaseConnectionPromise, QueuedReleaseConnection,
-                   QueuedConnectionWrite, QueuedConnectionRead, QueuedConnectionShutdownWrite>;
+                   QueuedConnectionWrite, QueuedConnectionRead, QueuedConnectionShutdownWrite,
+                   QueuedPromiseAllStart, QueuedPromiseRaceStart, QueuedTaskSetNew,
+                   QueuedTaskSetRelease, QueuedTaskSetAddPromise, QueuedTaskSetClear,
+                   QueuedTaskSetIsEmpty, QueuedTaskSetOnEmptyStart, QueuedTaskSetErrorCount,
+                   QueuedTaskSetTakeLastError, QueuedConnectionWhenWriteDisconnectedStart,
+                   QueuedConnectionAbortRead, QueuedConnectionAbortWrite, QueuedNewTwoWayPipe,
+                   QueuedDatagramBind, QueuedDatagramReleasePort, QueuedDatagramGetPort,
+                   QueuedDatagramSend, QueuedDatagramReceive>;
 
   uint32_t addPromise(PendingPromise&& promise) {
     uint32_t promiseId = nextPromiseId_++;
@@ -608,6 +1196,145 @@ class KjAsyncRuntimeLoop {
     }
     connections_.emplace(connectionId, kj::mv(stream));
     return connectionId;
+  }
+
+  uint32_t addTaskSet(kj::Own<RuntimeTaskSet>&& taskSet) {
+    uint32_t taskSetId = nextTaskSetId_++;
+    while (taskSets_.find(taskSetId) != taskSets_.end()) {
+      taskSetId = nextTaskSetId_++;
+    }
+    taskSets_.emplace(taskSetId, kj::mv(taskSet));
+    return taskSetId;
+  }
+
+  uint32_t addDatagramPort(kj::Own<kj::DatagramPort>&& port) {
+    uint32_t portId = nextDatagramPortId_++;
+    while (datagramPorts_.find(portId) != datagramPorts_.end()) {
+      portId = nextDatagramPortId_++;
+    }
+    datagramPorts_.emplace(portId, kj::mv(port));
+    return portId;
+  }
+
+  uint32_t promiseAllStart(std::vector<uint32_t> promiseIds) {
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(promiseIds.size());
+    for (auto promiseId : promiseIds) {
+      auto it = promises_.find(promiseId);
+      if (it == promises_.end()) {
+        throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
+      }
+      auto pending = kj::mv(it->second);
+      promises_.erase(it);
+      pending.canceler->release();
+      promises.add(kj::mv(pending.promise));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(kj::joinPromises(promises.finish()));
+    return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t promiseRaceStart(std::vector<uint32_t> promiseIds) {
+    if (promiseIds.empty()) {
+      throw std::runtime_error("promiseRaceStart requires at least one promise id");
+    }
+
+    auto firstIt = promises_.find(promiseIds[0]);
+    if (firstIt == promises_.end()) {
+      throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseIds[0]));
+    }
+    auto firstPending = kj::mv(firstIt->second);
+    promises_.erase(firstIt);
+    firstPending.canceler->release();
+    auto raced = kj::mv(firstPending.promise);
+
+    for (size_t i = 1; i < promiseIds.size(); ++i) {
+      auto promiseId = promiseIds[i];
+      auto it = promises_.find(promiseId);
+      if (it == promises_.end()) {
+        throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
+      }
+      auto pending = kj::mv(it->second);
+      promises_.erase(it);
+      pending.canceler->release();
+      raced = kj::mv(raced).exclusiveJoin(kj::mv(pending.promise));
+    }
+
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(kj::mv(raced));
+    return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t taskSetNew() { return addTaskSet(kj::heap<RuntimeTaskSet>()); }
+
+  void taskSetRelease(uint32_t taskSetId) {
+    auto erased = taskSets_.erase(taskSetId);
+    if (erased == 0) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+  }
+
+  void taskSetAddPromise(uint32_t taskSetId, uint32_t promiseId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    auto promiseIt = promises_.find(promiseId);
+    if (promiseIt == promises_.end()) {
+      throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
+    }
+    auto pending = kj::mv(promiseIt->second);
+    promises_.erase(promiseIt);
+    pending.canceler->release();
+    taskSetIt->second->tasks.add(kj::mv(pending.promise));
+  }
+
+  void taskSetClear(uint32_t taskSetId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    taskSetIt->second->tasks.clear();
+  }
+
+  bool taskSetIsEmpty(uint32_t taskSetId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    return taskSetIt->second->tasks.isEmpty();
+  }
+
+  uint32_t taskSetOnEmptyStart(uint32_t taskSetId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(taskSetIt->second->tasks.onEmpty());
+    return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t taskSetErrorCount(uint32_t taskSetId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    std::lock_guard<std::mutex> lock(taskSetIt->second->mutex);
+    return taskSetIt->second->errorCount;
+  }
+
+  kj::Maybe<std::string> taskSetTakeLastError(uint32_t taskSetId) {
+    auto taskSetIt = taskSets_.find(taskSetId);
+    if (taskSetIt == taskSets_.end()) {
+      throw std::runtime_error("unknown KJ task set id: " + std::to_string(taskSetId));
+    }
+    std::lock_guard<std::mutex> lock(taskSetIt->second->mutex);
+    if (taskSetIt->second->lastError.empty()) {
+      return kj::none;
+    }
+    auto out = taskSetIt->second->lastError;
+    taskSetIt->second->lastError.clear();
+    return out;
   }
 
   void awaitPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
@@ -769,6 +1496,107 @@ class KjAsyncRuntimeLoop {
     it->second->shutdownWrite();
   }
 
+  uint32_t connectionWhenWriteDisconnectedStart(uint32_t connectionId) {
+    auto it = connections_.find(connectionId);
+    if (it == connections_.end()) {
+      throw std::runtime_error("unknown KJ connection id: " + std::to_string(connectionId));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(it->second->whenWriteDisconnected());
+    return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  void connectionAbortRead(uint32_t connectionId) {
+    auto it = connections_.find(connectionId);
+    if (it == connections_.end()) {
+      throw std::runtime_error("unknown KJ connection id: " + std::to_string(connectionId));
+    }
+    it->second->abortRead();
+  }
+
+  void connectionAbortWrite(uint32_t connectionId, std::string reason) {
+    auto it = connections_.find(connectionId);
+    if (it == connections_.end()) {
+      throw std::runtime_error("unknown KJ connection id: " + std::to_string(connectionId));
+    }
+    it->second->abortWrite(kj::Exception(
+        kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str(reason.c_str())));
+  }
+
+  std::pair<uint32_t, uint32_t> newTwoWayPipe(kj::AsyncIoProvider& ioProvider) {
+    auto pipe = ioProvider.newTwoWayPipe();
+    auto first = addConnection(kj::mv(pipe.ends[0]));
+    auto second = addConnection(kj::mv(pipe.ends[1]));
+    return {first, second};
+  }
+
+  uint32_t datagramBind(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
+                        const std::string& address, uint32_t portHint) {
+    auto addr = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
+    auto port = addr->bindDatagramPort();
+    return addDatagramPort(kj::mv(port));
+  }
+
+  void datagramReleasePort(uint32_t portId) {
+    auto erased = datagramPorts_.erase(portId);
+    if (erased == 0) {
+      throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
+    }
+  }
+
+  uint32_t datagramGetPort(uint32_t portId) {
+    auto it = datagramPorts_.find(portId);
+    if (it == datagramPorts_.end()) {
+      throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
+    }
+    return it->second->getPort();
+  }
+
+  uint32_t datagramSend(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t portId,
+                        const std::string& address, uint32_t portHint,
+                        const std::vector<uint8_t>& bytes) {
+    auto it = datagramPorts_.find(portId);
+    if (it == datagramPorts_.end()) {
+      throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
+    }
+    auto addr = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
+    auto ptr = kj::ArrayPtr<const kj::byte>(reinterpret_cast<const kj::byte*>(bytes.data()),
+                                            bytes.size());
+    auto sent = it->second->send(ptr, *addr).wait(waitScope);
+    if (sent > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+      throw std::runtime_error("datagram send byte count exceeds UInt32 range");
+    }
+    return static_cast<uint32_t>(sent);
+  }
+
+  std::pair<std::string, std::vector<uint8_t>> datagramReceive(kj::WaitScope& waitScope,
+                                                                uint32_t portId,
+                                                                uint32_t maxBytes) {
+    if (maxBytes == 0) {
+      throw std::runtime_error("datagram receive requires maxBytes > 0");
+    }
+    auto it = datagramPorts_.find(portId);
+    if (it == datagramPorts_.end()) {
+      throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
+    }
+
+    kj::DatagramReceiver::Capacity capacity;
+    capacity.content = maxBytes;
+    capacity.ancillary = 0;
+    auto receiver = it->second->makeReceiver(capacity);
+    receiver->receive().wait(waitScope);
+    auto content = receiver->getContent();
+    auto contentPtr = content.value;
+    std::vector<uint8_t> bytes(contentPtr.size());
+    if (!bytes.empty()) {
+      std::memcpy(bytes.data(), contentPtr.begin(), bytes.size());
+    }
+
+    auto source = receiver->getSource().toString();
+    std::string sourceAddress(source.cStr());
+    return {std::move(sourceAddress), std::move(bytes)};
+  }
+
   void failOutstanding(const std::string& message) {
     std::deque<QueuedOperation> queued;
     {
@@ -811,6 +1639,45 @@ class KjAsyncRuntimeLoop {
         completeBytesFailure(std::get<QueuedConnectionRead>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectionShutdownWrite>(op)) {
         completeUnitFailure(std::get<QueuedConnectionShutdownWrite>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPromiseAllStart>(op)) {
+        completePromiseIdFailure(std::get<QueuedPromiseAllStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPromiseRaceStart>(op)) {
+        completePromiseIdFailure(std::get<QueuedPromiseRaceStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetNew>(op)) {
+        completeHandleFailure(std::get<QueuedTaskSetNew>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetRelease>(op)) {
+        completeUnitFailure(std::get<QueuedTaskSetRelease>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetAddPromise>(op)) {
+        completeUnitFailure(std::get<QueuedTaskSetAddPromise>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetClear>(op)) {
+        completeUnitFailure(std::get<QueuedTaskSetClear>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetIsEmpty>(op)) {
+        completeBoolFailure(std::get<QueuedTaskSetIsEmpty>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetOnEmptyStart>(op)) {
+        completePromiseIdFailure(std::get<QueuedTaskSetOnEmptyStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetErrorCount>(op)) {
+        completeUInt32Failure(std::get<QueuedTaskSetErrorCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTaskSetTakeLastError>(op)) {
+        completeOptionalStringFailure(std::get<QueuedTaskSetTakeLastError>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectionWhenWriteDisconnectedStart>(op)) {
+        completePromiseIdFailure(
+            std::get<QueuedConnectionWhenWriteDisconnectedStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectionAbortRead>(op)) {
+        completeUnitFailure(std::get<QueuedConnectionAbortRead>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectionAbortWrite>(op)) {
+        completeUnitFailure(std::get<QueuedConnectionAbortWrite>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
+        completeHandlePairFailure(std::get<QueuedNewTwoWayPipe>(op).completion, message);
+      } else if (std::holds_alternative<QueuedDatagramBind>(op)) {
+        completeHandleFailure(std::get<QueuedDatagramBind>(op).completion, message);
+      } else if (std::holds_alternative<QueuedDatagramReleasePort>(op)) {
+        completeUnitFailure(std::get<QueuedDatagramReleasePort>(op).completion, message);
+      } else if (std::holds_alternative<QueuedDatagramGetPort>(op)) {
+        completeHandleFailure(std::get<QueuedDatagramGetPort>(op).completion, message);
+      } else if (std::holds_alternative<QueuedDatagramSend>(op)) {
+        completeUInt32Failure(std::get<QueuedDatagramSend>(op).completion, message);
+      } else if (std::holds_alternative<QueuedDatagramReceive>(op)) {
+        completeDatagramReceiveFailure(std::get<QueuedDatagramReceive>(op).completion, message);
       }
     }
   }
@@ -1069,6 +1936,252 @@ class KjAsyncRuntimeLoop {
             completeUnitFailure(shutdown.completion,
                                 "unknown exception in Capnp.KjAsync connection shutdownWrite");
           }
+        } else if (std::holds_alternative<QueuedPromiseAllStart>(op)) {
+          auto compose = std::get<QueuedPromiseAllStart>(std::move(op));
+          try {
+            auto promiseId = promiseAllStart(std::move(compose.promiseIds));
+            completePromiseIdSuccess(compose.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(compose.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(compose.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(compose.completion,
+                                     "unknown exception in Capnp.KjAsync promiseAllStart");
+          }
+        } else if (std::holds_alternative<QueuedPromiseRaceStart>(op)) {
+          auto compose = std::get<QueuedPromiseRaceStart>(std::move(op));
+          try {
+            auto promiseId = promiseRaceStart(std::move(compose.promiseIds));
+            completePromiseIdSuccess(compose.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(compose.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(compose.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(compose.completion,
+                                     "unknown exception in Capnp.KjAsync promiseRaceStart");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetNew>(op)) {
+          auto create = std::get<QueuedTaskSetNew>(std::move(op));
+          try {
+            auto taskSetId = taskSetNew();
+            completeHandleSuccess(create.completion, taskSetId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(create.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(create.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(create.completion,
+                                  "unknown exception in Capnp.KjAsync taskSetNew");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetRelease>(op)) {
+          auto release = std::get<QueuedTaskSetRelease>(std::move(op));
+          try {
+            taskSetRelease(release.taskSetId);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(release.completion,
+                                "unknown exception in Capnp.KjAsync taskSetRelease");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetAddPromise>(op)) {
+          auto add = std::get<QueuedTaskSetAddPromise>(std::move(op));
+          try {
+            taskSetAddPromise(add.taskSetId, add.promiseId);
+            completeUnitSuccess(add.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(add.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(add.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(add.completion,
+                                "unknown exception in Capnp.KjAsync taskSetAddPromise");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetClear>(op)) {
+          auto clear = std::get<QueuedTaskSetClear>(std::move(op));
+          try {
+            taskSetClear(clear.taskSetId);
+            completeUnitSuccess(clear.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(clear.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(clear.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(clear.completion,
+                                "unknown exception in Capnp.KjAsync taskSetClear");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetIsEmpty>(op)) {
+          auto query = std::get<QueuedTaskSetIsEmpty>(std::move(op));
+          try {
+            completeBoolSuccess(query.completion, taskSetIsEmpty(query.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeBoolFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeBoolFailure(query.completion, e.what());
+          } catch (...) {
+            completeBoolFailure(query.completion,
+                                "unknown exception in Capnp.KjAsync taskSetIsEmpty");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetOnEmptyStart>(op)) {
+          auto start = std::get<QueuedTaskSetOnEmptyStart>(std::move(op));
+          try {
+            auto promiseId = taskSetOnEmptyStart(start.taskSetId);
+            completePromiseIdSuccess(start.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(start.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(start.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(start.completion,
+                                     "unknown exception in Capnp.KjAsync taskSetOnEmptyStart");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetErrorCount>(op)) {
+          auto query = std::get<QueuedTaskSetErrorCount>(std::move(op));
+          try {
+            completeUInt32Success(query.completion, taskSetErrorCount(query.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeUInt32Failure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt32Failure(query.completion, e.what());
+          } catch (...) {
+            completeUInt32Failure(query.completion,
+                                  "unknown exception in Capnp.KjAsync taskSetErrorCount");
+          }
+        } else if (std::holds_alternative<QueuedTaskSetTakeLastError>(op)) {
+          auto query = std::get<QueuedTaskSetTakeLastError>(std::move(op));
+          try {
+            completeOptionalStringSuccess(query.completion, taskSetTakeLastError(query.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeOptionalStringFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeOptionalStringFailure(query.completion, e.what());
+          } catch (...) {
+            completeOptionalStringFailure(
+                query.completion, "unknown exception in Capnp.KjAsync taskSetTakeLastError");
+          }
+        } else if (std::holds_alternative<QueuedConnectionWhenWriteDisconnectedStart>(op)) {
+          auto start = std::get<QueuedConnectionWhenWriteDisconnectedStart>(std::move(op));
+          try {
+            auto promiseId = connectionWhenWriteDisconnectedStart(start.connectionId);
+            completePromiseIdSuccess(start.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(start.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(start.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(
+                start.completion,
+                "unknown exception in Capnp.KjAsync connection whenWriteDisconnected start");
+          }
+        } else if (std::holds_alternative<QueuedConnectionAbortRead>(op)) {
+          auto abort = std::get<QueuedConnectionAbortRead>(std::move(op));
+          try {
+            connectionAbortRead(abort.connectionId);
+            completeUnitSuccess(abort.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(abort.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(abort.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(abort.completion,
+                                "unknown exception in Capnp.KjAsync connection abortRead");
+          }
+        } else if (std::holds_alternative<QueuedConnectionAbortWrite>(op)) {
+          auto abort = std::get<QueuedConnectionAbortWrite>(std::move(op));
+          try {
+            connectionAbortWrite(abort.connectionId, std::move(abort.reason));
+            completeUnitSuccess(abort.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(abort.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(abort.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(abort.completion,
+                                "unknown exception in Capnp.KjAsync connection abortWrite");
+          }
+        } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
+          auto create = std::get<QueuedNewTwoWayPipe>(std::move(op));
+          try {
+            auto pair = newTwoWayPipe(*io.provider);
+            completeHandlePairSuccess(create.completion, pair.first, pair.second);
+          } catch (const kj::Exception& e) {
+            completeHandlePairFailure(create.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandlePairFailure(create.completion, e.what());
+          } catch (...) {
+            completeHandlePairFailure(create.completion,
+                                      "unknown exception in Capnp.KjAsync newTwoWayPipe");
+          }
+        } else if (std::holds_alternative<QueuedDatagramBind>(op)) {
+          auto bind = std::get<QueuedDatagramBind>(std::move(op));
+          try {
+            auto portId = datagramBind(*io.provider, io.waitScope, bind.address, bind.portHint);
+            completeHandleSuccess(bind.completion, portId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(bind.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(bind.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(bind.completion,
+                                  "unknown exception in Capnp.KjAsync datagramBind");
+          }
+        } else if (std::holds_alternative<QueuedDatagramReleasePort>(op)) {
+          auto release = std::get<QueuedDatagramReleasePort>(std::move(op));
+          try {
+            datagramReleasePort(release.portId);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(release.completion,
+                                "unknown exception in Capnp.KjAsync datagramReleasePort");
+          }
+        } else if (std::holds_alternative<QueuedDatagramGetPort>(op)) {
+          auto query = std::get<QueuedDatagramGetPort>(std::move(op));
+          try {
+            completeHandleSuccess(query.completion, datagramGetPort(query.portId));
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(query.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(query.completion,
+                                  "unknown exception in Capnp.KjAsync datagramGetPort");
+          }
+        } else if (std::holds_alternative<QueuedDatagramSend>(op)) {
+          auto send = std::get<QueuedDatagramSend>(std::move(op));
+          try {
+            auto sent = datagramSend(*io.provider, io.waitScope, send.portId, send.address,
+                                     send.portHint, send.bytes);
+            completeUInt32Success(send.completion, sent);
+          } catch (const kj::Exception& e) {
+            completeUInt32Failure(send.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt32Failure(send.completion, e.what());
+          } catch (...) {
+            completeUInt32Failure(send.completion,
+                                  "unknown exception in Capnp.KjAsync datagramSend");
+          }
+        } else if (std::holds_alternative<QueuedDatagramReceive>(op)) {
+          auto recv = std::get<QueuedDatagramReceive>(std::move(op));
+          try {
+            auto result = datagramReceive(io.waitScope, recv.portId, recv.maxBytes);
+            completeDatagramReceiveSuccess(
+                recv.completion, std::move(result.first), std::move(result.second));
+          } catch (const kj::Exception& e) {
+            completeDatagramReceiveFailure(recv.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeDatagramReceiveFailure(recv.completion, e.what());
+          } catch (...) {
+            completeDatagramReceiveFailure(
+                recv.completion, "unknown exception in Capnp.KjAsync datagramReceive");
+          }
         }
       }
 
@@ -1076,6 +2189,8 @@ class KjAsyncRuntimeLoop {
       connectionPromises_.clear();
       listeners_.clear();
       connections_.clear();
+      taskSets_.clear();
+      datagramPorts_.clear();
     } catch (const kj::Exception& e) {
       {
         std::lock_guard<std::mutex> lock(startupMutex_);
@@ -1125,6 +2240,10 @@ class KjAsyncRuntimeLoop {
   std::unordered_map<uint32_t, kj::Own<kj::ConnectionReceiver>> listeners_;
   uint32_t nextConnectionId_ = 1;
   std::unordered_map<uint32_t, kj::Own<kj::AsyncIoStream>> connections_;
+  uint32_t nextTaskSetId_ = 1;
+  std::unordered_map<uint32_t, kj::Own<RuntimeTaskSet>> taskSets_;
+  uint32_t nextDatagramPortId_ = 1;
+  std::unordered_map<uint32_t, kj::Own<kj::DatagramPort>> datagramPorts_;
 };
 
 std::mutex gKjAsyncRuntimeRegistryMutex;
@@ -1680,5 +2799,529 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_shutd
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_connection_shutdown_write");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_promise_all_start(
+    uint64_t runtimeId, b_lean_obj_arg promiseIds) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueuePromiseAllStart(decodeUint32Array(promiseIds));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_promise_all_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_promise_race_start(
+    uint64_t runtimeId, b_lean_obj_arg promiseIds) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueuePromiseRaceStart(decodeUint32Array(promiseIds));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_promise_race_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_new(uint64_t runtimeId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetNew();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_task_set_new");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_release(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetRelease(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_task_set_release");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_add_promise(
+    uint64_t runtimeId, uint32_t taskSetId, uint32_t promiseId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetAddPromise(taskSetId, promiseId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_task_set_add_promise");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_clear(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetClear(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_task_set_clear");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_is_empty(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetIsEmpty(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box(completion->value ? 1 : 0));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_task_set_is_empty");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_on_empty_start(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetOnEmptyStart(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_task_set_on_empty_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_error_count(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetErrorCount(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_task_set_error_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_take_last_error(
+    uint64_t runtimeId, uint32_t taskSetId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTaskSetTakeLastError(taskSetId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
+      lean_ctor_set(pair, 1, lean_mk_string(completion->value.c_str()));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_task_set_take_last_error");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_connection_when_write_disconnected_start(
+    uint64_t runtimeId, uint32_t connectionId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueConnectionWhenWriteDisconnectedStart(connectionId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_connection_when_write_disconnected_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_abort_read(
+    uint64_t runtimeId, uint32_t connectionId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueConnectionAbortRead(connectionId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_abort_read");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_abort_write(
+    uint64_t runtimeId, uint32_t connectionId, b_lean_obj_arg reason) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion =
+        runtime->enqueueConnectionAbortWrite(connectionId, std::string(lean_string_cstr(reason)));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_connection_abort_write");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_new_two_way_pipe(
+    uint64_t runtimeId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNewTwoWayPipe();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_new_two_way_pipe");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_bind(
+    uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueDatagramBind(std::string(lean_string_cstr(address)), portHint);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_bind");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_release_port(
+    uint64_t runtimeId, uint32_t portId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueDatagramReleasePort(portId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_release_port");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_get_port(
+    uint64_t runtimeId, uint32_t portId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueDatagramGetPort(portId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_get_port");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send(
+    uint64_t runtimeId, uint32_t portId, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg bytes) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueDatagramSend(
+        portId, std::string(lean_string_cstr(address)), portHint, copyByteArray(bytes));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_send");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive(
+    uint64_t runtimeId, uint32_t portId, uint32_t maxBytes) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueDatagramReceive(portId, maxBytes);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_mk_string(completion->sourceAddress.c_str()));
+      lean_ctor_set(pair, 1, mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_receive");
   }
 }
