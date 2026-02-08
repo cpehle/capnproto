@@ -13,6 +13,16 @@ structure PromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure Listener where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure Connection where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
 @[extern "capnp_lean_kj_async_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
 
@@ -33,6 +43,35 @@ opaque ffiRuntimePromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Un
 
 @[extern "capnp_lean_kj_async_runtime_promise_release"]
 opaque ffiRuntimePromiseReleaseImpl (runtime : UInt64) (promise : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_listen"]
+opaque ffiRuntimeListenImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_release_listener"]
+opaque ffiRuntimeReleaseListenerImpl (runtime : UInt64) (listener : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_listener_accept"]
+opaque ffiRuntimeListenerAcceptImpl (runtime : UInt64) (listener : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_connect"]
+opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_release_connection"]
+opaque ffiRuntimeReleaseConnectionImpl (runtime : UInt64) (connection : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_connection_write"]
+opaque ffiRuntimeConnectionWriteImpl
+    (runtime : UInt64) (connection : UInt32) (bytes : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_connection_read"]
+opaque ffiRuntimeConnectionReadImpl
+    (runtime : UInt64) (connection : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
+    IO ByteArray
+
+@[extern "capnp_lean_kj_async_runtime_connection_shutdown_write"]
+opaque ffiRuntimeConnectionShutdownWriteImpl (runtime : UInt64) (connection : UInt32) : IO Unit
 
 @[inline] private def millisToNanos (millis : UInt32) : UInt64 :=
   (UInt64.ofNat millis.toNat) * (UInt64.ofNat 1000000)
@@ -63,6 +102,43 @@ namespace Runtime
 
 @[inline] def sleepMillis (runtime : Runtime) (delayMillis : UInt32) : IO Unit :=
   runtime.sleepNanos (millisToNanos delayMillis)
+
+@[inline] def listen (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO Listener := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeListenImpl runtime.handle address portHint)
+  }
+
+@[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO Connection := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeConnectImpl runtime.handle address portHint)
+  }
+
+@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
+  ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
+
+@[inline] def releaseConnection (runtime : Runtime) (connection : Connection) : IO Unit :=
+  ffiRuntimeReleaseConnectionImpl runtime.handle connection.handle
+
+@[inline] def listenerAccept (runtime : Runtime) (listener : Listener) : IO Connection := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeListenerAcceptImpl runtime.handle listener.handle)
+  }
+
+@[inline] def connectionWrite (runtime : Runtime) (connection : Connection)
+    (bytes : ByteArray) : IO Unit :=
+  ffiRuntimeConnectionWriteImpl runtime.handle connection.handle bytes
+
+@[inline] def connectionRead (runtime : Runtime) (connection : Connection)
+    (minBytes maxBytes : UInt32) : IO ByteArray :=
+  ffiRuntimeConnectionReadImpl runtime.handle connection.handle minBytes maxBytes
+
+@[inline] def connectionShutdownWrite (runtime : Runtime) (connection : Connection) : IO Unit :=
+  ffiRuntimeConnectionShutdownWriteImpl runtime.handle connection.handle
 
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
@@ -104,6 +180,35 @@ def toIOPromise (promise : PromiseRef) : IO (IO.Promise (Except String Unit)) :=
 
 end PromiseRef
 
+namespace Listener
+
+@[inline] def release (listener : Listener) : IO Unit :=
+  ffiRuntimeReleaseListenerImpl listener.runtime.handle listener.handle
+
+@[inline] def accept (listener : Listener) : IO Connection := do
+  return {
+    runtime := listener.runtime
+    handle := (← ffiRuntimeListenerAcceptImpl listener.runtime.handle listener.handle)
+  }
+
+end Listener
+
+namespace Connection
+
+@[inline] def release (connection : Connection) : IO Unit :=
+  ffiRuntimeReleaseConnectionImpl connection.runtime.handle connection.handle
+
+@[inline] def write (connection : Connection) (bytes : ByteArray) : IO Unit :=
+  ffiRuntimeConnectionWriteImpl connection.runtime.handle connection.handle bytes
+
+@[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : IO ByteArray :=
+  ffiRuntimeConnectionReadImpl connection.runtime.handle connection.handle minBytes maxBytes
+
+@[inline] def shutdownWrite (connection : Connection) : IO Unit :=
+  ffiRuntimeConnectionShutdownWriteImpl connection.runtime.handle connection.handle
+
+end Connection
+
 abbrev RuntimeM := ReaderT Runtime IO
 
 namespace RuntimeM
@@ -130,6 +235,30 @@ namespace RuntimeM
 
 @[inline] def sleepMillis (delayMillis : UInt32) : RuntimeM Unit := do
   Runtime.sleepMillis (← runtime) delayMillis
+
+@[inline] def listen (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
+  Runtime.listen (← runtime) address portHint
+
+@[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Connection := do
+  Runtime.connect (← runtime) address portHint
+
+@[inline] def releaseListener (listener : Listener) : RuntimeM Unit := do
+  Runtime.releaseListener (← runtime) listener
+
+@[inline] def releaseConnection (connection : Connection) : RuntimeM Unit := do
+  Runtime.releaseConnection (← runtime) connection
+
+@[inline] def accept (listener : Listener) : RuntimeM Connection := do
+  Runtime.listenerAccept (← runtime) listener
+
+@[inline] def write (connection : Connection) (bytes : ByteArray) : RuntimeM Unit := do
+  Runtime.connectionWrite (← runtime) connection bytes
+
+@[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
+  Runtime.connectionRead (← runtime) connection minBytes maxBytes
+
+@[inline] def shutdownWrite (connection : Connection) : RuntimeM Unit := do
+  Runtime.connectionShutdownWrite (← runtime) connection
 
 @[inline] def await (promise : PromiseRef) : RuntimeM Unit := do
   promise.await
