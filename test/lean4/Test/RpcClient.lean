@@ -427,6 +427,43 @@ def testRuntimeClientServerLifecycle : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeServerBootstrapFactoryLifecycle : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  let factoryCalls ← IO.mkRef (0 : Nat)
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServerWithBootstrapFactory (fun _ => do
+      factoryCalls.modify (fun n => n + 1)
+      pure bootstrap)
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let target ← client.bootstrap
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+    assertTrue ((← factoryCalls.get) > 0) "bootstrap factory callback was not invoked"
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeServerDrain : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress

@@ -42,6 +42,7 @@ structure Backend where
 abbrev RawCall := Client -> Method -> ByteArray -> IO ByteArray
 abbrev RawHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO (ByteArray × ByteArray)
+abbrev RawBootstrapFactoryCall := UInt16 -> IO UInt32
 abbrev RawTraceEncoder := String -> IO String
 
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
@@ -173,6 +174,10 @@ opaque ffiRuntimeClientOutgoingWaitNanosImpl (runtime : UInt64) (client : UInt32
 
 @[extern "capnp_lean_rpc_runtime_new_server"]
 opaque ffiRuntimeNewServerImpl (runtime : UInt64) (bootstrap : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_new_server_with_bootstrap_factory"]
+opaque ffiRuntimeNewServerWithBootstrapFactoryImpl
+    (runtime : UInt64) (bootstrapFactory : @& RawBootstrapFactoryCall) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_release_server"]
 opaque ffiRuntimeReleaseServerImpl (runtime : UInt64) (server : UInt32) : IO Unit
@@ -360,6 +365,15 @@ namespace Runtime
 @[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
   return { runtime := runtime, handle := { raw := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
 
+@[inline] def newServerWithBootstrapFactory (runtime : Runtime)
+    (bootstrapFactory : UInt16 -> IO Client) : IO RuntimeServerRef := do
+  return {
+    runtime := runtime
+    handle := {
+      raw := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle bootstrapFactory)
+    }
+  }
+
 @[inline] def withClient (runtime : Runtime) (address : String)
     (action : RuntimeClientRef -> IO α) (portHint : UInt32 := 0) : IO α := do
   let client ← runtime.newClient address portHint
@@ -371,6 +385,15 @@ namespace Runtime
 @[inline] def withServer (runtime : Runtime) (bootstrap : Client)
     (action : RuntimeServerRef -> IO α) : IO α := do
   let server ← runtime.newServer bootstrap
+  try
+    action server
+  finally
+    ffiRuntimeReleaseServerImpl runtime.handle server.handle.raw
+
+@[inline] def withServerWithBootstrapFactory (runtime : Runtime)
+    (bootstrapFactory : UInt16 -> IO Client)
+    (action : RuntimeServerRef -> IO α) : IO α := do
+  let server ← runtime.newServerWithBootstrapFactory bootstrapFactory
   try
     action server
   finally
@@ -573,6 +596,10 @@ namespace RuntimeM
 @[inline] def newServer (bootstrap : Client) : RuntimeM RuntimeServerRef := do
   Runtime.newServer (← runtime) bootstrap
 
+@[inline] def newServerWithBootstrapFactory
+    (bootstrapFactory : UInt16 -> IO Client) : RuntimeM RuntimeServerRef := do
+  Runtime.newServerWithBootstrapFactory (← runtime) bootstrapFactory
+
 @[inline] def clientRelease (client : RuntimeClientRef) : RuntimeM Unit := do
   client.release
 
@@ -618,6 +645,15 @@ namespace RuntimeM
 @[inline] def withServer (bootstrap : Client)
     (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
   let server ← newServer bootstrap
+  try
+    action server
+  finally
+    server.release
+
+@[inline] def withServerWithBootstrapFactory
+    (bootstrapFactory : UInt16 -> IO Client)
+    (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
+  let server ← newServerWithBootstrapFactory bootstrapFactory
   try
     action server
   finally

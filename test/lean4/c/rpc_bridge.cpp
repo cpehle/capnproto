@@ -1077,6 +1077,25 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueNewServerWithBootstrapFactory(
+      b_lean_obj_arg bootstrapFactory) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    auto* bootstrapFactoryObj = const_cast<lean_object*>(bootstrapFactory);
+    lean_mark_mt(bootstrapFactoryObj);
+    lean_inc(bootstrapFactoryObj);
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        lean_dec(bootstrapFactoryObj);
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewServerWithBootstrapFactory{bootstrapFactoryObj, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueReleaseServer(uint32_t serverId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -1374,6 +1393,11 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedNewServerWithBootstrapFactory {
+    lean_object* bootstrapFactory;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedReleaseServer {
     uint32_t serverId;
     std::shared_ptr<UnitCompletion> completion;
@@ -1424,7 +1448,7 @@ class RuntimeLoop {
                    QueuedConnectTarget, QueuedListenLoopback, QueuedAcceptLoopback,
                    QueuedReleaseListener, QueuedNewClient, QueuedReleaseClient,
                    QueuedClientBootstrap, QueuedClientOnDisconnect, QueuedClientSetFlowLimit,
-                   QueuedNewServer,
+                   QueuedNewServer, QueuedNewServerWithBootstrapFactory,
                    QueuedReleaseServer, QueuedServerListen, QueuedServerAccept,
                    QueuedServerDrain, QueuedClientQueueSize, QueuedClientQueueCount,
                    QueuedClientOutgoingWaitNanos>;
@@ -1450,10 +1474,52 @@ class RuntimeLoop {
     kj::Own<TwoPartyRpcSystem> rpcSystem;
   };
 
+  class LeanBootstrapFactory final : public capnp::BootstrapFactory<capnp::rpc::twoparty::VatId> {
+   public:
+    LeanBootstrapFactory(RuntimeLoop& runtime, lean_object* bootstrapFactory)
+        : runtime_(runtime), bootstrapFactory_(bootstrapFactory) {
+      lean_inc(bootstrapFactory_);
+    }
+
+    ~LeanBootstrapFactory() { lean_dec(bootstrapFactory_); }
+
+    capnp::Capability::Client createFor(
+        capnp::rpc::twoparty::VatId::Reader clientId) override {
+      auto side = static_cast<uint16_t>(clientId.getSide());
+      lean_inc(bootstrapFactory_);
+      auto ioResult = lean_apply_2(bootstrapFactory_, lean_box(static_cast<size_t>(side)),
+                                   lean_box(0));
+      if (lean_io_result_is_error(ioResult)) {
+        lean_dec(ioResult);
+        throw std::runtime_error("Lean bootstrap factory returned IO error");
+      }
+
+      auto targetObj = lean_io_result_take_value(ioResult);
+      uint32_t targetId = lean_unbox_uint32(targetObj);
+      lean_dec(targetObj);
+
+      auto targetIt = runtime_.targets_.find(targetId);
+      if (targetIt == runtime_.targets_.end()) {
+        throw std::runtime_error(
+            "unknown RPC bootstrap capability id from Lean bootstrap factory: " +
+            std::to_string(targetId));
+      }
+      return targetIt->second;
+    }
+
+   private:
+    RuntimeLoop& runtime_;
+    lean_object* bootstrapFactory_;
+  };
+
   struct RuntimeServer {
     explicit RuntimeServer(capnp::Capability::Client bootstrap)
         : bootstrap(kj::mv(bootstrap)) {}
-    capnp::Capability::Client bootstrap;
+    explicit RuntimeServer(
+        kj::Own<capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>> bootstrapFactory)
+        : bootstrapFactory(kj::mv(bootstrapFactory)) {}
+    kj::Maybe<capnp::Capability::Client> bootstrap;
+    kj::Maybe<kj::Own<capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>>> bootstrapFactory;
     kj::Vector<kj::Own<NetworkServerPeer>> peers;
   };
 
@@ -1966,7 +2032,7 @@ class RuntimeLoop {
     auto connection = acceptPromise.wait(waitScope).downcast<kj::AsyncCapabilityStream>();
 
     // Accept the incoming client connection and keep the server peer alive in runtime-owned state.
-    networkServerPeers_.add(makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection)));
+    networkServerPeers_.add(makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection)));
     std::vector<uint8_t> responseCopy;
     std::vector<uint8_t> responseCaps;
     {
@@ -2034,7 +2100,7 @@ class RuntimeLoop {
     auto connection = acceptPromise.wait(waitScope).downcast<kj::AsyncCapabilityStream>();
 
     // Accept the incoming client connection and keep the server peer alive in runtime-owned state.
-    networkServerPeers_.add(makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection)));
+    networkServerPeers_.add(makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection)));
 
     auto network = kj::heap<capnp::TwoPartyVatNetwork>(
         *stream, kMaxFdsPerMessage, capnp::rpc::twoparty::Side::CLIENT);
@@ -2249,6 +2315,20 @@ class RuntimeLoop {
     return peer;
   }
 
+  kj::Own<NetworkServerPeer> makeServerPeer(
+      capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>& bootstrapFactory,
+      kj::Own<kj::AsyncIoStream>&& connection) {
+    auto peer = kj::heap<NetworkServerPeer>();
+    peer->ioConnection = kj::mv(connection);
+    auto& ioConnection = KJ_ASSERT_NONNULL(peer->ioConnection);
+    peer->network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *ioConnection, capnp::rpc::twoparty::Side::SERVER);
+    peer->rpcSystem =
+        kj::heap<TwoPartyRpcSystem>(capnp::makeRpcServer(*peer->network, bootstrapFactory));
+    applyTraceEncoder(*peer->rpcSystem);
+    return peer;
+  }
+
   kj::Own<NetworkServerPeer> makeServerPeerWithFds(capnp::Capability::Client bootstrap,
                                                     kj::Own<kj::AsyncCapabilityStream>&& connection) {
     auto peer = kj::heap<NetworkServerPeer>();
@@ -2260,6 +2340,29 @@ class RuntimeLoop {
         capnp::makeRpcServer(*peer->network, kj::mv(bootstrap)));
     applyTraceEncoder(*peer->rpcSystem);
     return peer;
+  }
+
+  kj::Own<NetworkServerPeer> makeServerPeerWithFds(
+      capnp::BootstrapFactory<capnp::rpc::twoparty::VatId>& bootstrapFactory,
+      kj::Own<kj::AsyncCapabilityStream>&& connection) {
+    auto peer = kj::heap<NetworkServerPeer>();
+    peer->capConnection = kj::mv(connection);
+    auto& capConnection = KJ_ASSERT_NONNULL(peer->capConnection);
+    peer->network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *capConnection, kMaxFdsPerMessage, capnp::rpc::twoparty::Side::SERVER);
+    peer->rpcSystem =
+        kj::heap<TwoPartyRpcSystem>(capnp::makeRpcServer(*peer->network, bootstrapFactory));
+    applyTraceEncoder(*peer->rpcSystem);
+    return peer;
+  }
+
+  kj::Own<NetworkServerPeer> makeRuntimeServerPeerWithFds(
+      RuntimeServer& server, kj::Own<kj::AsyncCapabilityStream>&& connection) {
+    KJ_IF_SOME(bootstrapFactory, server.bootstrapFactory) {
+      return makeServerPeerWithFds(*bootstrapFactory, kj::mv(connection));
+    }
+    auto bootstrap = KJ_ASSERT_NONNULL(server.bootstrap);
+    return makeServerPeerWithFds(bootstrap, kj::mv(connection));
   }
 
   uint32_t listenLoopback(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
@@ -2296,6 +2399,12 @@ class RuntimeLoop {
     return addServer(kj::mv(server));
   }
 
+  uint32_t newServerWithBootstrapFactory(lean_object* bootstrapFactory) {
+    auto factory = kj::heap<LeanBootstrapFactory>(*this, bootstrapFactory);
+    auto server = kj::heap<RuntimeServer>(kj::mv(factory));
+    return addServer(kj::mv(server));
+  }
+
   void releaseServer(uint32_t serverId) {
     auto erased = servers_.erase(serverId);
     if (erased == 0) {
@@ -2325,7 +2434,7 @@ class RuntimeLoop {
     }
 
     auto connection = listenerIt->second->accept().wait(waitScope).downcast<kj::AsyncCapabilityStream>();
-    auto peer = makeServerPeerWithFds(serverIt->second->bootstrap, kj::mv(connection));
+    auto peer = makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection));
     serverIt->second->peers.add(kj::mv(peer));
   }
 
@@ -2846,6 +2955,21 @@ class RuntimeLoop {
             completeRegisterFailure(newServerReq.completion,
                                     "unknown exception in capnp_lean_rpc_runtime_new_server");
           }
+        } else if (std::holds_alternative<QueuedNewServerWithBootstrapFactory>(op)) {
+          auto newServerReq = std::get<QueuedNewServerWithBootstrapFactory>(std::move(op));
+          try {
+            auto serverId = newServerWithBootstrapFactory(newServerReq.bootstrapFactory);
+            completeRegisterSuccess(newServerReq.completion, serverId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(newServerReq.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(newServerReq.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                newServerReq.completion,
+                "unknown exception in capnp_lean_rpc_runtime_new_server_with_bootstrap_factory");
+          }
+          lean_dec(newServerReq.bootstrapFactory);
         } else if (std::holds_alternative<QueuedReleaseServer>(op)) {
           auto release = std::get<QueuedReleaseServer>(std::move(op));
           try {
@@ -3015,6 +3139,10 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedClientSetFlowLimit>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewServer>(op)) {
         completeRegisterFailure(std::get<QueuedNewServer>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewServerWithBootstrapFactory>(op)) {
+        auto& newServer = std::get<QueuedNewServerWithBootstrapFactory>(op);
+        lean_dec(newServer.bootstrapFactory);
+        completeRegisterFailure(newServer.completion, message);
       } else if (std::holds_alternative<QueuedReleaseServer>(op)) {
         completeUnitFailure(std::get<QueuedReleaseServer>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerListen>(op)) {
@@ -3922,6 +4050,33 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_server(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_new_server");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_server_with_bootstrap_factory(
+    uint64_t runtimeId, b_lean_obj_arg bootstrapFactory) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNewServerWithBootstrapFactory(bootstrapFactory);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_new_server_with_bootstrap_factory");
   }
 }
 
