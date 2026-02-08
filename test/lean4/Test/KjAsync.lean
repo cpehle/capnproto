@@ -160,3 +160,94 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
         IO.FS.removeFile socketPath
       catch _ =>
         pure ()
+
+@[test]
+def testKjAsyncPromiseComposition : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let p1 ← runtime.sleepMillisStart (UInt32.ofNat 5)
+    let p2 ← runtime.sleepMillisStart (UInt32.ofNat 10)
+    let all ← runtime.promiseAllStart #[p1, p2]
+    all.await
+
+    let p3 ← runtime.sleepMillisStart (UInt32.ofNat 200)
+    let p4 ← runtime.sleepMillisStart (UInt32.ofNat 5)
+    let race ← runtime.promiseRaceStart #[p3, p4]
+    let startedAt ← IO.monoNanosNow
+    race.await
+    let finishedAt ← IO.monoNanosNow
+    let elapsed := finishedAt - startedAt
+    assertTrue (elapsed < 500000000) "promise race took too long"
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncTaskSetLifecycle : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let taskSet ← runtime.taskSetNew
+    assertEqual (← taskSet.isEmpty) true
+
+    let p ← runtime.sleepMillisStart (UInt32.ofNat 10)
+    taskSet.addPromise p
+    assertEqual (← taskSet.isEmpty) false
+
+    let onEmpty ← taskSet.onEmptyStart
+    onEmpty.await
+    assertEqual (← taskSet.isEmpty) true
+    assertEqual (← taskSet.errorCount) (UInt32.ofNat 0)
+    assertEqual (← taskSet.takeLastError?) none
+    taskSet.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncTwoWayPipeDisconnectAndAbort : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newTwoWayPipe
+
+    let disconnect ← left.whenWriteDisconnectedStart
+    right.release
+    disconnect.await
+
+    let (abortWriter, abortReader) ← runtime.newTwoWayPipe
+    let abortDisconnect ← abortWriter.whenWriteDisconnectedStart
+    abortWriter.abortWrite "lean-test-abort-write"
+    abortReader.abortRead
+    abortReader.release
+    abortDisconnect.await
+
+    left.release
+    abortWriter.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncDatagramRoundtrip : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverPort ← receiverRuntime.datagramBind "127.0.0.1" 0
+    let receiverPortNumber ← receiverPort.getPort
+    let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
+    let payload := mkPayload
+
+    let receiveTask ← IO.asTask do
+      receiverPort.receive (UInt32.ofNat 1024)
+
+    let sentCount ← senderPort.send "127.0.0.1" payload receiverPortNumber
+    assertEqual sentCount (UInt32.ofNat payload.size)
+
+    let receiveResult ← IO.wait receiveTask
+    match receiveResult with
+    | Except.ok (_source, bytes) =>
+      assertEqual bytes payload
+    | Except.error err =>
+      throw (IO.userError s!"datagram receive task failed: {err}")
+
+    senderPort.release
+    receiverPort.release
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
