@@ -118,3 +118,45 @@ def testKjAsyncNetworkRoundtrip : IO Unit := do
         IO.FS.removeFile socketPath
       catch _ =>
         pure ()
+
+@[test]
+def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let listener ← runtime.listen address
+      let acceptPromise ← listener.acceptStart
+      let connectPromise ← runtime.connectStart address
+
+      let serverConn ← acceptPromise.await
+      let clientConn ← connectPromise.await
+
+      let payload := mkPayload
+      clientConn.write payload
+      clientConn.shutdownWrite
+
+      let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      assertEqual req payload
+      serverConn.write req
+      serverConn.shutdownWrite
+
+      let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+      assertEqual echoed payload
+
+      clientConn.release
+      serverConn.release
+      listener.release
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()

@@ -23,6 +23,11 @@ structure Connection where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure ConnectionPromiseRef where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
 @[extern "capnp_lean_kj_async_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
 
@@ -54,9 +59,25 @@ opaque ffiRuntimeReleaseListenerImpl (runtime : UInt64) (listener : UInt32) : IO
 @[extern "capnp_lean_kj_async_runtime_listener_accept"]
 opaque ffiRuntimeListenerAcceptImpl (runtime : UInt64) (listener : UInt32) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_listener_accept_start"]
+opaque ffiRuntimeListenerAcceptStartImpl (runtime : UInt64) (listener : UInt32) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_connect"]
 opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
     IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_connect_start"]
+opaque ffiRuntimeConnectStartImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_connection_promise_await"]
+opaque ffiRuntimeConnectionPromiseAwaitImpl (runtime : UInt64) (promise : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_connection_promise_cancel"]
+opaque ffiRuntimeConnectionPromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_connection_promise_release"]
+opaque ffiRuntimeConnectionPromiseReleaseImpl (runtime : UInt64) (promise : UInt32) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_release_connection"]
 opaque ffiRuntimeReleaseConnectionImpl (runtime : UInt64) (connection : UInt32) : IO Unit
@@ -117,6 +138,13 @@ namespace Runtime
     handle := (← ffiRuntimeConnectImpl runtime.handle address portHint)
   }
 
+@[inline] def connectStart (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO ConnectionPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
+  }
+
 @[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
   ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
 
@@ -127,6 +155,13 @@ namespace Runtime
   return {
     runtime := runtime
     handle := (← ffiRuntimeListenerAcceptImpl runtime.handle listener.handle)
+  }
+
+@[inline] def listenerAcceptStart (runtime : Runtime) (listener : Listener) :
+    IO ConnectionPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeListenerAcceptStartImpl runtime.handle listener.handle)
   }
 
 @[inline] def connectionWrite (runtime : Runtime) (connection : Connection)
@@ -191,6 +226,12 @@ namespace Listener
     handle := (← ffiRuntimeListenerAcceptImpl listener.runtime.handle listener.handle)
   }
 
+@[inline] def acceptStart (listener : Listener) : IO ConnectionPromiseRef := do
+  return {
+    runtime := listener.runtime
+    handle := (← ffiRuntimeListenerAcceptStartImpl listener.runtime.handle listener.handle)
+  }
+
 end Listener
 
 namespace Connection
@@ -208,6 +249,25 @@ namespace Connection
   ffiRuntimeConnectionShutdownWriteImpl connection.runtime.handle connection.handle
 
 end Connection
+
+namespace ConnectionPromiseRef
+
+@[inline] def await (promise : ConnectionPromiseRef) : IO Connection := do
+  return {
+    runtime := promise.runtime
+    handle := (← ffiRuntimeConnectionPromiseAwaitImpl promise.runtime.handle promise.handle)
+  }
+
+@[inline] def cancel (promise : ConnectionPromiseRef) : IO Unit :=
+  ffiRuntimeConnectionPromiseCancelImpl promise.runtime.handle promise.handle
+
+@[inline] def release (promise : ConnectionPromiseRef) : IO Unit :=
+  ffiRuntimeConnectionPromiseReleaseImpl promise.runtime.handle promise.handle
+
+@[inline] def awaitAndRelease (promise : ConnectionPromiseRef) : IO Connection := do
+  promise.await
+
+end ConnectionPromiseRef
 
 abbrev RuntimeM := ReaderT Runtime IO
 
@@ -242,6 +302,10 @@ namespace RuntimeM
 @[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Connection := do
   Runtime.connect (← runtime) address portHint
 
+@[inline] def connectStart (address : String) (portHint : UInt32 := 0) :
+    RuntimeM ConnectionPromiseRef := do
+  Runtime.connectStart (← runtime) address portHint
+
 @[inline] def releaseListener (listener : Listener) : RuntimeM Unit := do
   Runtime.releaseListener (← runtime) listener
 
@@ -251,6 +315,9 @@ namespace RuntimeM
 @[inline] def accept (listener : Listener) : RuntimeM Connection := do
   Runtime.listenerAccept (← runtime) listener
 
+@[inline] def acceptStart (listener : Listener) : RuntimeM ConnectionPromiseRef := do
+  Runtime.listenerAcceptStart (← runtime) listener
+
 @[inline] def write (connection : Connection) (bytes : ByteArray) : RuntimeM Unit := do
   Runtime.connectionWrite (← runtime) connection bytes
 
@@ -259,6 +326,15 @@ namespace RuntimeM
 
 @[inline] def shutdownWrite (connection : Connection) : RuntimeM Unit := do
   Runtime.connectionShutdownWrite (← runtime) connection
+
+@[inline] def awaitConnection (promise : ConnectionPromiseRef) : RuntimeM Connection := do
+  promise.await
+
+@[inline] def cancelConnection (promise : ConnectionPromiseRef) : RuntimeM Unit := do
+  promise.cancel
+
+@[inline] def releaseConnectionPromise (promise : ConnectionPromiseRef) : RuntimeM Unit := do
+  promise.release
 
 @[inline] def await (promise : PromiseRef) : RuntimeM Unit := do
   promise.await
