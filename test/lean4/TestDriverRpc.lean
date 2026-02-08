@@ -14,6 +14,7 @@ import Test.Builder
 import Test.Capability
 import Test.Packed
 import Test.Checked
+import Test.KjAsync
 import Test.Rpc
 import Test.RpcClient
 
@@ -57,7 +58,8 @@ unsafe def main (args : List String) : IO UInt32 := do
   let env ← Lean.importModules
     #[{ module := `LeanTest }, { module := `Test.Runtime }, { module := `Test.Generated },
       { module := `Test.Builder }, { module := `Test.Capability }, { module := `Test.Packed },
-      { module := `Test.Checked }, { module := `Test.Rpc }, { module := `Test.RpcClient }]
+      { module := `Test.Checked }, { module := `Test.KjAsync }, { module := `Test.Rpc },
+      { module := `Test.RpcClient }]
     {}
 
   LeanTest.runTestsAndExit env {} config
