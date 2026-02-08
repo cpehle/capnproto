@@ -41,10 +41,20 @@ target rpc_bridge.o pkg : FilePath := do
   ]
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
+target kj_async_bridge.o pkg : FilePath := do
+  let srcJob ← inputTextFile <| pkg.dir / "c" / "kj_async_bridge.cpp"
+  let oFile := pkg.buildDir / "c" / "kj_async_bridge.o"
+  let weakArgs := #[
+    "-I", (← getLeanIncludeDir).toString,
+    "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString
+  ]
+  buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
+
 target libleanrpcbridge pkg : FilePath := do
   let bridgeO ← rpc_bridge.o.fetch
+  let kjAsyncBridgeO ← kj_async_bridge.o.fetch
   let name := nameToStaticLib "leanrpcbridge"
-  buildStaticLib (pkg.staticLibDir / name) #[bridgeO]
+  buildStaticLib (pkg.staticLibDir / name) #[bridgeO, kjAsyncBridgeO]
 
 lean_lib CapnpRuntime where
   srcDir := "../../lean"
