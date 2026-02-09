@@ -45,6 +45,12 @@ def connectRuntimeTargetWithRetry (runtime : Capnp.Rpc.Runtime) (address : Strin
   | some target => pure target
   | none => throw (IO.userError s!"failed to connect Lean runtime target to {address}")
 
+@[extern "capnp_lean_rpc_test_new_socketpair"]
+opaque ffiNewSocketPairImpl : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_rpc_test_close_fd"]
+opaque ffiCloseFdImpl (fd : UInt32) : IO Unit
+
 @[test]
 def testGeneratedMethodMetadata : IO Unit := do
   assertEqual Echo.fooMethodId (UInt16.ofNat 0)
@@ -1323,6 +1329,115 @@ def testInteropCppClientPipeliningThroughLeanTailCallForwarder : IO Unit := do
       pure ()
 
 @[test]
+def testInteropCppClientPipeliningThroughLeanAdvancedAsyncForwarder : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let returnPayload := mkCapabilityPayload sink
+    let returnCapTarget ← runtime.registerHandlerTarget (fun _ _ _ => do
+      IO.sleep (UInt32.ofNat 30)
+      pure returnPayload)
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.asyncCall returnCapTarget method req))
+    let server ← runtime.newServer forwarder
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallPipelinedWithAccept
+      runtime server listener address Echo.fooMethod payload payload
+    assertEqual response.capTable.caps.size 0
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget returnCapTarget
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropCppClientPipeliningThroughLeanAdvancedTailCallForwarder : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let returnPayload := mkCapabilityPayload sink
+    let returnCapTarget ← runtime.registerHandlerTarget (fun _ _ _ => do
+      IO.sleep (UInt32.ofNat 30)
+      pure returnPayload)
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.tailCall returnCapTarget method req))
+    let server ← runtime.newServer forwarder
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallPipelinedWithAccept
+      runtime server listener address Echo.fooMethod payload payload
+    assertEqual response.capTable.caps.size 0
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget returnCapTarget
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropCppClientReceivesLeanAdvancedRemoteDetail : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let throwing ← runtime.registerAdvancedHandlerTarget (fun _ _ _ => do
+      pure (.throwRemote "lean advanced failure" "lean-detail-1".toUTF8))
+    let server ← runtime.newServer throwing
+    let listener ← server.listen address
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.Interop.cppCallWithAccept
+          runtime server listener address Echo.fooMethod payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "remote exception: lean advanced failure") then
+      throw (IO.userError s!"missing remote exception text: {errMsg}")
+    if !(errMsg.containsSubstr "remote detail[1]: lean-detail-1") then
+      throw (IO.userError s!"missing remote detail text: {errMsg}")
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget throwing
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimePendingCallPipeline : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -1665,6 +1780,126 @@ def testRuntimeTailCallHandlerTargetFromRequestCapability : IO Unit := do
     runtime.releaseTarget sink
   finally
     runtime.shutdown
+
+@[test]
+def testRuntimeRegisterLoopbackTargetUsesBootstrap : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        seenFoo.set true
+      pure req)
+    let loopback ← runtime.registerLoopbackTarget bootstrap
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM loopback payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← seenFoo.get) true
+    runtime.releaseTarget loopback
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerAsyncCallPipeline : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload sink
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.asyncCall sink method req))
+
+    let pending ← runtime.startCall forwarder Echo.fooMethod capPayload
+    let pipelinedCap ← pending.getPipelinedCap
+    let pipelinedResponse ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload
+    assertEqual pipelinedResponse.capTable.caps.size 0
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+    runtime.releaseTarget pipelinedCap
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerTailCall : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerHandlerTarget (fun _ method req => do
+      seenMethod.set method
+      pure req)
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.tailCall sink method req))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    assertEqual response.capTable.caps.size 0
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerThrowRemote : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let throwing ← runtime.registerAdvancedHandlerTarget (fun _ _ _ => do
+      pure (.throwRemote "advanced test exception" (ByteArray.mk #[97, 98])))
+    let loopback ← runtime.registerLoopbackTarget throwing
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "remote exception: advanced test exception") then
+      throw (IO.userError s!"missing remote exception text: {errMsg}")
+    if !(errMsg.containsSubstr "remote detail[1]: ab") then
+      throw (IO.userError s!"missing remote detail text: {errMsg}")
+    runtime.releaseTarget loopback
+    runtime.releaseTarget throwing
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeConnectFdAndServerAcceptFd : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let payload : Capnp.Rpc.Payload := mkNullPayload
+    let (clientFd, serverFd) ← ffiNewSocketPairImpl
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      let bootstrap ← runtime.registerEchoTarget
+      let server ← runtime.newServer bootstrap
+      server.acceptFd serverFd
+      let target ← runtime.connectFd clientFd
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      assertEqual response.capTable.caps.size 0
+      runtime.releaseTarget target
+      server.release
+      runtime.releaseTarget bootstrap
+    finally
+      runtime.shutdown
+      try
+        ffiCloseFdImpl clientFd
+      catch _ =>
+        pure ()
+      try
+        ffiCloseFdImpl serverFd
+      catch _ =>
+        pure ()
 
 @[test]
 def testRuntimeInitWithFdLimit : IO Unit := do
