@@ -152,6 +152,63 @@ inductive AdvancedHandlerReply where
 @[inline] def AdvancedCallHints.withOnlyPromisePipeline : AdvancedCallHints :=
   { onlyPromisePipeline := true }
 
+@[inline] def AdvancedCallHints.setNoPromisePipelining
+    (hints : AdvancedCallHints := {}) : AdvancedCallHints :=
+  { hints with noPromisePipelining := true }
+
+@[inline] def AdvancedCallHints.setOnlyPromisePipeline
+    (hints : AdvancedCallHints := {}) : AdvancedCallHints :=
+  { hints with onlyPromisePipeline := true }
+
+@[inline] def AdvancedForwardOptions.setNoPromisePipelining
+    (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
+  { opts with callHints := AdvancedCallHints.setNoPromisePipelining opts.callHints }
+
+@[inline] def AdvancedForwardOptions.setOnlyPromisePipeline
+    (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
+  { opts with callHints := AdvancedCallHints.setOnlyPromisePipeline opts.callHints }
+
+@[inline] def AdvancedForwardOptions.setSendResultsToCaller
+    (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
+  { opts with sendResultsTo := .caller }
+
+namespace Advanced
+
+@[inline] def respond (payload : Payload) : AdvancedHandlerResult :=
+  .respond payload
+
+@[inline] def asyncForward (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .asyncCall target method payload
+
+@[inline] def forward (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope)
+    (opts : AdvancedForwardOptions := {}) : AdvancedHandlerResult :=
+  .forwardCall target method payload opts
+
+@[inline] def forwardToCaller (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope)
+    (callHints : AdvancedCallHints := {}) : AdvancedHandlerResult :=
+  .forwardCall target method payload (AdvancedForwardOptions.toCaller callHints)
+
+@[inline] def tailForward (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .tailCall target method payload
+
+@[inline] def throwRemote (message : String)
+    (detail : ByteArray := ByteArray.empty) : AdvancedHandlerResult :=
+  .throwRemote message detail
+
+@[inline] def now (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
+  .now result
+
+@[inline] def defer
+    (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
+    IO AdvancedHandlerReply :=
+  AdvancedHandlerReply.defer next opts
+
+end Advanced
+
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
   Capnp.writeMessage payload.msg
 

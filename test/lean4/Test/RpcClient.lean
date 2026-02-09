@@ -1916,9 +1916,11 @@ def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit 
       seenMethod.set method
       pure req)
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
-      pure (.forwardCall sink method req
-        { sendResultsTo := .caller
-          callHints := { noPromisePipelining := true, onlyPromisePipeline := true } }))
+      let hints : Capnp.Rpc.AdvancedCallHints := {
+        noPromisePipelining := true
+        onlyPromisePipeline := true
+      }
+      pure (Capnp.Rpc.Advanced.forwardToCaller sink method req hints))
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM forwarder payload
     assertEqual response.capTable.caps.size 0
@@ -1937,9 +1939,9 @@ def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO 
   try
     let sink ← runtime.registerEchoTarget
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
-      pure (.forwardCall sink method req
-        { sendResultsTo := .yourself
-          callHints := { onlyPromisePipeline := true } }))
+      let opts : Capnp.Rpc.AdvancedForwardOptions :=
+        Capnp.Rpc.AdvancedForwardOptions.setOnlyPromisePipeline {}
+      pure (Capnp.Rpc.Advanced.forward sink method req opts))
     let errMsg ←
       try
         let _ ← Capnp.Rpc.RuntimeM.run runtime do
@@ -1960,9 +1962,9 @@ def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit 
   try
     let sink ← runtime.registerEchoTarget
     let handler ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
-      let deferred ← Capnp.Rpc.AdvancedHandlerReply.defer do
+      let deferred ← Capnp.Rpc.Advanced.defer do
         IO.sleep (UInt32.ofNat 200)
-        pure (.respond mkNullPayload)
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
       pure (.control { releaseParams := true, allowCancellation := true } deferred))
 
     let baselineTargets := (← runtime.targetCount)
@@ -2002,10 +2004,10 @@ def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
-      Capnp.Rpc.AdvancedHandlerReply.defer do
+      Capnp.Rpc.Advanced.defer do
         IO.sleep (UInt32.ofNat 25)
         seenRespond.set true
-        pure (.respond req))
+        pure (Capnp.Rpc.Advanced.respond req))
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM deferred payload
     assertEqual response.capTable.caps.size 0
@@ -2020,10 +2022,10 @@ def testRuntimeAdvancedHandlerDeferredWithControl : IO Unit := do
   try
     let sink ← runtime.registerEchoTarget
     let forwarder ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
-      let deferred ← Capnp.Rpc.AdvancedHandlerReply.defer
+      let deferred ← Capnp.Rpc.Advanced.defer
         (next := do
           IO.sleep (UInt32.ofNat 25)
-          pure (.respond mkNullPayload))
+          pure (Capnp.Rpc.Advanced.respond mkNullPayload))
         (opts := {
           releaseParams := true
           allowCancellation := true
@@ -2049,9 +2051,9 @@ def testRuntimeAdvancedHandlerDeferredLateAllowCancellationRejected : IO Unit :=
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
-      Capnp.Rpc.AdvancedHandlerReply.defer do
+      Capnp.Rpc.Advanced.defer do
         IO.sleep (UInt32.ofNat 25)
-        pure (Capnp.Rpc.AdvancedHandlerResult.allowCancellation (.respond req)))
+        pure (Capnp.Rpc.AdvancedHandlerResult.allowCancellation (Capnp.Rpc.Advanced.respond req)))
     let errMsg ←
       try
         let _ ← Capnp.Rpc.RuntimeM.run runtime do
