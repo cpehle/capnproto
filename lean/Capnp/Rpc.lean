@@ -44,6 +44,27 @@ abbrev RawHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO (ByteArray × ByteArray)
 abbrev RawTailCallHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO UInt32
+
+structure AdvancedHandlerControl where
+  releaseParams : Bool := false
+  allowCancellation : Bool := false
+  deriving Inhabited, BEq, Repr
+
+inductive AdvancedSendResultsTo where
+  | yourself
+  | caller
+  deriving Inhabited, BEq, Repr
+
+structure AdvancedCallHints where
+  noPromisePipelining : Bool := false
+  onlyPromisePipeline : Bool := false
+  deriving Inhabited, BEq, Repr
+
+structure AdvancedForwardOptions where
+  sendResultsTo : AdvancedSendResultsTo := .yourself
+  callHints : AdvancedCallHints := {}
+  deriving Inhabited, BEq, Repr
+
 inductive RawAdvancedHandlerResult where
   | returnPayload (response : ByteArray) (responseCaps : ByteArray)
   | asyncCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
@@ -51,6 +72,11 @@ inductive RawAdvancedHandlerResult where
   | tailCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
       (request : ByteArray) (requestCaps : ByteArray)
   | throwRemote (message : String) (detail : ByteArray)
+  | control (releaseParams : Bool) (allowCancellation : Bool) (next : RawAdvancedHandlerResult)
+  | awaitTask (task : Task (Except IO.Error RawAdvancedHandlerResult))
+  | sendResultsToCaller (next : RawAdvancedHandlerResult)
+  | callHints (noPromisePipelining : Bool) (onlyPromisePipeline : Bool)
+      (next : RawAdvancedHandlerResult)
 
 abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO RawAdvancedHandlerResult
@@ -61,9 +87,70 @@ inductive AdvancedHandlerResult where
   | respond (payload : Payload)
   | asyncCall (target : Client) (method : Method)
       (payload : Payload := Capnp.emptyRpcEnvelope)
+  | forwardCall (target : Client) (method : Method)
+      (payload : Payload := Capnp.emptyRpcEnvelope)
+      (options : AdvancedForwardOptions := {})
   | tailCall (target : Client) (method : Method)
       (payload : Payload := Capnp.emptyRpcEnvelope)
   | throwRemote (message : String) (detail : ByteArray := ByteArray.empty)
+  | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult)
+
+inductive AdvancedHandlerReply where
+  | now (result : AdvancedHandlerResult)
+  | deferred (task : Task (Except IO.Error AdvancedHandlerResult))
+  | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply)
+
+@[inline] def AdvancedHandlerReply.fromResult
+    (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
+  .now result
+
+@[inline] def AdvancedHandlerReply.defer
+    (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
+    IO AdvancedHandlerReply := do
+  let task ← IO.asTask next
+  let deferred : AdvancedHandlerReply := .deferred task
+  if opts.releaseParams || opts.allowCancellation then
+    return .control opts deferred
+  else
+    return deferred
+
+@[inline] def AdvancedHandlerResult.withControl
+    (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
+  .control opts next
+
+@[inline] def AdvancedHandlerResult.releaseParams
+    (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
+  .control { releaseParams := true } next
+
+@[inline] def AdvancedHandlerResult.allowCancellation
+    (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
+  .control { allowCancellation := true } next
+
+@[inline] def AdvancedHandlerReply.withControl
+    (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  .control opts next
+
+@[inline] def AdvancedHandlerReply.releaseParams
+    (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  .control { releaseParams := true } next
+
+@[inline] def AdvancedHandlerReply.allowCancellation
+    (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  .control { allowCancellation := true } next
+
+@[inline] def AdvancedForwardOptions.toCaller
+    (callHints : AdvancedCallHints := {}) : AdvancedForwardOptions :=
+  { sendResultsTo := .caller, callHints := callHints }
+
+@[inline] def AdvancedForwardOptions.toYourself
+    (callHints : AdvancedCallHints := {}) : AdvancedForwardOptions :=
+  { sendResultsTo := .yourself, callHints := callHints }
+
+@[inline] def AdvancedCallHints.withNoPromisePipelining : AdvancedCallHints :=
+  { noPromisePipelining := true }
+
+@[inline] def AdvancedCallHints.withOnlyPromisePipeline : AdvancedCallHints :=
+  { onlyPromisePipeline := true }
 
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
   Capnp.writeMessage payload.msg
@@ -423,22 +510,63 @@ end CapTable
     let request ← decodePayloadChecked requestBytes requestCaps
     handler target { interfaceId := interfaceId, methodId := methodId } request
 
-@[inline] private def toRawAdvancedHandlerCall
-    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RawAdvancedHandlerCall :=
+@[inline] private partial def toRawAdvancedHandlerResult
+    (result : AdvancedHandlerResult) : IO RawAdvancedHandlerResult := do
+  match result with
+  | .respond response =>
+      pure (.returnPayload response.toBytes (CapTable.toBytes response.capTable))
+  | .asyncCall nextTarget nextMethod nextPayload =>
+      pure (.asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
+        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+  | .forwardCall nextTarget nextMethod nextPayload options =>
+      let base : RawAdvancedHandlerResult := .asyncCall
+        nextTarget nextMethod.interfaceId nextMethod.methodId
+        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
+      let withHints : RawAdvancedHandlerResult :=
+        .callHints options.callHints.noPromisePipelining options.callHints.onlyPromisePipeline base
+      let withSend : RawAdvancedHandlerResult :=
+        match options.sendResultsTo with
+        | .yourself => withHints
+        | .caller => .sendResultsToCaller withHints
+      pure withSend
+  | .tailCall nextTarget nextMethod nextPayload =>
+      pure (.tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
+        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+  | .throwRemote message detail =>
+      pure (.throwRemote message detail)
+  | .control opts next =>
+      pure (.control opts.releaseParams opts.allowCancellation
+        (← toRawAdvancedHandlerResult next))
+
+@[inline] private partial def toRawAdvancedHandlerReply
+    (reply : AdvancedHandlerReply) : IO RawAdvancedHandlerResult := do
+  match reply with
+  | .now result =>
+      toRawAdvancedHandlerResult result
+  | .deferred task => do
+      let rawTask ← IO.asTask do
+        let result ← IO.wait task
+        match result with
+        | .ok next =>
+            toRawAdvancedHandlerResult next
+        | .error err =>
+            throw err
+      return .awaitTask rawTask
+  | .control opts next =>
+      return .control opts.releaseParams opts.allowCancellation
+        (← toRawAdvancedHandlerReply next)
+
+@[inline] private def toRawAdvancedHandlerCallAsync
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : RawAdvancedHandlerCall :=
   fun target interfaceId methodId requestBytes requestCaps => do
     let request ← decodePayloadChecked requestBytes requestCaps
     let method : Method := { interfaceId := interfaceId, methodId := methodId }
-    match (← handler target method request) with
-    | .respond response =>
-        pure (.returnPayload response.toBytes (CapTable.toBytes response.capTable))
-    | .asyncCall nextTarget nextMethod nextPayload =>
-        pure (.asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
-          nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
-    | .tailCall nextTarget nextMethod nextPayload =>
-        pure (.tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
-          nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
-    | .throwRemote message detail =>
-        pure (.throwRemote message detail)
+    toRawAdvancedHandlerReply (← handler target method request)
+
+@[inline] private def toRawAdvancedHandlerCall
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RawAdvancedHandlerCall :=
+  toRawAdvancedHandlerCallAsync fun target method request => do
+    return AdvancedHandlerReply.fromResult (← handler target method request)
 
 namespace Runtime
 
@@ -467,6 +595,11 @@ namespace Runtime
 @[inline] def registerAdvancedHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : IO Client :=
   ffiRuntimeRegisterAdvancedHandlerTargetImpl runtime.handle (toRawAdvancedHandlerCall handler)
+
+@[inline] def registerAdvancedHandlerTargetAsync (runtime : Runtime)
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : IO Client :=
+  ffiRuntimeRegisterAdvancedHandlerTargetImpl runtime.handle
+    (toRawAdvancedHandlerCallAsync handler)
 
 @[inline] def registerTailCallHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO Client) : IO Client :=
@@ -861,6 +994,10 @@ namespace RuntimeM
 @[inline] def registerAdvancedHandlerTarget
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RuntimeM Client := do
   Runtime.registerAdvancedHandlerTarget (← runtime) handler
+
+@[inline] def registerAdvancedHandlerTargetAsync
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : RuntimeM Client := do
+  Runtime.registerAdvancedHandlerTargetAsync (← runtime) handler
 
 @[inline] def registerTailCallHandlerTarget
     (handler : Client -> Method -> Payload -> IO Client) : RuntimeM Client := do

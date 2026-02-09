@@ -1907,6 +1907,165 @@ def testRuntimeAdvancedHandlerTailCall : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerHandlerTarget (fun _ method req => do
+      seenMethod.set method
+      pure req)
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.forwardCall sink method req
+        { sendResultsTo := .caller
+          callHints := { noPromisePipelining := true, onlyPromisePipeline := true } }))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    assertEqual response.capTable.caps.size 0
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (.forwardCall sink method req
+        { sendResultsTo := .yourself
+          callHints := { onlyPromisePipeline := true } }))
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM forwarder payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "onlyPromisePipeline requires sendResultsTo.caller") then
+      throw (IO.userError s!"missing onlyPromisePipeline validation error text: {errMsg}")
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let handler ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      let deferred ← Capnp.Rpc.AdvancedHandlerReply.defer do
+        IO.sleep (UInt32.ofNat 200)
+        pure (.respond mkNullPayload)
+      pure (.control { releaseParams := true, allowCancellation := true } deferred))
+
+    let baselineTargets := (← runtime.targetCount)
+    assertEqual baselineTargets (UInt64.ofNat 2)
+
+    let pending ← runtime.startCall handler Echo.fooMethod (mkCapabilityPayload sink)
+    IO.sleep (UInt32.ofNat 10)
+    pending.release
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+
+    waitForTargetCount 50
+    -- Deferred handler tasks are currently not canceled; let the task finish
+    -- before runtime teardown to avoid cross-test interference.
+    IO.sleep (UInt32.ofNat 250)
+
+    runtime.releaseTarget handler
+    runtime.releaseTarget sink
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenRespond ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      Capnp.Rpc.AdvancedHandlerReply.defer do
+        IO.sleep (UInt32.ofNat 25)
+        seenRespond.set true
+        pure (.respond req))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM deferred payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← seenRespond.get) true
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerDeferredWithControl : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let forwarder ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      let deferred ← Capnp.Rpc.AdvancedHandlerReply.defer
+        (next := do
+          IO.sleep (UInt32.ofNat 25)
+          pure (.respond mkNullPayload))
+        (opts := {
+          releaseParams := true
+          allowCancellation := true
+        })
+      pure deferred)
+    let baselineTargets := (← runtime.targetCount)
+    assertEqual baselineTargets (UInt64.ofNat 2)
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder (mkCapabilityPayload sink)
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) baselineTargets
+
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerDeferredLateAllowCancellationRejected : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      Capnp.Rpc.AdvancedHandlerReply.defer do
+        IO.sleep (UInt32.ofNat 25)
+        pure (Capnp.Rpc.AdvancedHandlerResult.allowCancellation (.respond req)))
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM deferred payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "allowCancellation must be set before defer") then
+      throw (IO.userError s!"missing deferred allowCancellation ordering error text: {errMsg}")
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerThrowRemote : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

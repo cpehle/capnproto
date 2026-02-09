@@ -141,15 +141,27 @@ struct RawCallResult {
   std::vector<uint8_t> responseCaps;
 };
 
+struct DeferredLeanTask {
+  explicit DeferredLeanTask(lean_object* task): task(task) {}
+  ~DeferredLeanTask() { lean_dec(task); }
+  lean_object* task;
+};
+
 struct LeanAdvancedHandlerAction {
   enum class Kind : uint8_t {
     RETURN_PAYLOAD = 0,
     ASYNC_CALL = 1,
     TAIL_CALL = 2,
-    THROW_REMOTE = 3
+    THROW_REMOTE = 3,
+    AWAIT_TASK = 4
   };
 
   Kind kind = Kind::RETURN_PAYLOAD;
+  bool releaseParams = false;
+  bool allowCancellation = false;
+  bool sendResultsToCaller = false;
+  bool noPromisePipelining = false;
+  bool onlyPromisePipeline = false;
   uint32_t target = 0;
   uint64_t interfaceId = 0;
   uint16_t methodId = 0;
@@ -157,6 +169,7 @@ struct LeanAdvancedHandlerAction {
   std::vector<uint8_t> payloadCaps;
   std::string message;
   std::vector<uint8_t> detailBytes;
+  kj::Own<DeferredLeanTask> deferredTask;
 };
 
 [[noreturn]] void throwRemoteException(const std::string& message,
@@ -2331,21 +2344,8 @@ class RuntimeLoop {
       }
       const auto* requestCapsPtr = requestCaps.empty() ? nullptr : requestCaps.data();
       auto requestCapsObj = mkByteArrayCopy(requestCapsPtr, requestCaps.size());
-
-      auto cleanupRequestCaps = [&](const std::vector<uint32_t>& retainedCaps) {
-        kj::HashSet<uint32_t> retained;
-        retained.reserve(retainedCaps.size());
-        for (auto capId : retainedCaps) {
-          if (capId != 0) {
-            retained.insert(capId);
-          }
-        }
-        for (auto capId : requestCapIds) {
-          if (!retained.contains(capId)) {
-            runtime_.dropTargetIfPresent(capId);
-          }
-        }
-      };
+      auto cleanupState =
+          std::make_shared<RequestCapCleanupState>(std::move(requestCapIds));
 
       auto targetId = targetId_->load(std::memory_order_relaxed);
       lean_inc(handler_);
@@ -2353,7 +2353,7 @@ class RuntimeLoop {
                                    lean_box(static_cast<size_t>(methodId)), requestObj,
                                    requestCapsObj, lean_box(0));
       if (lean_io_result_is_error(ioResult)) {
-        cleanupRequestCaps({});
+        cleanupRequestCaps(cleanupState, {});
         lean_dec(ioResult);
         throw std::runtime_error("Lean RPC advanced handler returned IO error");
       }
@@ -2363,101 +2363,244 @@ class RuntimeLoop {
       lean_dec(actionObj);
 
       try {
-        if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
-          auto retainedCaps = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
-          cleanupRequestCaps(retainedCaps);
-          setContextResultsFromPayload(context, action.payloadBytes, action.payloadCaps);
-          return {kj::READY_NOW, false};
-        }
-
-        if (action.kind == LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
-          auto targetIt = runtime_.targets_.find(action.target);
-          if (targetIt == runtime_.targets_.end()) {
-            throw std::runtime_error(
-                "unknown RPC async-call target capability id from Lean handler: " +
-                std::to_string(action.target));
-          }
-          auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
-          auto requestBuilder =
-              targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, {});
-          runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
-          cleanupRequestCaps({});
-
-          auto promiseAndPipeline = requestBuilder.send();
-          context.setPipeline(promiseAndPipeline.noop());
-          auto completion = promiseAndPipeline.then(
-              [this, context = kj::mv(context)](
-                  capnp::Response<capnp::AnyPointer>&& response) mutable {
-                setContextResultsFromResponse(context, response);
-              });
-          return {kj::mv(completion), false};
-        }
-
-        if (action.kind == LeanAdvancedHandlerAction::Kind::TAIL_CALL) {
-          auto targetIt = runtime_.targets_.find(action.target);
-          if (targetIt == runtime_.targets_.end()) {
-            throw std::runtime_error(
-                "unknown RPC tail-call target capability id from Lean advanced handler: " +
-                std::to_string(action.target));
-          }
-          auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
-          auto requestBuilder =
-              targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, {});
-          runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
-          cleanupRequestCaps({});
-          return {context.tailCall(kj::mv(requestBuilder)), false};
-        }
-
-        cleanupRequestCaps({});
-        throwRemoteException(action.message, action.detailBytes);
+        return dispatchDecodedAction(kj::mv(action), kj::mv(context), cleanupState);
       } catch (...) {
-        cleanupRequestCaps({});
+        cleanupRequestCaps(cleanupState, {});
         throw;
       }
     }
 
    private:
+    struct RequestCapCleanupState {
+      explicit RequestCapCleanupState(std::vector<uint32_t>&& capIds)
+          : requestCapIds(kj::mv(capIds)) {}
+      std::vector<uint32_t> requestCapIds;
+      bool done = false;
+    };
+
+    void cleanupRequestCaps(const std::shared_ptr<RequestCapCleanupState>& cleanupState,
+                            const std::vector<uint32_t>& retainedCaps) {
+      if (cleanupState->done) {
+        return;
+      }
+      kj::HashSet<uint32_t> retained;
+      retained.reserve(retainedCaps.size());
+      for (auto capId : retainedCaps) {
+        if (capId != 0) {
+          retained.insert(capId);
+        }
+      }
+      for (auto capId : cleanupState->requestCapIds) {
+        if (!retained.contains(capId)) {
+          runtime_.dropTargetIfPresent(capId);
+        }
+      }
+      cleanupState->done = true;
+    }
+
+    kj::Promise<LeanAdvancedHandlerAction> waitLeanActionTask(kj::Own<DeferredLeanTask>&& task) {
+      constexpr uint8_t kLeanTaskStateFinished = 2;
+      if (lean_io_get_task_state_core(task->task) == kLeanTaskStateFinished) {
+        auto taskResult = lean_task_get(task->task);
+        auto taskResultTag = lean_obj_tag(taskResult);
+        if (taskResultTag == 0) {
+          throw std::runtime_error("Lean RPC advanced deferred handler task returned IO error");
+        }
+        if (taskResultTag != 1) {
+          throw std::runtime_error("Lean RPC advanced deferred handler task returned invalid result");
+        }
+        auto actionObj = lean_ctor_get(taskResult, 0);
+        lean_inc(actionObj);
+        auto action = decodeAction(actionObj);
+        lean_dec(actionObj);
+        return action;
+      }
+      return kj::evalLater([this, task = kj::mv(task)]() mutable {
+        return waitLeanActionTask(kj::mv(task));
+      });
+    }
+
+    DispatchCallResult dispatchDecodedAction(
+        LeanAdvancedHandlerAction action,
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context,
+        const std::shared_ptr<RequestCapCleanupState>& cleanupState) {
+      capnp::Capability::Client::CallHints callHints;
+      callHints.noPromisePipelining = action.noPromisePipelining;
+      callHints.onlyPromisePipeline = action.onlyPromisePipeline;
+
+      if ((action.sendResultsToCaller || action.noPromisePipelining || action.onlyPromisePipeline) &&
+          action.kind != LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
+        cleanupRequestCaps(cleanupState, {});
+        throw std::runtime_error(
+            "Lean RPC advanced handler: forward options are only valid with forwardCall");
+      }
+
+      if (action.releaseParams) {
+        context.releaseParams();
+      }
+
+      if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
+        auto retainedCaps = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+        cleanupRequestCaps(cleanupState, retainedCaps);
+        setContextResultsFromPayload(context, action.payloadBytes, action.payloadCaps);
+        return {kj::READY_NOW, false, action.allowCancellation};
+      }
+
+      if (action.kind == LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
+        auto targetIt = runtime_.targets_.find(action.target);
+        if (targetIt == runtime_.targets_.end()) {
+          throw std::runtime_error(
+              "unknown RPC async-call target capability id from Lean handler: " +
+              std::to_string(action.target));
+        }
+        auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+        auto requestBuilder =
+            targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, callHints);
+        runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
+        cleanupRequestCaps(cleanupState, {});
+
+        if (action.sendResultsToCaller) {
+          return {context.tailCall(kj::mv(requestBuilder)), false, action.allowCancellation};
+        }
+        if (action.onlyPromisePipeline) {
+          throw std::runtime_error(
+              "Lean RPC advanced handler: onlyPromisePipeline requires sendResultsTo.caller");
+        }
+
+        auto promiseAndPipeline = requestBuilder.send();
+        context.setPipeline(promiseAndPipeline.noop());
+        auto completion = promiseAndPipeline.then(
+            [this, context = kj::mv(context)](
+                capnp::Response<capnp::AnyPointer>&& response) mutable {
+              setContextResultsFromResponse(context, response);
+            });
+        return {kj::mv(completion), false, action.allowCancellation};
+      }
+
+      if (action.kind == LeanAdvancedHandlerAction::Kind::TAIL_CALL) {
+        auto targetIt = runtime_.targets_.find(action.target);
+        if (targetIt == runtime_.targets_.end()) {
+          throw std::runtime_error(
+              "unknown RPC tail-call target capability id from Lean advanced handler: " +
+              std::to_string(action.target));
+        }
+        auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+        auto requestBuilder =
+            targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, callHints);
+        runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
+        cleanupRequestCaps(cleanupState, {});
+        return {context.tailCall(kj::mv(requestBuilder)), false, action.allowCancellation};
+      }
+
+      if (action.kind == LeanAdvancedHandlerAction::Kind::THROW_REMOTE) {
+        cleanupRequestCaps(cleanupState, {});
+        throwRemoteException(action.message, action.detailBytes);
+      }
+
+      auto completion = waitLeanActionTask(kj::mv(action.deferredTask)).then(
+          [this, context = kj::mv(context), cleanupState, earlyAllowCancellation = action.allowCancellation](
+              LeanAdvancedHandlerAction nextAction) mutable -> kj::Promise<void> {
+            if (nextAction.allowCancellation && !earlyAllowCancellation) {
+              cleanupRequestCaps(cleanupState, {});
+              throw std::runtime_error(
+                  "Lean RPC advanced deferred handler: allowCancellation must be set before defer");
+            }
+            auto nextResult = dispatchDecodedAction(kj::mv(nextAction), kj::mv(context), cleanupState);
+            return kj::mv(nextResult.promise).then(
+                []() {},
+                [this, cleanupState](kj::Exception&& e) {
+                  cleanupRequestCaps(cleanupState, {});
+                  throw kj::mv(e);
+                });
+          },
+          [this, cleanupState](kj::Exception&& e) -> kj::Promise<void> {
+            cleanupRequestCaps(cleanupState, {});
+            return kj::mv(e);
+          });
+      return {kj::mv(completion), false, action.allowCancellation};
+    }
+
     static LeanAdvancedHandlerAction decodeAction(lean_object* actionObj) {
       LeanAdvancedHandlerAction action;
+      constexpr unsigned kRawAdvancedWrapperScalarBase = sizeof(void*) * 1;
+      constexpr unsigned kRawAdvancedControlReleaseOffset = kRawAdvancedWrapperScalarBase;
+      constexpr unsigned kRawAdvancedControlAllowOffset = kRawAdvancedWrapperScalarBase + 1;
+      constexpr unsigned kRawAdvancedHintsNoPromiseOffset = kRawAdvancedWrapperScalarBase;
+      constexpr unsigned kRawAdvancedHintsOnlyPipelineOffset = kRawAdvancedWrapperScalarBase + 1;
       constexpr unsigned kRawAdvancedScalarBase = sizeof(void*) * 2;
       constexpr unsigned kRawAdvancedInterfaceIdOffset = kRawAdvancedScalarBase;
       constexpr unsigned kRawAdvancedTargetOffset = kRawAdvancedScalarBase + 8;
       constexpr unsigned kRawAdvancedMethodIdOffset = kRawAdvancedScalarBase + 12;
 
-      auto tag = lean_obj_tag(actionObj);
-      switch (tag) {
-        case 0: {
-          action.kind = LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD;
-          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
-          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
-          return action;
+      while (true) {
+        auto tag = lean_obj_tag(actionObj);
+        if (tag == 4) {
+          if (lean_ctor_get_uint8(actionObj, kRawAdvancedControlReleaseOffset) != 0) {
+            action.releaseParams = true;
+          }
+          if (lean_ctor_get_uint8(actionObj, kRawAdvancedControlAllowOffset) != 0) {
+            action.allowCancellation = true;
+          }
+          actionObj = lean_ctor_get(actionObj, 0);
+          continue;
         }
-        case 1: {
-          action.kind = LeanAdvancedHandlerAction::Kind::ASYNC_CALL;
-          action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
-          action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
-          action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
-          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
-          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
-          return action;
+        if (tag == 6) {
+          action.sendResultsToCaller = true;
+          actionObj = lean_ctor_get(actionObj, 0);
+          continue;
         }
-        case 2: {
-          action.kind = LeanAdvancedHandlerAction::Kind::TAIL_CALL;
-          action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
-          action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
-          action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
-          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
-          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
-          return action;
+        if (tag == 7) {
+          if (lean_ctor_get_uint8(actionObj, kRawAdvancedHintsNoPromiseOffset) != 0) {
+            action.noPromisePipelining = true;
+          }
+          if (lean_ctor_get_uint8(actionObj, kRawAdvancedHintsOnlyPipelineOffset) != 0) {
+            action.onlyPromisePipeline = true;
+          }
+          actionObj = lean_ctor_get(actionObj, 0);
+          continue;
         }
-        case 3: {
-          action.kind = LeanAdvancedHandlerAction::Kind::THROW_REMOTE;
-          action.message = std::string(lean_string_cstr(lean_ctor_get(actionObj, 0)));
-          action.detailBytes = copyByteArray(lean_ctor_get(actionObj, 1));
-          return action;
+
+        switch (tag) {
+          case 0: {
+            action.kind = LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD;
+            action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+            action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+            return action;
+          }
+          case 1: {
+            action.kind = LeanAdvancedHandlerAction::Kind::ASYNC_CALL;
+            action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
+            action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
+            action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
+            action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+            action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+            return action;
+          }
+          case 2: {
+            action.kind = LeanAdvancedHandlerAction::Kind::TAIL_CALL;
+            action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
+            action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
+            action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
+            action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+            action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+            return action;
+          }
+          case 3: {
+            action.kind = LeanAdvancedHandlerAction::Kind::THROW_REMOTE;
+            action.message = std::string(lean_string_cstr(lean_ctor_get(actionObj, 0)));
+            action.detailBytes = copyByteArray(lean_ctor_get(actionObj, 1));
+            return action;
+          }
+          case 5: {
+            action.kind = LeanAdvancedHandlerAction::Kind::AWAIT_TASK;
+            auto taskObj = lean_ctor_get(actionObj, 0);
+            lean_inc(taskObj);
+            action.deferredTask = kj::heap<DeferredLeanTask>(taskObj);
+            return action;
+          }
+          default:
+            throw std::runtime_error("unknown Lean RPC advanced handler result tag");
         }
-        default:
-          throw std::runtime_error("unknown Lean RPC advanced handler result tag");
       }
     }
 
