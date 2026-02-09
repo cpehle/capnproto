@@ -18,6 +18,17 @@ private def mkPayload : ByteArray :=
     |>.push (UInt8.ofNat 107)
     |>.push (UInt8.ofNat 106)
 
+private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
+    (server : Capnp.KjAsync.HttpServer) (attempts : Nat := 400) :
+    IO Capnp.KjAsync.HttpServerRequest := do
+  if attempts == 0 then
+    throw (IO.userError "timed out waiting for HTTP server request")
+  match (← runtime.httpServerPollRequest? server) with
+  | some request => pure request
+  | none =>
+    runtime.sleepMillis (UInt32.ofNat 5)
+    waitForHttpServerRequest runtime server (attempts - 1)
+
 @[test]
 def testKjAsyncRuntimeLifecycle : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
@@ -64,6 +75,46 @@ def testKjAsyncAwaitAsTask : IO Unit := do
     | Except.ok () => pure ()
     | Except.error err =>
       throw (IO.userError s!"awaitAsTask failed: {err}")
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncSharedAsyncHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let sleepPromise ← runtime.sleepMillisStart (UInt32.ofNat 10)
+    let sleepTask ← Capnp.Async.awaitAsTask sleepPromise
+    let sleepTaskResult ← IO.wait sleepTask
+    match sleepTaskResult with
+    | .ok () => pure ()
+    | .error err =>
+        throw (IO.userError s!"shared awaitAsTask failed: {err}")
+
+    let sleepPromise2 ← runtime.sleepMillisStart (UInt32.ofNat 10)
+    let sleepIoPromise ← Capnp.Async.toIOPromise sleepPromise2
+    let sleepIoResult? ← IO.wait sleepIoPromise.result?
+    match sleepIoResult? with
+    | some (.ok ()) => pure ()
+    | some (.error err) =>
+        throw (IO.userError s!"shared toIOPromise failed: {err}")
+    | none =>
+        throw (IO.userError "shared toIOPromise dropped without a result")
+
+    let (left, right) ← runtime.newTwoWayPipe
+    try
+      let payload := mkPayload
+      let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      let readTask ← Capnp.Async.awaitAsTask readPromise
+      left.write payload
+      let readTaskResult ← IO.wait readTask
+      match readTaskResult with
+      | .ok received =>
+          assertEqual received payload
+      | .error err =>
+          throw (IO.userError s!"shared typed awaitAsTask failed: {err}")
+    finally
+      left.release
+      right.release
   finally
     runtime.shutdown
 
@@ -357,5 +408,76 @@ def testKjAsyncWebSocketReceiveCancel : IO Unit := do
         pure true
     assertEqual canceled true
     right.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestHeaders : Array Capnp.KjAsync.HttpHeader := #[
+      { name := "x-lean-client", value := "1" }
+    ]
+    let requestBody := mkPayload
+    let responsePromise ← runtime.httpRequestStartWithHeaders
+      .post "127.0.0.1" "/lean-http" requestHeaders requestBody server.boundPort
+
+    let request ← waitForHttpServerRequest runtime server
+    assertTrue (request.method == .post) "expected POST request method"
+    assertEqual request.path "/lean-http"
+    assertEqual request.body requestBody
+
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 201) "Created"
+      #[{ name := "x-lean-server", value := "ok" }] requestBody
+
+    let response ← runtime.httpResponsePromiseAwaitWithHeaders responsePromise
+    assertEqual response.status (UInt32.ofNat 201)
+    assertEqual response.statusText "Created"
+    assertEqual response.body requestBody
+    assertTrue
+      (response.headers.any
+        (fun h => h.name == "x-lean-server" && h.value == "ok"))
+      "expected response header x-lean-server"
+
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncWebSocketServerAccept : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let connectPromise ←
+      runtime.webSocketConnectStartWithHeaders "127.0.0.1" "/lean-ws"
+        #[{ name := "x-lean-ws", value := "1" }] server.boundPort
+
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.webSocketRequested true
+    assertEqual request.path "/lean-ws"
+
+    let serverWs ← runtime.httpServerRespondWebSocket server request.requestId
+    let clientWs ← connectPromise.await
+
+    (← clientWs.sendTextStart "hello-from-client").await
+    let serverMsg ← serverWs.receive
+    match serverMsg with
+    | .text value =>
+      assertEqual value "hello-from-client"
+    | _ =>
+      throw (IO.userError "expected websocket text message on server side")
+
+    (← serverWs.sendTextStart "hello-from-server").await
+    let clientMsg ← clientWs.receive
+    match clientMsg with
+    | .text value =>
+      assertEqual value "hello-from-server"
+    | _ =>
+      throw (IO.userError "expected websocket text message on client side")
+
+    clientWs.release
+    serverWs.release
+    server.release
   finally
     runtime.shutdown
