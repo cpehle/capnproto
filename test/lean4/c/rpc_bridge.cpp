@@ -28,6 +28,7 @@
 #include <variant>
 #include <vector>
 #if !defined(_WIN32)
+#include <sys/socket.h>
 #include <unistd.h>
 #endif
 
@@ -139,6 +140,36 @@ struct RawCallResult {
   std::vector<uint8_t> response;
   std::vector<uint8_t> responseCaps;
 };
+
+struct LeanAdvancedHandlerAction {
+  enum class Kind : uint8_t {
+    RETURN_PAYLOAD = 0,
+    ASYNC_CALL = 1,
+    TAIL_CALL = 2,
+    THROW_REMOTE = 3
+  };
+
+  Kind kind = Kind::RETURN_PAYLOAD;
+  uint32_t target = 0;
+  uint64_t interfaceId = 0;
+  uint16_t methodId = 0;
+  std::vector<uint8_t> payloadBytes;
+  std::vector<uint8_t> payloadCaps;
+  std::string message;
+  std::vector<uint8_t> detailBytes;
+};
+
+[[noreturn]] void throwRemoteException(const std::string& message,
+                                       const std::vector<uint8_t>& detailBytes) {
+  auto ex = kj::Exception(
+      kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str(message.c_str()));
+  if (!detailBytes.empty()) {
+    auto copy = kj::heapArray<kj::byte>(detailBytes.size());
+    std::memcpy(copy.begin(), detailBytes.data(), detailBytes.size());
+    ex.setDetail(1, kj::mv(copy));
+  }
+  throw kj::mv(ex);
+}
 
 class OneShotCaptureServer final : public capnp::Capability::Server {
  public:
@@ -862,6 +893,21 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueRegisterLoopbackTarget(
+      uint32_t bootstrapTarget) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedRegisterLoopbackBootstrapTarget{bootstrapTarget, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueRegisterHandlerTarget(
       b_lean_obj_arg handler) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
@@ -876,6 +922,25 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedRegisterHandlerTarget{handlerObj, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueRegisterAdvancedHandlerTarget(
+      b_lean_obj_arg handler) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    auto* handlerObj = const_cast<lean_object*>(handler);
+    lean_mark_mt(handlerObj);
+    lean_inc(handlerObj);
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        lean_dec(handlerObj);
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedRegisterAdvancedHandlerTarget{handlerObj, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -995,6 +1060,20 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedConnectTargetStart{std::move(address), portHint, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueConnectTargetFd(uint32_t fd) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectTargetFd{fd, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -1230,6 +1309,20 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedServerAcceptStart{serverId, listenerId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueServerAcceptFd(uint32_t serverId, uint32_t fd) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedServerAcceptFd{serverId, fd, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -1512,7 +1605,17 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedRegisterLoopbackBootstrapTarget {
+    uint32_t bootstrapTarget;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedRegisterHandlerTarget {
+    lean_object* handler;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedRegisterAdvancedHandlerTarget {
     lean_object* handler;
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
@@ -1556,6 +1659,11 @@ class RuntimeLoop {
   struct QueuedConnectTargetStart {
     std::string address;
     uint32_t portHint;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedConnectTargetFd {
+    uint32_t fd;
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
@@ -1647,6 +1755,12 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedServerAcceptFd {
+    uint32_t serverId;
+    uint32_t fd;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   struct QueuedServerDrain {
     uint32_t serverId;
     std::shared_ptr<UnitCompletion> completion;
@@ -1709,18 +1823,21 @@ class RuntimeLoop {
                    QueuedEnableTraceEncoder,
                    QueuedDisableTraceEncoder, QueuedSetTraceEncoder, QueuedCppCallWithAccept,
                    QueuedCppCallPipelinedWithAccept,
-                   QueuedRegisterLoopbackTarget, QueuedRegisterHandlerTarget,
+                   QueuedRegisterLoopbackTarget, QueuedRegisterLoopbackBootstrapTarget,
+                   QueuedRegisterHandlerTarget, QueuedRegisterAdvancedHandlerTarget,
                    QueuedRegisterTailCallHandlerTarget,
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
                    QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
-                   QueuedConnectTarget, QueuedConnectTargetStart, QueuedListenLoopback,
+                   QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
+                   QueuedListenLoopback,
                    QueuedAcceptLoopback, QueuedReleaseListener, QueuedNewClient,
                    QueuedNewClientStart, QueuedReleaseClient, QueuedClientBootstrap,
                    QueuedClientOnDisconnect, QueuedClientOnDisconnectStart,
                    QueuedClientSetFlowLimit,
                    QueuedNewServer, QueuedNewServerWithBootstrapFactory,
                    QueuedReleaseServer, QueuedServerListen, QueuedServerAccept,
-                   QueuedServerAcceptStart, QueuedServerDrain, QueuedServerDrainStart,
+                   QueuedServerAcceptStart, QueuedServerAcceptFd,
+                   QueuedServerDrain, QueuedServerDrainStart,
                    QueuedClientQueueSize, QueuedClientQueueCount,
                    QueuedClientOutgoingWaitNanos, QueuedAwaitRegisterPromise,
                    QueuedCancelRegisterPromise, QueuedReleaseRegisterPromise,
@@ -2080,6 +2197,227 @@ class RuntimeLoop {
     lean_object* handler_;
   };
 
+  class LeanAdvancedCapabilityServer final : public capnp::Capability::Server {
+   public:
+    LeanAdvancedCapabilityServer(RuntimeLoop& runtime,
+                                 std::shared_ptr<std::atomic<uint32_t>> targetId,
+                                 lean_object* handler)
+        : runtime_(runtime), targetId_(kj::mv(targetId)), handler_(handler) {
+      lean_inc(handler_);
+    }
+
+    ~LeanAdvancedCapabilityServer() { lean_dec(handler_); }
+
+    DispatchCallResult dispatchCall(
+        uint64_t interfaceId, uint16_t methodId,
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
+      capnp::MallocMessageBuilder requestMessage;
+      capnp::BuilderCapabilityTable requestCapTable;
+      requestCapTable
+          .imbue(requestMessage.getRoot<capnp::AnyPointer>())
+          .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+
+      auto requestWords = capnp::messageToFlatArray(requestMessage);
+      auto requestBytes = requestWords.asBytes();
+      auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
+                                        requestBytes.size());
+
+      std::vector<uint8_t> requestCaps;
+      std::vector<uint32_t> requestCapIds;
+      auto requestCapEntries = requestCapTable.getTable();
+      requestCaps.reserve(requestCapEntries.size() * 4);
+      requestCapIds.reserve(requestCapEntries.size());
+      for (auto& maybeHook : requestCapEntries) {
+        KJ_IF_SOME(hook, maybeHook) {
+          auto cap = capnp::Capability::Client(hook->addRef());
+          auto capId = runtime_.addTarget(kj::mv(cap));
+          appendUint32Le(requestCaps, capId);
+          requestCapIds.push_back(capId);
+        } else {
+          appendUint32Le(requestCaps, 0);
+        }
+      }
+      const auto* requestCapsPtr = requestCaps.empty() ? nullptr : requestCaps.data();
+      auto requestCapsObj = mkByteArrayCopy(requestCapsPtr, requestCaps.size());
+
+      auto cleanupRequestCaps = [&](const std::vector<uint32_t>& retainedCaps) {
+        kj::HashSet<uint32_t> retained;
+        retained.reserve(retainedCaps.size());
+        for (auto capId : retainedCaps) {
+          if (capId != 0) {
+            retained.insert(capId);
+          }
+        }
+        for (auto capId : requestCapIds) {
+          if (!retained.contains(capId)) {
+            runtime_.dropTargetIfPresent(capId);
+          }
+        }
+      };
+
+      auto targetId = targetId_->load(std::memory_order_relaxed);
+      lean_inc(handler_);
+      auto ioResult = lean_apply_6(handler_, lean_box_uint32(targetId), lean_box_uint64(interfaceId),
+                                   lean_box(static_cast<size_t>(methodId)), requestObj,
+                                   requestCapsObj, lean_box(0));
+      if (lean_io_result_is_error(ioResult)) {
+        cleanupRequestCaps({});
+        lean_dec(ioResult);
+        throw std::runtime_error("Lean RPC advanced handler returned IO error");
+      }
+
+      auto actionObj = lean_io_result_take_value(ioResult);
+      auto action = decodeAction(actionObj);
+      lean_dec(actionObj);
+
+      try {
+        if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
+          auto retainedCaps = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+          cleanupRequestCaps(retainedCaps);
+          setContextResultsFromPayload(context, action.payloadBytes, action.payloadCaps);
+          return {kj::READY_NOW, false};
+        }
+
+        if (action.kind == LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
+          auto targetIt = runtime_.targets_.find(action.target);
+          if (targetIt == runtime_.targets_.end()) {
+            throw std::runtime_error(
+                "unknown RPC async-call target capability id from Lean handler: " +
+                std::to_string(action.target));
+          }
+          auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+          auto requestBuilder =
+              targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, {});
+          runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
+          cleanupRequestCaps({});
+
+          auto promiseAndPipeline = requestBuilder.send();
+          context.setPipeline(promiseAndPipeline.noop());
+          auto completion = promiseAndPipeline.then(
+              [this, context = kj::mv(context)](
+                  capnp::Response<capnp::AnyPointer>&& response) mutable {
+                setContextResultsFromResponse(context, response);
+              });
+          return {kj::mv(completion), false};
+        }
+
+        if (action.kind == LeanAdvancedHandlerAction::Kind::TAIL_CALL) {
+          auto targetIt = runtime_.targets_.find(action.target);
+          if (targetIt == runtime_.targets_.end()) {
+            throw std::runtime_error(
+                "unknown RPC tail-call target capability id from Lean advanced handler: " +
+                std::to_string(action.target));
+          }
+          auto requestCapIdsOut = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+          auto requestBuilder =
+              targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, {});
+          runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
+          cleanupRequestCaps({});
+          return {context.tailCall(kj::mv(requestBuilder)), false};
+        }
+
+        cleanupRequestCaps({});
+        throwRemoteException(action.message, action.detailBytes);
+      } catch (...) {
+        cleanupRequestCaps({});
+        throw;
+      }
+    }
+
+   private:
+    static LeanAdvancedHandlerAction decodeAction(lean_object* actionObj) {
+      LeanAdvancedHandlerAction action;
+      constexpr unsigned kRawAdvancedScalarBase = sizeof(void*) * 2;
+      constexpr unsigned kRawAdvancedInterfaceIdOffset = kRawAdvancedScalarBase;
+      constexpr unsigned kRawAdvancedTargetOffset = kRawAdvancedScalarBase + 8;
+      constexpr unsigned kRawAdvancedMethodIdOffset = kRawAdvancedScalarBase + 12;
+
+      auto tag = lean_obj_tag(actionObj);
+      switch (tag) {
+        case 0: {
+          action.kind = LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD;
+          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+          return action;
+        }
+        case 1: {
+          action.kind = LeanAdvancedHandlerAction::Kind::ASYNC_CALL;
+          action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
+          action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
+          action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
+          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+          return action;
+        }
+        case 2: {
+          action.kind = LeanAdvancedHandlerAction::Kind::TAIL_CALL;
+          action.interfaceId = lean_ctor_get_uint64(actionObj, kRawAdvancedInterfaceIdOffset);
+          action.target = lean_ctor_get_uint32(actionObj, kRawAdvancedTargetOffset);
+          action.methodId = lean_ctor_get_uint16(actionObj, kRawAdvancedMethodIdOffset);
+          action.payloadBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+          action.payloadCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+          return action;
+        }
+        case 3: {
+          action.kind = LeanAdvancedHandlerAction::Kind::THROW_REMOTE;
+          action.message = std::string(lean_string_cstr(lean_ctor_get(actionObj, 0)));
+          action.detailBytes = copyByteArray(lean_ctor_get(actionObj, 1));
+          return action;
+        }
+        default:
+          throw std::runtime_error("unknown Lean RPC advanced handler result tag");
+      }
+    }
+
+    void setContextResultsFromPayload(
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+        const std::vector<uint8_t>& responseBytesCopy,
+        const std::vector<uint8_t>& responseCapsCopy) {
+      kj::ArrayPtr<const kj::byte> responseBytes(
+          reinterpret_cast<const kj::byte*>(responseBytesCopy.data()), responseBytesCopy.size());
+      kj::ArrayInputStream input(responseBytes);
+      capnp::ReaderOptions options;
+      options.traversalLimitInWords = 1ull << 30;
+      capnp::InputStreamMessageReader reader(input, options);
+      auto responseRoot = reader.getRoot<capnp::AnyPointer>();
+
+      auto responseCapIds = decodeCapTable(responseCapsCopy.data(), responseCapsCopy.size());
+      if (responseCapIds.empty()) {
+        context.getResults().setAs<capnp::AnyPointer>(responseRoot);
+      } else {
+        auto capTableBuilder =
+            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
+        for (auto capId : responseCapIds) {
+          if (capId == 0) {
+            capTableBuilder.add(kj::none);
+            continue;
+          }
+          auto capIt = runtime_.targets_.find(capId);
+          if (capIt == runtime_.targets_.end()) {
+            throw std::runtime_error(
+                "unknown RPC response capability id from Lean advanced handler: " +
+                std::to_string(capId));
+          }
+          capnp::Capability::Client cap = capIt->second;
+          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
+        }
+        capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
+        context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
+      }
+    }
+
+    void setContextResultsFromResponse(
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+        capnp::Response<capnp::AnyPointer>& response) {
+      auto raw = runtime_.serializeResponse(response);
+      setContextResultsFromPayload(context, raw.response, raw.responseCaps);
+    }
+
+    RuntimeLoop& runtime_;
+    std::shared_ptr<std::atomic<uint32_t>> targetId_;
+    lean_object* handler_;
+  };
+
   uint32_t addTarget(capnp::Capability::Client cap) {
     uint32_t targetId = nextTargetId_++;
     while (targets_.find(targetId) != targets_.end()) {
@@ -2173,6 +2511,14 @@ class RuntimeLoop {
   uint32_t registerHandlerTarget(lean_object* handler) {
     auto targetIdRef = std::make_shared<std::atomic<uint32_t>>(0);
     auto server = kj::heap<LeanCapabilityServer>(*this, targetIdRef, handler);
+    auto targetId = addTarget(capnp::Capability::Client(kj::mv(server)));
+    targetIdRef->store(targetId, std::memory_order_relaxed);
+    return targetId;
+  }
+
+  uint32_t registerAdvancedHandlerTarget(lean_object* handler) {
+    auto targetIdRef = std::make_shared<std::atomic<uint32_t>>(0);
+    auto server = kj::heap<LeanAdvancedCapabilityServer>(*this, targetIdRef, handler);
     auto targetId = addTarget(capnp::Capability::Client(kj::mv(server)));
     targetIdRef->store(targetId, std::memory_order_relaxed);
     return targetId;
@@ -2749,6 +3095,47 @@ class RuntimeLoop {
     return addRegisterPromise(PendingRegisterPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
+  uint32_t connectTargetFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("connectFd is not supported on Windows");
+#else
+    constexpr uint32_t maxInt = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxInt) {
+      throw std::runtime_error("fd exceeds platform int range");
+    }
+    int fdCopy = dup(static_cast<int>(fd));
+    if (fdCopy < 0) {
+      throw std::runtime_error("dup() failed while connecting RPC target fd");
+    }
+    auto stream = lowLevelProvider.wrapUnixSocketFd(
+        kj::LowLevelAsyncIoProvider::OwnFd{fdCopy});
+    auto network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *stream, maxFdsPerMessage_, capnp::rpc::twoparty::Side::CLIENT);
+    auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
+    applyTraceEncoder(*rpcSystem);
+
+    capnp::word scratch[4];
+    memset(&scratch, 0, sizeof(scratch));
+    capnp::MallocMessageBuilder message(scratch);
+    auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
+    vatId.setSide(capnp::rpc::twoparty::Side::SERVER);
+    auto cap = rpcSystem->bootstrap(vatId);
+
+    auto peer = kj::heap<NetworkClientPeer>();
+    peer->stream = kj::mv(stream);
+    peer->network = kj::mv(network);
+    peer->rpcSystem = kj::mv(rpcSystem);
+
+    auto targetId = addTarget(kj::mv(cap));
+    networkClientPeers_.emplace(targetId, kj::mv(peer));
+    networkPeerOwnerByTarget_.emplace(targetId, targetId);
+    networkPeerOwnerRefCount_.emplace(targetId, 1);
+    return targetId;
+#endif
+  }
+
   uint32_t newClient(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
                      const std::string& address, uint32_t portHint) {
     auto peer = connectPeer(ioProvider, waitScope, address, portHint);
@@ -3004,6 +3391,34 @@ class RuntimeLoop {
     return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
+  void serverAcceptFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t serverId,
+                      uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)serverId;
+    (void)fd;
+    throw std::runtime_error("serverAcceptFd is not supported on Windows");
+#else
+    auto serverIt = servers_.find(serverId);
+    if (serverIt == servers_.end()) {
+      throw std::runtime_error("unknown RPC server id: " + std::to_string(serverId));
+    }
+
+    constexpr uint32_t maxInt = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxInt) {
+      throw std::runtime_error("fd exceeds platform int range");
+    }
+    int fdCopy = dup(static_cast<int>(fd));
+    if (fdCopy < 0) {
+      throw std::runtime_error("dup() failed while accepting RPC server fd");
+    }
+    auto connection = lowLevelProvider.wrapUnixSocketFd(
+        kj::LowLevelAsyncIoProvider::OwnFd{fdCopy});
+    auto peer = makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection));
+    serverIt->second->peers.add(kj::mv(peer));
+#endif
+  }
+
   void serverDrain(kj::WaitScope& waitScope, uint32_t serverId) {
     auto serverIt = servers_.find(serverId);
     if (serverIt == servers_.end()) {
@@ -3028,13 +3443,14 @@ class RuntimeLoop {
     return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
-  uint32_t registerLoopbackTarget(kj::AsyncIoProvider& ioProvider) {
+  uint32_t registerLoopbackTarget(kj::AsyncIoProvider& ioProvider,
+                                  capnp::Capability::Client bootstrap) {
     auto pipe = ioProvider.newCapabilityPipe();
     auto serverStream = kj::mv(pipe.ends[0]);
     auto serverNetwork = kj::heap<capnp::TwoPartyVatNetwork>(
         *serverStream, 2, capnp::rpc::twoparty::Side::SERVER);
-    auto serverRpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcServer(
-        *serverNetwork, capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>())));
+    auto serverRpcSystem =
+        kj::heap<TwoPartyRpcSystem>(capnp::makeRpcServer(*serverNetwork, kj::mv(bootstrap)));
     applyTraceEncoder(*serverRpcSystem);
 
     auto client = kj::heap<capnp::TwoPartyClient>(*pipe.ends[1], 2);
@@ -3052,6 +3468,20 @@ class RuntimeLoop {
     loopbackPeerOwnerByTarget_.emplace(targetId, targetId);
     loopbackPeerOwnerRefCount_.emplace(targetId, 1);
     return targetId;
+  }
+
+  uint32_t registerLoopbackTarget(kj::AsyncIoProvider& ioProvider) {
+    return registerLoopbackTarget(
+        ioProvider, capnp::Capability::Client(kj::heap<LoopbackCapabilityServer>()));
+  }
+
+  uint32_t registerLoopbackTarget(kj::AsyncIoProvider& ioProvider, uint32_t bootstrapTarget) {
+    auto targetIt = targets_.find(bootstrapTarget);
+    if (targetIt == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " +
+                               std::to_string(bootstrapTarget));
+    }
+    return registerLoopbackTarget(ioProvider, targetIt->second);
   }
 
   void run() {
@@ -3298,6 +3728,20 @@ class RuntimeLoop {
             completeRegisterFailure(registration.completion,
                                     "unknown exception in capnp_lean_rpc_runtime_register_echo_target");
           }
+        } else if (std::holds_alternative<QueuedRegisterLoopbackBootstrapTarget>(op)) {
+          auto registration = std::get<QueuedRegisterLoopbackBootstrapTarget>(std::move(op));
+          try {
+            auto targetId = registerLoopbackTarget(*io.provider, registration.bootstrapTarget);
+            completeRegisterSuccess(registration.completion, targetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(registration.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(registration.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                registration.completion,
+                "unknown exception in capnp_lean_rpc_runtime_register_loopback_target");
+          }
         } else if (std::holds_alternative<QueuedRegisterHandlerTarget>(op)) {
           auto registration = std::get<QueuedRegisterHandlerTarget>(std::move(op));
           try {
@@ -3311,6 +3755,21 @@ class RuntimeLoop {
             completeRegisterFailure(
                 registration.completion,
                 "unknown exception in capnp_lean_rpc_runtime_register_handler_target");
+          }
+          lean_dec(registration.handler);
+        } else if (std::holds_alternative<QueuedRegisterAdvancedHandlerTarget>(op)) {
+          auto registration = std::get<QueuedRegisterAdvancedHandlerTarget>(std::move(op));
+          try {
+            auto targetId = registerAdvancedHandlerTarget(registration.handler);
+            completeRegisterSuccess(registration.completion, targetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(registration.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(registration.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                registration.completion,
+                "unknown exception in capnp_lean_rpc_runtime_register_advanced_handler_target");
           }
           lean_dec(registration.handler);
         } else if (std::holds_alternative<QueuedRegisterTailCallHandlerTarget>(op)) {
@@ -3422,6 +3881,20 @@ class RuntimeLoop {
             completeRegisterFailure(
                 connect.completion,
                 "unknown exception in capnp_lean_rpc_runtime_connect_start");
+          }
+        } else if (std::holds_alternative<QueuedConnectTargetFd>(op)) {
+          auto connect = std::get<QueuedConnectTargetFd>(std::move(op));
+          try {
+            auto targetId = connectTargetFd(*io.lowLevelProvider, connect.fd);
+            completeRegisterSuccess(connect.completion, targetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(connect.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(connect.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                connect.completion,
+                "unknown exception in capnp_lean_rpc_runtime_connect_fd");
           }
         } else if (std::holds_alternative<QueuedListenLoopback>(op)) {
           auto listen = std::get<QueuedListenLoopback>(std::move(op));
@@ -3677,6 +4150,20 @@ class RuntimeLoop {
                 accept.completion,
                 "unknown exception in capnp_lean_rpc_runtime_server_accept_start");
           }
+        } else if (std::holds_alternative<QueuedServerAcceptFd>(op)) {
+          auto accept = std::get<QueuedServerAcceptFd>(std::move(op));
+          try {
+            serverAcceptFd(*io.lowLevelProvider, accept.serverId, accept.fd);
+            completeUnitSuccess(accept.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(accept.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(accept.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                accept.completion,
+                "unknown exception in capnp_lean_rpc_runtime_server_accept_fd");
+          }
         } else if (std::holds_alternative<QueuedServerDrain>(op)) {
           auto drain = std::get<QueuedServerDrain>(std::move(op));
           try {
@@ -3874,8 +4361,15 @@ class RuntimeLoop {
         completeFailure(std::get<QueuedCppCallPipelinedWithAccept>(op).completion, message);
       } else if (std::holds_alternative<QueuedRegisterLoopbackTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRegisterLoopbackTarget>(op).completion, message);
+      } else if (std::holds_alternative<QueuedRegisterLoopbackBootstrapTarget>(op)) {
+        completeRegisterFailure(
+            std::get<QueuedRegisterLoopbackBootstrapTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedRegisterHandlerTarget>(op)) {
         auto& registration = std::get<QueuedRegisterHandlerTarget>(op);
+        lean_dec(registration.handler);
+        completeRegisterFailure(registration.completion, message);
+      } else if (std::holds_alternative<QueuedRegisterAdvancedHandlerTarget>(op)) {
+        auto& registration = std::get<QueuedRegisterAdvancedHandlerTarget>(op);
         lean_dec(registration.handler);
         completeRegisterFailure(registration.completion, message);
       } else if (std::holds_alternative<QueuedRegisterTailCallHandlerTarget>(op)) {
@@ -3896,6 +4390,8 @@ class RuntimeLoop {
         completeRegisterFailure(std::get<QueuedConnectTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTargetStart>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTargetStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectTargetFd>(op)) {
+        completeRegisterFailure(std::get<QueuedConnectTargetFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedListenLoopback>(op)) {
         completeRegisterFailure(std::get<QueuedListenLoopback>(op).completion, message);
       } else if (std::holds_alternative<QueuedAcceptLoopback>(op)) {
@@ -3930,6 +4426,8 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedServerAccept>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerAcceptStart>(op)) {
         completeRegisterFailure(std::get<QueuedServerAcceptStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedServerAcceptFd>(op)) {
+        completeUnitFailure(std::get<QueuedServerAcceptFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerDrain>(op)) {
         completeUnitFailure(std::get<QueuedServerDrain>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerDrainStart>(op)) {
@@ -4744,6 +5242,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_connect_start(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_connect_fd(
+    uint64_t runtimeId, uint32_t fd) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueConnectTargetFd(fd);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_connect_fd");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_listen_echo(
     uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint) {
   auto runtime = getRuntime(runtimeId);
@@ -5265,6 +5789,34 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_accept_start(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_accept_fd(
+    uint64_t runtimeId, uint32_t serverId, uint32_t fd) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueServerAcceptFd(serverId, fd);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_server_accept_fd");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_drain(
     uint64_t runtimeId, uint32_t serverId) {
   auto runtime = getRuntime(runtimeId);
@@ -5395,6 +5947,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_echo_target(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_loopback_target(
+    uint64_t runtimeId, uint32_t bootstrapTarget) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueRegisterLoopbackTarget(bootstrapTarget);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_register_loopback_target");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_handler_target(
     uint64_t runtimeId, b_lean_obj_arg handler) {
   auto runtime = getRuntime(runtimeId);
@@ -5418,6 +5996,33 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_handler_targ
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_register_handler_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_advanced_handler_target(
+    uint64_t runtimeId, b_lean_obj_arg handler) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueRegisterAdvancedHandlerTarget(handler);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_register_advanced_handler_target");
   }
 }
 
@@ -5658,4 +6263,49 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_pipelined_wi
     return mkIoUserError(
         "unknown exception in capnp_lean_rpc_runtime_cpp_call_pipelined_with_accept");
   }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_new_socketpair() {
+#if defined(_WIN32)
+  return mkIoUserError("capnp_lean_rpc_test_new_socketpair is not supported on Windows");
+#else
+  try {
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+      throw std::runtime_error("socketpair() failed in capnp_lean_rpc_test_new_socketpair");
+    }
+    auto pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, lean_box_uint32(static_cast<uint32_t>(fds[0])));
+    lean_ctor_set(pair, 1, lean_box_uint32(static_cast<uint32_t>(fds[1])));
+    return lean_io_result_mk_ok(pair);
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_test_new_socketpair");
+  }
+#endif
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_close_fd(uint32_t fd) {
+#if defined(_WIN32)
+  (void)fd;
+  return mkIoUserError("capnp_lean_rpc_test_close_fd is not supported on Windows");
+#else
+  try {
+    constexpr uint32_t maxInt = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxInt) {
+      throw std::runtime_error("fd exceeds platform int range");
+    }
+    if (close(static_cast<int>(fd)) != 0) {
+      throw std::runtime_error("close() failed in capnp_lean_rpc_test_close_fd");
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_test_close_fd");
+  }
+#endif
 }

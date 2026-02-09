@@ -44,8 +44,26 @@ abbrev RawHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO (ByteArray × ByteArray)
 abbrev RawTailCallHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO UInt32
+inductive RawAdvancedHandlerResult where
+  | returnPayload (response : ByteArray) (responseCaps : ByteArray)
+  | asyncCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+      (request : ByteArray) (requestCaps : ByteArray)
+  | tailCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+      (request : ByteArray) (requestCaps : ByteArray)
+  | throwRemote (message : String) (detail : ByteArray)
+
+abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
+    IO RawAdvancedHandlerResult
 abbrev RawBootstrapFactoryCall := UInt16 -> IO UInt32
 abbrev RawTraceEncoder := String -> IO String
+
+inductive AdvancedHandlerResult where
+  | respond (payload : Payload)
+  | asyncCall (target : Client) (method : Method)
+      (payload : Payload := Capnp.emptyRpcEnvelope)
+  | tailCall (target : Client) (method : Method)
+      (payload : Payload := Capnp.emptyRpcEnvelope)
+  | throwRemote (message : String) (detail : ByteArray := ByteArray.empty)
 
 @[inline] def Payload.toBytes (payload : Payload) : ByteArray :=
   Capnp.writeMessage payload.msg
@@ -151,9 +169,16 @@ opaque ffiRuntimeRegisterEchoTargetImpl (runtime : UInt64) : IO UInt32
 opaque ffiRuntimeRegisterHandlerTargetImpl (runtime : UInt64) (handler : @& RawHandlerCall) :
     IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_register_advanced_handler_target"]
+opaque ffiRuntimeRegisterAdvancedHandlerTargetImpl
+    (runtime : UInt64) (handler : @& RawAdvancedHandlerCall) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_register_tailcall_handler_target"]
 opaque ffiRuntimeRegisterTailCallHandlerTargetImpl
     (runtime : UInt64) (handler : @& RawTailCallHandlerCall) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_register_loopback_target"]
+opaque ffiRuntimeRegisterLoopbackTargetImpl (runtime : UInt64) (bootstrap : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_register_tailcall_target"]
 opaque ffiRuntimeRegisterTailCallTargetImpl (runtime : UInt64) (target : UInt32) : IO UInt32
@@ -176,6 +201,9 @@ opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint 
 @[extern "capnp_lean_rpc_runtime_connect_start"]
 opaque ffiRuntimeConnectStartImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_connect_fd"]
+opaque ffiRuntimeConnectFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_listen_echo"]
 opaque ffiRuntimeListenEchoImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
@@ -239,6 +267,10 @@ opaque ffiRuntimeServerAcceptImpl (runtime : UInt64) (server : UInt32) (listener
 @[extern "capnp_lean_rpc_runtime_server_accept_start"]
 opaque ffiRuntimeServerAcceptStartImpl
     (runtime : UInt64) (server : UInt32) (listener : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_server_accept_fd"]
+opaque ffiRuntimeServerAcceptFdImpl
+    (runtime : UInt64) (server : UInt32) (fd : UInt32) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_server_drain"]
 opaque ffiRuntimeServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
@@ -376,6 +408,23 @@ end CapTable
     let request ← decodePayloadChecked requestBytes requestCaps
     handler target { interfaceId := interfaceId, methodId := methodId } request
 
+@[inline] private def toRawAdvancedHandlerCall
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RawAdvancedHandlerCall :=
+  fun target interfaceId methodId requestBytes requestCaps => do
+    let request ← decodePayloadChecked requestBytes requestCaps
+    let method : Method := { interfaceId := interfaceId, methodId := methodId }
+    match (← handler target method request) with
+    | .respond response =>
+        pure (.returnPayload response.toBytes (CapTable.toBytes response.capTable))
+    | .asyncCall nextTarget nextMethod nextPayload =>
+        pure (.asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
+          nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+    | .tailCall nextTarget nextMethod nextPayload =>
+        pure (.tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
+          nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+    | .throwRemote message detail =>
+        pure (.throwRemote message detail)
+
 namespace Runtime
 
 @[inline] def init : IO Runtime := do
@@ -393,9 +442,16 @@ namespace Runtime
 @[inline] def registerEchoTarget (runtime : Runtime) : IO Client :=
   ffiRuntimeRegisterEchoTargetImpl runtime.handle
 
+@[inline] def registerLoopbackTarget (runtime : Runtime) (bootstrap : Client) : IO Client :=
+  ffiRuntimeRegisterLoopbackTargetImpl runtime.handle bootstrap
+
 @[inline] def registerHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO Payload) : IO Client :=
   ffiRuntimeRegisterHandlerTargetImpl runtime.handle (toRawHandlerCall handler)
+
+@[inline] def registerAdvancedHandlerTarget (runtime : Runtime)
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : IO Client :=
+  ffiRuntimeRegisterAdvancedHandlerTargetImpl runtime.handle (toRawAdvancedHandlerCall handler)
 
 @[inline] def registerTailCallHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO Client) : IO Client :=
@@ -428,6 +484,9 @@ namespace Runtime
     runtime := runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
+
+@[inline] def connectFd (runtime : Runtime) (fd : UInt32) : IO Client :=
+  ffiRuntimeConnectFdImpl runtime.handle fd
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
@@ -648,6 +707,9 @@ namespace RuntimeServerRef
       server.runtime.handle server.handle.raw listener.raw)
   }
 
+@[inline] def acceptFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit :=
+  ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.raw fd
+
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
   ffiRuntimeServerDrainImpl server.runtime.handle server.handle.raw
 
@@ -759,9 +821,16 @@ namespace RuntimeM
 @[inline] def registerEchoTarget : RuntimeM Client := do
   Runtime.registerEchoTarget (← runtime)
 
+@[inline] def registerLoopbackTarget (bootstrap : Client) : RuntimeM Client := do
+  Runtime.registerLoopbackTarget (← runtime) bootstrap
+
 @[inline] def registerHandlerTarget
     (handler : Client -> Method -> Payload -> IO Payload) : RuntimeM Client := do
   Runtime.registerHandlerTarget (← runtime) handler
+
+@[inline] def registerAdvancedHandlerTarget
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RuntimeM Client := do
+  Runtime.registerAdvancedHandlerTarget (← runtime) handler
 
 @[inline] def registerTailCallHandlerTarget
     (handler : Client -> Method -> Payload -> IO Client) : RuntimeM Client := do
@@ -788,6 +857,9 @@ namespace RuntimeM
 @[inline] def connectStart (address : String) (portHint : UInt32 := 0) :
     RuntimeM RuntimeRegisterPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
+
+@[inline] def connectFd (fd : UInt32) : RuntimeM Client := do
+  Runtime.connectFd (← runtime) fd
 
 @[inline] def listenEcho (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
   Runtime.listenEcho (← runtime) address portHint
@@ -850,6 +922,9 @@ namespace RuntimeM
 @[inline] def serverAcceptStart (server : RuntimeServerRef) (listener : Listener) :
     RuntimeM RuntimeUnitPromiseRef := do
   server.acceptStart listener
+
+@[inline] def serverAcceptFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
+  server.acceptFd fd
 
 @[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
   server.drain
