@@ -251,3 +251,111 @@ def testKjAsyncDatagramRoundtrip : IO Unit := do
   finally
     senderRuntime.shutdown
     receiverRuntime.shutdown
+
+@[test]
+def testKjAsyncTwoWayPipeAsyncReadWritePrimitives : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newTwoWayPipe
+    let payload := mkPayload
+
+    let writePromise ← left.writeStart payload
+    let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
+    writePromise.await
+    let received ← readPromise.await
+    assertEqual received payload
+
+    let shutdownPromise ← left.shutdownWriteStart
+    shutdownPromise.await
+
+    left.release
+    right.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncDatagramAsyncPromiseRefs : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverPort? ←
+      try
+        pure (some (← receiverRuntime.datagramBind "127.0.0.1" 0))
+      catch _ =>
+        pure none
+    let senderPort? ←
+      try
+        pure (some (← senderRuntime.datagramBind "127.0.0.1" 0))
+      catch _ =>
+        pure none
+
+    match receiverPort?, senderPort? with
+    | some receiverPort, some senderPort =>
+      let receiverPortNumber ← receiverPort.getPort
+      let payload := mkPayload
+      let receivePromise ← receiverPort.receiveStart (UInt32.ofNat 1024)
+      let sendPromise ← senderPort.sendStart "127.0.0.1" payload receiverPortNumber
+
+      let sentCount ← sendPromise.await
+      assertEqual sentCount (UInt32.ofNat payload.size)
+
+      let (_source, bytes) ← receivePromise.await
+      assertEqual bytes payload
+
+      senderPort.release
+      receiverPort.release
+    | _, _ =>
+      assertTrue true "datagram async promise test skipped (bind unavailable)"
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
+
+@[test]
+def testKjAsyncWebSocketPipeAsyncSendReceive : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newWebSocketPipe
+
+    let recvText ← right.receiveStart
+    let sendText ← left.sendTextStart "lean-kjasync-text"
+    sendText.await
+    let message ← recvText.await
+    match message with
+    | .text value =>
+      assertEqual value "lean-kjasync-text"
+    | _ =>
+      throw (IO.userError "expected websocket text message")
+
+    let payload := mkPayload
+    let recvBinary ← right.receiveStart
+    let sendBinary ← left.sendBinaryStart payload
+    sendBinary.await
+    let binaryMessage ← recvBinary.await
+    match binaryMessage with
+    | .binary bytes =>
+      assertEqual bytes payload
+    | _ =>
+      throw (IO.userError "expected websocket binary message")
+
+    left.release
+    right.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncWebSocketReceiveCancel : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (_left, right) ← runtime.newWebSocketPipe
+    let receivePromise ← right.receiveStart
+    receivePromise.cancel
+    let canceled ←
+      try
+        let _ ← receivePromise.await
+        pure false
+      catch _ =>
+        pure true
+    assertEqual canceled true
+    right.release
+  finally
+    runtime.shutdown
