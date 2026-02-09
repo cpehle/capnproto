@@ -247,6 +247,21 @@ opaque ffiRuntimeClientQueueCountImpl (runtime : UInt64) (client : UInt32) : IO 
 @[extern "capnp_lean_rpc_runtime_client_outgoing_wait_nanos"]
 opaque ffiRuntimeClientOutgoingWaitNanosImpl (runtime : UInt64) (client : UInt32) : IO UInt64
 
+@[extern "capnp_lean_rpc_runtime_target_count"]
+opaque ffiRuntimeTargetCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_listener_count"]
+opaque ffiRuntimeListenerCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_client_count"]
+opaque ffiRuntimeClientCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_server_count"]
+opaque ffiRuntimeServerCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_pending_call_count"]
+opaque ffiRuntimePendingCallCountImpl (runtime : UInt64) : IO UInt64
+
 @[extern "capnp_lean_rpc_runtime_new_server"]
 opaque ffiRuntimeNewServerImpl (runtime : UInt64) (bootstrap : UInt32) : IO UInt32
 
@@ -638,6 +653,21 @@ namespace Runtime
 @[inline] def setTraceEncoder (runtime : Runtime) (encoder : RawTraceEncoder) : IO Unit :=
   ffiRuntimeSetTraceEncoderImpl runtime.handle encoder
 
+@[inline] def targetCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeTargetCountImpl runtime.handle
+
+@[inline] def listenerCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeListenerCountImpl runtime.handle
+
+@[inline] def clientCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeClientCountImpl runtime.handle
+
+@[inline] def serverCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeServerCountImpl runtime.handle
+
+@[inline] def pendingCallCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimePendingCallCountImpl runtime.handle
+
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
   try
@@ -908,6 +938,21 @@ namespace RuntimeM
 
 @[inline] def clientOutgoingWaitNanos (client : RuntimeClientRef) : RuntimeM UInt64 := do
   client.outgoingWaitNanos
+
+@[inline] def targetCount : RuntimeM UInt64 := do
+  Runtime.targetCount (← runtime)
+
+@[inline] def listenerCount : RuntimeM UInt64 := do
+  Runtime.listenerCount (← runtime)
+
+@[inline] def clientCount : RuntimeM UInt64 := do
+  Runtime.clientCount (← runtime)
+
+@[inline] def serverCount : RuntimeM UInt64 := do
+  Runtime.serverCount (← runtime)
+
+@[inline] def pendingCallCount : RuntimeM UInt64 := do
+  Runtime.pendingCallCount (← runtime)
 
 @[inline] def serverRelease (server : RuntimeServerRef) : RuntimeM Unit := do
   server.release

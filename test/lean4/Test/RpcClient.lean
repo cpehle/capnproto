@@ -720,6 +720,65 @@ def testRuntimeMClientServerLifecycle : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeResourceCounts : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+    assertEqual (← runtime.listenerCount) (UInt64.ofNat 0)
+    assertEqual (← runtime.clientCount) (UInt64.ofNat 0)
+    assertEqual (← runtime.serverCount) (UInt64.ofNat 0)
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+
+    let bootstrap ← runtime.registerEchoTarget
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 1)
+
+    let retained ← runtime.retainTarget bootstrap
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 2)
+    runtime.releaseTarget retained
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 1)
+
+    let server ← runtime.newServer bootstrap
+    assertEqual (← runtime.serverCount) (UInt64.ofNat 1)
+    let listener ← server.listen address
+    assertEqual (← runtime.listenerCount) (UInt64.ofNat 1)
+    let client ← runtime.newClient address
+    assertEqual (← runtime.clientCount) (UInt64.ofNat 1)
+
+    server.accept listener
+    let target ← client.bootstrap
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 2)
+
+    let pending ← runtime.startCall target Echo.fooMethod payload
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 1)
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+
+    runtime.releaseTarget target
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 1)
+    client.release
+    assertEqual (← runtime.clientCount) (UInt64.ofNat 0)
+    server.release
+    assertEqual (← runtime.serverCount) (UInt64.ofNat 0)
+    runtime.releaseListener listener
+    assertEqual (← runtime.listenerCount) (UInt64.ofNat 0)
+    runtime.releaseTarget bootstrap
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeClientReleaseErrors : IO Unit := do
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init

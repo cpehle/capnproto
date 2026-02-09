@@ -1398,6 +1398,76 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UInt64Completion> enqueueTargetCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTargetCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueListenerCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedListenerCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueClientCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedClientCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueServerCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedServerCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueuePendingCallCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPendingCallCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueAwaitRegisterPromise(uint32_t promiseId) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
     {
@@ -1786,6 +1856,26 @@ class RuntimeLoop {
     std::shared_ptr<UInt64Completion> completion;
   };
 
+  struct QueuedTargetCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedListenerCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedClientCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedServerCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedPendingCallCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
   struct QueuedAwaitRegisterPromise {
     uint32_t promiseId;
     std::shared_ptr<RegisterTargetCompletion> completion;
@@ -1839,7 +1929,9 @@ class RuntimeLoop {
                    QueuedServerAcceptStart, QueuedServerAcceptFd,
                    QueuedServerDrain, QueuedServerDrainStart,
                    QueuedClientQueueSize, QueuedClientQueueCount,
-                   QueuedClientOutgoingWaitNanos, QueuedAwaitRegisterPromise,
+                   QueuedClientOutgoingWaitNanos, QueuedTargetCount,
+                   QueuedListenerCount, QueuedClientCount, QueuedServerCount,
+                   QueuedPendingCallCount, QueuedAwaitRegisterPromise,
                    QueuedCancelRegisterPromise, QueuedReleaseRegisterPromise,
                    QueuedAwaitUnitPromise, QueuedCancelUnitPromise,
                    QueuedReleaseUnitPromise>;
@@ -3216,6 +3308,26 @@ class RuntimeLoop {
     return static_cast<uint64_t>(wait / kj::NANOSECONDS);
   }
 
+  uint64_t targetCount() const {
+    return static_cast<uint64_t>(targets_.size());
+  }
+
+  uint64_t listenerCount() const {
+    return static_cast<uint64_t>(listeners_.size());
+  }
+
+  uint64_t clientCount() const {
+    return static_cast<uint64_t>(clients_.size());
+  }
+
+  uint64_t serverCount() const {
+    return static_cast<uint64_t>(servers_.size());
+  }
+
+  uint64_t pendingCallCount() const {
+    return static_cast<uint64_t>(pendingCalls_.size());
+  }
+
   void clientSetFlowLimit(uint32_t clientId, uint64_t words) {
     auto clientIt = clients_.find(clientId);
     if (clientIt == clients_.end()) {
@@ -4068,6 +4180,67 @@ class RuntimeLoop {
                 metric.completion,
                 "unknown exception in capnp_lean_rpc_runtime_client_outgoing_wait_nanos");
           }
+        } else if (std::holds_alternative<QueuedTargetCount>(op)) {
+          auto metric = std::get<QueuedTargetCount>(std::move(op));
+          try {
+            completeUInt64Success(metric.completion, targetCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(metric.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(metric.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(metric.completion,
+                                  "unknown exception in capnp_lean_rpc_runtime_target_count");
+          }
+        } else if (std::holds_alternative<QueuedListenerCount>(op)) {
+          auto metric = std::get<QueuedListenerCount>(std::move(op));
+          try {
+            completeUInt64Success(metric.completion, listenerCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(metric.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(metric.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(metric.completion,
+                                  "unknown exception in capnp_lean_rpc_runtime_listener_count");
+          }
+        } else if (std::holds_alternative<QueuedClientCount>(op)) {
+          auto metric = std::get<QueuedClientCount>(std::move(op));
+          try {
+            completeUInt64Success(metric.completion, clientCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(metric.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(metric.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(metric.completion,
+                                  "unknown exception in capnp_lean_rpc_runtime_client_count");
+          }
+        } else if (std::holds_alternative<QueuedServerCount>(op)) {
+          auto metric = std::get<QueuedServerCount>(std::move(op));
+          try {
+            completeUInt64Success(metric.completion, serverCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(metric.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(metric.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(metric.completion,
+                                  "unknown exception in capnp_lean_rpc_runtime_server_count");
+          }
+        } else if (std::holds_alternative<QueuedPendingCallCount>(op)) {
+          auto metric = std::get<QueuedPendingCallCount>(std::move(op));
+          try {
+            completeUInt64Success(metric.completion, pendingCallCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(metric.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(metric.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                metric.completion,
+                "unknown exception in capnp_lean_rpc_runtime_pending_call_count");
+          }
         } else if (std::holds_alternative<QueuedNewServer>(op)) {
           auto newServerReq = std::get<QueuedNewServer>(std::move(op));
           try {
@@ -4438,6 +4611,16 @@ class RuntimeLoop {
         completeUInt64Failure(std::get<QueuedClientQueueCount>(op).completion, message);
       } else if (std::holds_alternative<QueuedClientOutgoingWaitNanos>(op)) {
         completeUInt64Failure(std::get<QueuedClientOutgoingWaitNanos>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTargetCount>(op)) {
+        completeUInt64Failure(std::get<QueuedTargetCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedListenerCount>(op)) {
+        completeUInt64Failure(std::get<QueuedListenerCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedClientCount>(op)) {
+        completeUInt64Failure(std::get<QueuedClientCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedServerCount>(op)) {
+        completeUInt64Failure(std::get<QueuedServerCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPendingCallCount>(op)) {
+        completeUInt64Failure(std::get<QueuedPendingCallCount>(op).completion, message);
       } else if (std::holds_alternative<QueuedAwaitRegisterPromise>(op)) {
         completeRegisterFailure(std::get<QueuedAwaitRegisterPromise>(op).completion, message);
       } else if (std::holds_alternative<QueuedCancelRegisterPromise>(op)) {
@@ -5622,6 +5805,132 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_client_outgoing_wait_
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_client_outgoing_wait_nanos");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_target_count(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTargetCount();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_target_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_listener_count(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueListenerCount();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_listener_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_client_count(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueClientCount();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_client_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_count(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueServerCount();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_server_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_count(
+    uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueuePendingCallCount();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pending_call_count");
   }
 }
 
