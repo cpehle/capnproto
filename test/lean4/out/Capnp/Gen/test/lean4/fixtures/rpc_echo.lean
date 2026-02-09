@@ -97,6 +97,12 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+def startFoo (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target fooMethod payload
+def startFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target fooMethod payload
+def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -114,6 +120,22 @@ def callFooTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.
 def callFooTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
   fooResponseOfPayload response
+def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  fooResponseOfPayload response
+def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO Echo := do
+  pendingCall.getPipelinedCap pointerPath
+def callFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
+def callFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← callFooPipelinedM pendingCall pointerPath payload
+  fooResponseOfPayload response
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
@@ -121,6 +143,12 @@ def callBar (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target barMethod payload
 def callBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target barMethod payload
+def startBar (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target barMethod payload
+def startBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target barMethod payload
+def awaitBar (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -137,6 +165,22 @@ def callBarTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.
   barResponseOfPayload response
 def callBarTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target barMethod payload
+  barResponseOfPayload response
+def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  barResponseOfPayload response
+def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO Echo := do
+  pendingCall.getPipelinedCap pointerPath
+def callBarPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target barMethod payload
+def callBarPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← callBarPipelinedM pendingCall pointerPath payload
   barResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler

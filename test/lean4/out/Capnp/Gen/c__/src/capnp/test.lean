@@ -3772,6 +3772,12 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.DeepNes
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+def startCall (runtime : Capnp.Rpc.Runtime) (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callMethod payload
+def startCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callMethod payload
+def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -3788,6 +3794,22 @@ def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestGenerics.Inner2.De
   callResponseOfPayload response
 def callCallTypedM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
+def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callResponseOfPayload response
+def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callMethod payload
+def callCallPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← callCallPipelinedM pendingCall pointerPath payload
   callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -3858,6 +3880,12 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface) (pa
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+def startCall (runtime : Capnp.Rpc.Runtime) (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callMethod payload
+def startCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callMethod payload
+def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.readChecked (Capnp.getRoot payload.msg) with
@@ -3874,6 +3902,22 @@ def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestGenerics.Interface
   callResponseOfPayload response
 def callCallTypedM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
+def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callResponseOfPayload response
+def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestGenerics.Interface := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callMethod payload
+def callCallPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Interface.call_Results.Reader × Capnp.CapTable) := do
+  let response ← callCallPipelinedM pendingCall pointerPath payload
   callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -3945,6 +3989,12 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParams) (
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+def startCall (runtime : Capnp.Rpc.Runtime) (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callMethod payload
+def startCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callMethod payload
+def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -3961,6 +4011,22 @@ def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodPara
   callResponseOfPayload response
 def callCallTypedM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
+def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callResponseOfPayload response
+def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestImplicitMethodParams := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callMethod payload
+def callCallPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← callCallPipelinedM pendingCall pointerPath payload
   callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4031,6 +4097,12 @@ def callCall (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodParamsInG
   Capnp.Rpc.call backend target callMethod payload
 def callCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callMethod payload
+def startCall (runtime : Capnp.Rpc.Runtime) (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callMethod payload
+def startCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callMethod payload
+def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4047,6 +4119,22 @@ def callCallTyped (backend : Capnp.Rpc.Backend) (target : TestImplicitMethodPara
   callResponseOfPayload response
 def callCallTypedM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callMethod payload
+  callResponseOfPayload response
+def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callResponseOfPayload response
+def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestImplicitMethodParamsInGeneric := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callMethod payload
+def callCallPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestGenerics.Reader × Capnp.CapTable) := do
+  let response ← callCallPipelinedM pendingCall pointerPath payload
   callResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4117,6 +4205,12 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+def startFoo (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target fooMethod payload
+def startFooM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target fooMethod payload
+def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4134,6 +4228,22 @@ def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload
 def callFooTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
   fooResponseOfPayload response
+def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  fooResponseOfPayload response
+def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
+def callFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Results.Reader × Capnp.CapTable) := do
+  let response ← callFooPipelinedM pendingCall pointerPath payload
+  fooResponseOfPayload response
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
@@ -4141,6 +4251,12 @@ def callBar (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target barMethod payload
 def callBarM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target barMethod payload
+def startBar (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target barMethod payload
+def startBarM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target barMethod payload
+def awaitBar (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4158,6 +4274,22 @@ def callBarTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload
 def callBarTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target barMethod payload
   barResponseOfPayload response
+def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  barResponseOfPayload response
+def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callBarPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target barMethod payload
+def callBarPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Results.Reader × Capnp.CapTable) := do
+  let response ← callBarPipelinedM pendingCall pointerPath payload
+  barResponseOfPayload response
 
 def bazMethodId : UInt16 := UInt16.ofNat 2
 def bazMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := bazMethodId }
@@ -4165,6 +4297,12 @@ def callBaz (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload : Ca
   Capnp.Rpc.call backend target bazMethod payload
 def callBazM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target bazMethod payload
+def startBaz (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target bazMethod payload
+def startBazM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target bazMethod payload
+def awaitBaz (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev bazTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def bazRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4182,6 +4320,22 @@ def callBazTyped (backend : Capnp.Rpc.Backend) (target : TestInterface) (payload
 def callBazTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target bazMethod payload
   bazResponseOfPayload response
+def awaitBazTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  bazResponseOfPayload response
+def getBazPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callBazPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target bazMethod payload
+def callBazPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Results.Reader × Capnp.CapTable) := do
+  let response ← callBazPipelinedM pendingCall pointerPath payload
+  bazResponseOfPayload response
 
 def getTestPipelineMethodId : UInt16 := UInt16.ofNat 3
 def getTestPipelineMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestPipelineMethodId }
@@ -4189,6 +4343,12 @@ def callGetTestPipeline (backend : Capnp.Rpc.Backend) (target : TestInterface) (
   Capnp.Rpc.call backend target getTestPipelineMethod payload
 def callGetTestPipelineM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
+def startGetTestPipeline (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getTestPipelineMethod payload
+def startGetTestPipelineM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getTestPipelineMethod payload
+def awaitGetTestPipeline (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getTestPipelineTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getTestPipelineRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4206,6 +4366,22 @@ def callGetTestPipelineTyped (backend : Capnp.Rpc.Backend) (target : TestInterfa
 def callGetTestPipelineTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
   getTestPipelineResponseOfPayload response
+def awaitGetTestPipelineTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getTestPipelineResponseOfPayload response
+def getGetTestPipelinePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetTestPipelinePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getTestPipelineMethod payload
+def callGetTestPipelinePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetTestPipelinePipelinedM pendingCall pointerPath payload
+  getTestPipelineResponseOfPayload response
 
 def getTestTailCalleeMethodId : UInt16 := UInt16.ofNat 4
 def getTestTailCalleeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCalleeMethodId }
@@ -4213,6 +4389,12 @@ def callGetTestTailCallee (backend : Capnp.Rpc.Backend) (target : TestInterface)
   Capnp.Rpc.call backend target getTestTailCalleeMethod payload
 def callGetTestTailCalleeM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
+def startGetTestTailCallee (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getTestTailCalleeMethod payload
+def startGetTestTailCalleeM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getTestTailCalleeMethod payload
+def awaitGetTestTailCallee (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getTestTailCalleeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getTestTailCalleeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4230,6 +4412,22 @@ def callGetTestTailCalleeTyped (backend : Capnp.Rpc.Backend) (target : TestInter
 def callGetTestTailCalleeTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
   getTestTailCalleeResponseOfPayload response
+def awaitGetTestTailCalleeTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getTestTailCalleeResponseOfPayload response
+def getGetTestTailCalleePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetTestTailCalleePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getTestTailCalleeMethod payload
+def callGetTestTailCalleePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetTestTailCalleePipelinedM pendingCall pointerPath payload
+  getTestTailCalleeResponseOfPayload response
 
 def getTestTailCallerMethodId : UInt16 := UInt16.ofNat 5
 def getTestTailCallerMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestTailCallerMethodId }
@@ -4237,6 +4435,12 @@ def callGetTestTailCaller (backend : Capnp.Rpc.Backend) (target : TestInterface)
   Capnp.Rpc.call backend target getTestTailCallerMethod payload
 def callGetTestTailCallerM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
+def startGetTestTailCaller (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getTestTailCallerMethod payload
+def startGetTestTailCallerM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getTestTailCallerMethod payload
+def awaitGetTestTailCaller (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getTestTailCallerTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getTestTailCallerRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4254,6 +4458,22 @@ def callGetTestTailCallerTyped (backend : Capnp.Rpc.Backend) (target : TestInter
 def callGetTestTailCallerTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
   getTestTailCallerResponseOfPayload response
+def awaitGetTestTailCallerTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getTestTailCallerResponseOfPayload response
+def getGetTestTailCallerPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetTestTailCallerPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getTestTailCallerMethod payload
+def callGetTestTailCallerPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetTestTailCallerPipelinedM pendingCall pointerPath payload
+  getTestTailCallerResponseOfPayload response
 
 def getTestMoreStuffMethodId : UInt16 := UInt16.ofNat 6
 def getTestMoreStuffMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getTestMoreStuffMethodId }
@@ -4261,6 +4481,12 @@ def callGetTestMoreStuff (backend : Capnp.Rpc.Backend) (target : TestInterface) 
   Capnp.Rpc.call backend target getTestMoreStuffMethod payload
 def callGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
+def startGetTestMoreStuff (runtime : Capnp.Rpc.Runtime) (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getTestMoreStuffMethod payload
+def startGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getTestMoreStuffMethod payload
+def awaitGetTestMoreStuff (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getTestMoreStuffTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getTestMoreStuffRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4277,6 +4503,22 @@ def callGetTestMoreStuffTyped (backend : Capnp.Rpc.Backend) (target : TestInterf
   getTestMoreStuffResponseOfPayload response
 def callGetTestMoreStuffTypedM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
+  getTestMoreStuffResponseOfPayload response
+def awaitGetTestMoreStuffTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getTestMoreStuffResponseOfPayload response
+def getGetTestMoreStuffPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetTestMoreStuffPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getTestMoreStuffMethod payload
+def callGetTestMoreStuffPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetTestMoreStuffPipelinedM pendingCall pointerPath payload
   getTestMoreStuffResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4425,6 +4667,12 @@ def callQux (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Capn
   Capnp.Rpc.call backend target quxMethod payload
 def callQuxM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target quxMethod payload
+def startQux (runtime : Capnp.Rpc.Runtime) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target quxMethod payload
+def startQuxM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target quxMethod payload
+def awaitQux (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev quxTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def quxRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4442,6 +4690,22 @@ def callQuxTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload :
 def callQuxTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target quxMethod payload
   quxResponseOfPayload response
+def awaitQuxTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  quxResponseOfPayload response
+def getQuxPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
+  pendingCall.getPipelinedCap pointerPath
+def callQuxPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target quxMethod payload
+def callQuxPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Results.Reader × Capnp.CapTable) := do
+  let response ← callQuxPipelinedM pendingCall pointerPath payload
+  quxResponseOfPayload response
 
 def corgeMethodId : UInt16 := UInt16.ofNat 1
 def corgeMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := corgeMethodId }
@@ -4449,6 +4713,12 @@ def callCorge (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : Ca
   Capnp.Rpc.call backend target corgeMethod payload
 def callCorgeM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target corgeMethod payload
+def startCorge (runtime : Capnp.Rpc.Runtime) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target corgeMethod payload
+def startCorgeM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target corgeMethod payload
+def awaitCorge (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev corgeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def corgeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestAllTypes.readChecked (Capnp.getRoot payload.msg) with
@@ -4466,6 +4736,22 @@ def callCorgeTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload
 def callCorgeTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target corgeMethod payload
   corgeResponseOfPayload response
+def awaitCorgeTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  corgeResponseOfPayload response
+def getCorgePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
+  pendingCall.getPipelinedCap pointerPath
+def callCorgePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target corgeMethod payload
+def callCorgePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestExtends.corge_Results.Reader × Capnp.CapTable) := do
+  let response ← callCorgePipelinedM pendingCall pointerPath payload
+  corgeResponseOfPayload response
 
 def graultMethodId : UInt16 := UInt16.ofNat 2
 def graultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := graultMethodId }
@@ -4473,6 +4759,12 @@ def callGrault (backend : Capnp.Rpc.Backend) (target : TestExtends) (payload : C
   Capnp.Rpc.call backend target graultMethod payload
 def callGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target graultMethod payload
+def startGrault (runtime : Capnp.Rpc.Runtime) (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target graultMethod payload
+def startGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target graultMethod payload
+def awaitGrault (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev graultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def graultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4489,6 +4781,22 @@ def callGraultTyped (backend : Capnp.Rpc.Backend) (target : TestExtends) (payloa
   graultResponseOfPayload response
 def callGraultTypedM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target graultMethod payload
+  graultResponseOfPayload response
+def awaitGraultTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  graultResponseOfPayload response
+def getGraultPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
+  pendingCall.getPipelinedCap pointerPath
+def callGraultPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target graultMethod payload
+def callGraultPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
+  let response ← callGraultPipelinedM pendingCall pointerPath payload
   graultResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4638,6 +4946,12 @@ def callGetCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload : 
   Capnp.Rpc.call backend target getCapMethod payload
 def callGetCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCapMethod payload
+def startGetCap (runtime : Capnp.Rpc.Runtime) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getCapMethod payload
+def startGetCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getCapMethod payload
+def awaitGetCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4655,6 +4969,22 @@ def callGetCapTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (paylo
 def callGetCapTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getCapMethod payload
   getCapResponseOfPayload response
+def awaitGetCapTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getCapResponseOfPayload response
+def getGetCapPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetCapPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getCapMethod payload
+def callGetCapPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetCapPipelinedM pendingCall pointerPath payload
+  getCapResponseOfPayload response
 
 def testPointersMethodId : UInt16 := UInt16.ofNat 1
 def testPointersMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := testPointersMethodId }
@@ -4662,6 +4992,12 @@ def callTestPointers (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payl
   Capnp.Rpc.call backend target testPointersMethod payload
 def callTestPointersM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target testPointersMethod payload
+def startTestPointers (runtime : Capnp.Rpc.Runtime) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target testPointersMethod payload
+def startTestPointersM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target testPointersMethod payload
+def awaitTestPointers (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev testPointersTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def testPointersRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4679,6 +5015,22 @@ def callTestPointersTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) 
 def callTestPointersTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target testPointersMethod payload
   testPointersResponseOfPayload response
+def awaitTestPointersTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  testPointersResponseOfPayload response
+def getTestPointersPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
+  pendingCall.getPipelinedCap pointerPath
+def callTestPointersPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target testPointersMethod payload
+def callTestPointersPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Results.Reader × Capnp.CapTable) := do
+  let response ← callTestPointersPipelinedM pendingCall pointerPath payload
+  testPointersResponseOfPayload response
 
 def getAnyCapMethodId : UInt16 := UInt16.ofNat 2
 def getAnyCapMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getAnyCapMethodId }
@@ -4686,6 +5038,12 @@ def callGetAnyCap (backend : Capnp.Rpc.Backend) (target : TestPipeline) (payload
   Capnp.Rpc.call backend target getAnyCapMethod payload
 def callGetAnyCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
+def startGetAnyCap (runtime : Capnp.Rpc.Runtime) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getAnyCapMethod payload
+def startGetAnyCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getAnyCapMethod payload
+def awaitGetAnyCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getAnyCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getAnyCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4703,6 +5061,22 @@ def callGetAnyCapTyped (backend : Capnp.Rpc.Backend) (target : TestPipeline) (pa
 def callGetAnyCapTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
   getAnyCapResponseOfPayload response
+def awaitGetAnyCapTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getAnyCapResponseOfPayload response
+def getGetAnyCapPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetAnyCapPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getAnyCapMethod payload
+def callGetAnyCapPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetAnyCapPipelinedM pendingCall pointerPath payload
+  getAnyCapResponseOfPayload response
 
 def getCapPipelineOnlyMethodId : UInt16 := UInt16.ofNat 3
 def getCapPipelineOnlyMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getCapPipelineOnlyMethodId }
@@ -4710,6 +5084,12 @@ def callGetCapPipelineOnly (backend : Capnp.Rpc.Backend) (target : TestPipeline)
   Capnp.Rpc.call backend target getCapPipelineOnlyMethod payload
 def callGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
+def startGetCapPipelineOnly (runtime : Capnp.Rpc.Runtime) (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getCapPipelineOnlyMethod payload
+def startGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getCapPipelineOnlyMethod payload
+def awaitGetCapPipelineOnly (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getCapPipelineOnlyTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getCapPipelineOnlyRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4726,6 +5106,22 @@ def callGetCapPipelineOnlyTyped (backend : Capnp.Rpc.Backend) (target : TestPipe
   getCapPipelineOnlyResponseOfPayload response
 def callGetCapPipelineOnlyTypedM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
+  getCapPipelineOnlyResponseOfPayload response
+def awaitGetCapPipelineOnlyTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getCapPipelineOnlyResponseOfPayload response
+def getGetCapPipelineOnlyPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetCapPipelineOnlyPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getCapPipelineOnlyMethod payload
+def callGetCapPipelineOnlyPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetCapPipelineOnlyPipelinedM pendingCall pointerPath payload
   getCapPipelineOnlyResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4835,6 +5231,12 @@ def callGetCallSequence (backend : Capnp.Rpc.Backend) (target : TestCallOrder) (
   Capnp.Rpc.call backend target getCallSequenceMethod payload
 def callGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+def startGetCallSequence (runtime : Capnp.Rpc.Runtime) (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getCallSequenceMethod payload
+def startGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getCallSequenceMethod payload
+def awaitGetCallSequence (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getCallSequenceTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getCallSequenceRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4851,6 +5253,22 @@ def callGetCallSequenceTyped (backend : Capnp.Rpc.Backend) (target : TestCallOrd
   getCallSequenceResponseOfPayload response
 def callGetCallSequenceTypedM (target : TestCallOrder) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+  getCallSequenceResponseOfPayload response
+def awaitGetCallSequenceTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getCallSequenceResponseOfPayload response
+def getGetCallSequencePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestCallOrder := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetCallSequencePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getCallSequenceMethod payload
+def callGetCallSequencePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetCallSequencePipelinedM pendingCall pointerPath payload
   getCallSequenceResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -4924,6 +5342,12 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payload : C
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+def startFoo (runtime : Capnp.Rpc.Runtime) (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target fooMethod payload
+def startFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target fooMethod payload
+def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -4940,6 +5364,22 @@ def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestTailCallee) (payloa
   fooResponseOfPayload response
 def callFooTypedM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
+def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  fooResponseOfPayload response
+def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestTailCallee := do
+  pendingCall.getPipelinedCap pointerPath
+def callFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
+def callFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← callFooPipelinedM pendingCall pointerPath payload
   fooResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -5010,6 +5450,12 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payload : C
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+def startFoo (runtime : Capnp.Rpc.Runtime) (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target fooMethod payload
+def startFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target fooMethod payload
+def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5026,6 +5472,22 @@ def callFooTyped (backend : Capnp.Rpc.Backend) (target : TestTailCaller) (payloa
   fooResponseOfPayload response
 def callFooTypedM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
+  fooResponseOfPayload response
+def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  fooResponseOfPayload response
+def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestTailCaller := do
+  pendingCall.getPipelinedCap pointerPath
+def callFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target fooMethod payload
+def callFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestTailCallee.TailResult.Reader × Capnp.CapTable) := do
+  let response ← callFooPipelinedM pendingCall pointerPath payload
   fooResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -5099,6 +5561,12 @@ def callDoStreamI (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payloa
   Capnp.Rpc.call backend target doStreamIMethod payload
 def callDoStreamIM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
+def startDoStreamI (runtime : Capnp.Rpc.Runtime) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target doStreamIMethod payload
+def startDoStreamIM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target doStreamIMethod payload
+def awaitDoStreamI (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev doStreamITypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def doStreamIRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5116,6 +5584,22 @@ def callDoStreamITyped (backend : Capnp.Rpc.Backend) (target : TestStreaming) (p
 def callDoStreamITypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
   doStreamIResponseOfPayload response
+def awaitDoStreamITyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  doStreamIResponseOfPayload response
+def getDoStreamIPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
+  pendingCall.getPipelinedCap pointerPath
+def callDoStreamIPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target doStreamIMethod payload
+def callDoStreamIPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← callDoStreamIPipelinedM pendingCall pointerPath payload
+  doStreamIResponseOfPayload response
 
 def doStreamJMethodId : UInt16 := UInt16.ofNat 1
 def doStreamJMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := doStreamJMethodId }
@@ -5123,6 +5607,12 @@ def callDoStreamJ (backend : Capnp.Rpc.Backend) (target : TestStreaming) (payloa
   Capnp.Rpc.call backend target doStreamJMethod payload
 def callDoStreamJM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
+def startDoStreamJ (runtime : Capnp.Rpc.Runtime) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target doStreamJMethod payload
+def startDoStreamJM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target doStreamJMethod payload
+def awaitDoStreamJ (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev doStreamJTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def doStreamJRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5140,6 +5630,22 @@ def callDoStreamJTyped (backend : Capnp.Rpc.Backend) (target : TestStreaming) (p
 def callDoStreamJTypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
   doStreamJResponseOfPayload response
+def awaitDoStreamJTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  doStreamJResponseOfPayload response
+def getDoStreamJPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
+  pendingCall.getPipelinedCap pointerPath
+def callDoStreamJPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target doStreamJMethod payload
+def callDoStreamJPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.capnp.stream.StreamResult.Reader × Capnp.CapTable) := do
+  let response ← callDoStreamJPipelinedM pendingCall pointerPath payload
+  doStreamJResponseOfPayload response
 
 def finishStreamMethodId : UInt16 := UInt16.ofNat 2
 def finishStreamMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := finishStreamMethodId }
@@ -5147,6 +5653,12 @@ def callFinishStream (backend : Capnp.Rpc.Backend) (target : TestStreaming) (pay
   Capnp.Rpc.call backend target finishStreamMethod payload
 def callFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
+def startFinishStream (runtime : Capnp.Rpc.Runtime) (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target finishStreamMethod payload
+def startFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target finishStreamMethod payload
+def awaitFinishStream (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev finishStreamTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def finishStreamRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5163,6 +5675,22 @@ def callFinishStreamTyped (backend : Capnp.Rpc.Backend) (target : TestStreaming)
   finishStreamResponseOfPayload response
 def callFinishStreamTypedM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
+  finishStreamResponseOfPayload response
+def awaitFinishStreamTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  finishStreamResponseOfPayload response
+def getFinishStreamPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
+  pendingCall.getPipelinedCap pointerPath
+def callFinishStreamPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target finishStreamMethod payload
+def callFinishStreamPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Results.Reader × Capnp.CapTable) := do
+  let response ← callFinishStreamPipelinedM pendingCall pointerPath payload
   finishStreamResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -5312,6 +5840,12 @@ def callCallFoo (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target callFooMethod payload
 def callCallFooM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callFooMethod payload
+def startCallFoo (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callFooMethod payload
+def startCallFooM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callFooMethod payload
+def awaitCallFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callFooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callFooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5329,6 +5863,22 @@ def callCallFooTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pay
 def callCallFooTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callFooMethod payload
   callFooResponseOfPayload response
+def awaitCallFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callFooResponseOfPayload response
+def getCallFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callFooMethod payload
+def callCallFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Results.Reader × Capnp.CapTable) := do
+  let response ← callCallFooPipelinedM pendingCall pointerPath payload
+  callFooResponseOfPayload response
 
 def callFooWhenResolvedMethodId : UInt16 := UInt16.ofNat 1
 def callFooWhenResolvedMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callFooWhenResolvedMethodId }
@@ -5336,6 +5886,12 @@ def callCallFooWhenResolved (backend : Capnp.Rpc.Backend) (target : TestMoreStuf
   Capnp.Rpc.call backend target callFooWhenResolvedMethod payload
 def callCallFooWhenResolvedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
+def startCallFooWhenResolved (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callFooWhenResolvedMethod payload
+def startCallFooWhenResolvedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callFooWhenResolvedMethod payload
+def awaitCallFooWhenResolved (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callFooWhenResolvedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callFooWhenResolvedRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5353,6 +5909,22 @@ def callCallFooWhenResolvedTyped (backend : Capnp.Rpc.Backend) (target : TestMor
 def callCallFooWhenResolvedTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
   callFooWhenResolvedResponseOfPayload response
+def awaitCallFooWhenResolvedTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callFooWhenResolvedResponseOfPayload response
+def getCallFooWhenResolvedPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallFooWhenResolvedPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callFooWhenResolvedMethod payload
+def callCallFooWhenResolvedPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Results.Reader × Capnp.CapTable) := do
+  let response ← callCallFooWhenResolvedPipelinedM pendingCall pointerPath payload
+  callFooWhenResolvedResponseOfPayload response
 
 def neverReturnMethodId : UInt16 := UInt16.ofNat 2
 def neverReturnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := neverReturnMethodId }
@@ -5360,6 +5932,12 @@ def callNeverReturn (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payl
   Capnp.Rpc.call backend target neverReturnMethod payload
 def callNeverReturnM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
+def startNeverReturn (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target neverReturnMethod payload
+def startNeverReturnM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target neverReturnMethod payload
+def awaitNeverReturn (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev neverReturnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def neverReturnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5377,6 +5955,22 @@ def callNeverReturnTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) 
 def callNeverReturnTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
   neverReturnResponseOfPayload response
+def awaitNeverReturnTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  neverReturnResponseOfPayload response
+def getNeverReturnPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callNeverReturnPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target neverReturnMethod payload
+def callNeverReturnPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Results.Reader × Capnp.CapTable) := do
+  let response ← callNeverReturnPipelinedM pendingCall pointerPath payload
+  neverReturnResponseOfPayload response
 
 def TestMoreStuff.neverReturnMethod._ann_allowCancellation : Unit := ()
 
@@ -5386,6 +5980,12 @@ def callHold (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : C
   Capnp.Rpc.call backend target holdMethod payload
 def callHoldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target holdMethod payload
+def startHold (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target holdMethod payload
+def startHoldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target holdMethod payload
+def awaitHold (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev holdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def holdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5403,6 +6003,22 @@ def callHoldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
 def callHoldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target holdMethod payload
   holdResponseOfPayload response
+def awaitHoldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  holdResponseOfPayload response
+def getHoldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callHoldPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target holdMethod payload
+def callHoldPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Results.Reader × Capnp.CapTable) := do
+  let response ← callHoldPipelinedM pendingCall pointerPath payload
+  holdResponseOfPayload response
 
 def callHeldMethodId : UInt16 := UInt16.ofNat 4
 def callHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callHeldMethodId }
@@ -5410,6 +6026,12 @@ def callCallHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload
   Capnp.Rpc.call backend target callHeldMethod payload
 def callCallHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callHeldMethod payload
+def startCallHeld (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callHeldMethod payload
+def startCallHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callHeldMethod payload
+def awaitCallHeld (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5427,6 +6049,22 @@ def callCallHeldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pa
 def callCallHeldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callHeldMethod payload
   callHeldResponseOfPayload response
+def awaitCallHeldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callHeldResponseOfPayload response
+def getCallHeldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallHeldPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callHeldMethod payload
+def callCallHeldPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← callCallHeldPipelinedM pendingCall pointerPath payload
+  callHeldResponseOfPayload response
 
 def getHeldMethodId : UInt16 := UInt16.ofNat 5
 def getHeldMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHeldMethodId }
@@ -5434,6 +6072,12 @@ def callGetHeld (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target getHeldMethod payload
 def callGetHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getHeldMethod payload
+def startGetHeld (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getHeldMethod payload
+def startGetHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getHeldMethod payload
+def awaitGetHeld (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5451,6 +6095,22 @@ def callGetHeldTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pay
 def callGetHeldTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getHeldMethod payload
   getHeldResponseOfPayload response
+def awaitGetHeldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getHeldResponseOfPayload response
+def getGetHeldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetHeldPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getHeldMethod payload
+def callGetHeldPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetHeldPipelinedM pendingCall pointerPath payload
+  getHeldResponseOfPayload response
 
 def echoMethodId : UInt16 := UInt16.ofNat 6
 def echoMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := echoMethodId }
@@ -5458,6 +6118,12 @@ def callEcho (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload : C
   Capnp.Rpc.call backend target echoMethod payload
 def callEchoM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target echoMethod payload
+def startEcho (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target echoMethod payload
+def startEchoM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target echoMethod payload
+def awaitEcho (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev echoTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def echoRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5475,6 +6141,22 @@ def callEchoTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
 def callEchoTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target echoMethod payload
   echoResponseOfPayload response
+def awaitEchoTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  echoResponseOfPayload response
+def getEchoPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callEchoPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target echoMethod payload
+def callEchoPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Results.Reader × Capnp.CapTable) := do
+  let response ← callEchoPipelinedM pendingCall pointerPath payload
+  echoResponseOfPayload response
 
 def expectCancelMethodId : UInt16 := UInt16.ofNat 7
 def expectCancelMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := expectCancelMethodId }
@@ -5482,6 +6164,12 @@ def callExpectCancel (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pay
   Capnp.Rpc.call backend target expectCancelMethod payload
 def callExpectCancelM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
+def startExpectCancel (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target expectCancelMethod payload
+def startExpectCancelM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target expectCancelMethod payload
+def awaitExpectCancel (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev expectCancelTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def expectCancelRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5499,6 +6187,22 @@ def callExpectCancelTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff)
 def callExpectCancelTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
   expectCancelResponseOfPayload response
+def awaitExpectCancelTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  expectCancelResponseOfPayload response
+def getExpectCancelPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callExpectCancelPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target expectCancelMethod payload
+def callExpectCancelPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Results.Reader × Capnp.CapTable) := do
+  let response ← callExpectCancelPipelinedM pendingCall pointerPath payload
+  expectCancelResponseOfPayload response
 
 def TestMoreStuff.expectCancelMethod._ann_allowCancellation : Unit := ()
 
@@ -5508,6 +6212,12 @@ def callMethodWithDefaults (backend : Capnp.Rpc.Backend) (target : TestMoreStuff
   Capnp.Rpc.call backend target methodWithDefaultsMethod payload
 def callMethodWithDefaultsM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
+def startMethodWithDefaults (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target methodWithDefaultsMethod payload
+def startMethodWithDefaultsM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target methodWithDefaultsMethod payload
+def awaitMethodWithDefaults (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev methodWithDefaultsTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def methodWithDefaultsRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5525,6 +6235,22 @@ def callMethodWithDefaultsTyped (backend : Capnp.Rpc.Backend) (target : TestMore
 def callMethodWithDefaultsTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
   methodWithDefaultsResponseOfPayload response
+def awaitMethodWithDefaultsTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  methodWithDefaultsResponseOfPayload response
+def getMethodWithDefaultsPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callMethodWithDefaultsPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target methodWithDefaultsMethod payload
+def callMethodWithDefaultsPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Results.Reader × Capnp.CapTable) := do
+  let response ← callMethodWithDefaultsPipelinedM pendingCall pointerPath payload
+  methodWithDefaultsResponseOfPayload response
 
 def getHandleMethodId : UInt16 := UInt16.ofNat 9
 def getHandleMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getHandleMethodId }
@@ -5532,6 +6258,12 @@ def callGetHandle (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
   Capnp.Rpc.call backend target getHandleMethod payload
 def callGetHandleM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getHandleMethod payload
+def startGetHandle (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getHandleMethod payload
+def startGetHandleM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getHandleMethod payload
+def awaitGetHandle (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getHandleTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getHandleRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5549,6 +6281,22 @@ def callGetHandleTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (p
 def callGetHandleTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getHandleMethod payload
   getHandleResponseOfPayload response
+def awaitGetHandleTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getHandleResponseOfPayload response
+def getGetHandlePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetHandlePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getHandleMethod payload
+def callGetHandlePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetHandlePipelinedM pendingCall pointerPath payload
+  getHandleResponseOfPayload response
 
 def getNullMethodId : UInt16 := UInt16.ofNat 10
 def getNullMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getNullMethodId }
@@ -5556,6 +6304,12 @@ def callGetNull (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payload 
   Capnp.Rpc.call backend target getNullMethod payload
 def callGetNullM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getNullMethod payload
+def startGetNull (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getNullMethod payload
+def startGetNullM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getNullMethod payload
+def awaitGetNull (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getNullTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getNullRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5573,6 +6327,22 @@ def callGetNullTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (pay
 def callGetNullTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getNullMethod payload
   getNullResponseOfPayload response
+def awaitGetNullTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getNullResponseOfPayload response
+def getGetNullPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetNullPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getNullMethod payload
+def callGetNullPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetNullPipelinedM pendingCall pointerPath payload
+  getNullResponseOfPayload response
 
 def getEnormousStringMethodId : UInt16 := UInt16.ofNat 11
 def getEnormousStringMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := getEnormousStringMethodId }
@@ -5580,6 +6350,12 @@ def callGetEnormousString (backend : Capnp.Rpc.Backend) (target : TestMoreStuff)
   Capnp.Rpc.call backend target getEnormousStringMethod payload
 def callGetEnormousStringM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
+def startGetEnormousString (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getEnormousStringMethod payload
+def startGetEnormousStringM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getEnormousStringMethod payload
+def awaitGetEnormousString (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getEnormousStringTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getEnormousStringRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5597,6 +6373,22 @@ def callGetEnormousStringTyped (backend : Capnp.Rpc.Backend) (target : TestMoreS
 def callGetEnormousStringTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
   getEnormousStringResponseOfPayload response
+def awaitGetEnormousStringTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getEnormousStringResponseOfPayload response
+def getGetEnormousStringPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetEnormousStringPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getEnormousStringMethod payload
+def callGetEnormousStringPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetEnormousStringPipelinedM pendingCall pointerPath payload
+  getEnormousStringResponseOfPayload response
 
 def methodWithNullDefaultMethodId : UInt16 := UInt16.ofNat 12
 def methodWithNullDefaultMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := methodWithNullDefaultMethodId }
@@ -5604,6 +6396,12 @@ def callMethodWithNullDefault (backend : Capnp.Rpc.Backend) (target : TestMoreSt
   Capnp.Rpc.call backend target methodWithNullDefaultMethod payload
 def callMethodWithNullDefaultM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
+def startMethodWithNullDefault (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target methodWithNullDefaultMethod payload
+def startMethodWithNullDefaultM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target methodWithNullDefaultMethod payload
+def awaitMethodWithNullDefault (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev methodWithNullDefaultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def methodWithNullDefaultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5621,6 +6419,22 @@ def callMethodWithNullDefaultTyped (backend : Capnp.Rpc.Backend) (target : TestM
 def callMethodWithNullDefaultTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
   methodWithNullDefaultResponseOfPayload response
+def awaitMethodWithNullDefaultTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  methodWithNullDefaultResponseOfPayload response
+def getMethodWithNullDefaultPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callMethodWithNullDefaultPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target methodWithNullDefaultMethod payload
+def callMethodWithNullDefaultPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Results.Reader × Capnp.CapTable) := do
+  let response ← callMethodWithNullDefaultPipelinedM pendingCall pointerPath payload
+  methodWithNullDefaultResponseOfPayload response
 
 def writeToFdMethodId : UInt16 := UInt16.ofNat 13
 def writeToFdMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := writeToFdMethodId }
@@ -5628,6 +6442,12 @@ def callWriteToFd (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (payloa
   Capnp.Rpc.call backend target writeToFdMethod payload
 def callWriteToFdM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
+def startWriteToFd (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target writeToFdMethod payload
+def startWriteToFdM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target writeToFdMethod payload
+def awaitWriteToFd (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev writeToFdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def writeToFdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5645,6 +6465,22 @@ def callWriteToFdTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (p
 def callWriteToFdTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
   writeToFdResponseOfPayload response
+def awaitWriteToFdTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  writeToFdResponseOfPayload response
+def getWriteToFdPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callWriteToFdPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target writeToFdMethod payload
+def callWriteToFdPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Results.Reader × Capnp.CapTable) := do
+  let response ← callWriteToFdPipelinedM pendingCall pointerPath payload
+  writeToFdResponseOfPayload response
 
 def throwExceptionMethodId : UInt16 := UInt16.ofNat 14
 def throwExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionMethodId }
@@ -5652,6 +6488,12 @@ def callThrowException (backend : Capnp.Rpc.Backend) (target : TestMoreStuff) (p
   Capnp.Rpc.call backend target throwExceptionMethod payload
 def callThrowExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
+def startThrowException (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target throwExceptionMethod payload
+def startThrowExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target throwExceptionMethod payload
+def awaitThrowException (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev throwExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def throwExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5669,6 +6511,22 @@ def callThrowExceptionTyped (backend : Capnp.Rpc.Backend) (target : TestMoreStuf
 def callThrowExceptionTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
   throwExceptionResponseOfPayload response
+def awaitThrowExceptionTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  throwExceptionResponseOfPayload response
+def getThrowExceptionPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callThrowExceptionPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target throwExceptionMethod payload
+def callThrowExceptionPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Results.Reader × Capnp.CapTable) := do
+  let response ← callThrowExceptionPipelinedM pendingCall pointerPath payload
+  throwExceptionResponseOfPayload response
 
 def throwRemoteExceptionMethodId : UInt16 := UInt16.ofNat 15
 def throwRemoteExceptionMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwRemoteExceptionMethodId }
@@ -5676,6 +6534,12 @@ def callThrowRemoteException (backend : Capnp.Rpc.Backend) (target : TestMoreStu
   Capnp.Rpc.call backend target throwRemoteExceptionMethod payload
 def callThrowRemoteExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
+def startThrowRemoteException (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target throwRemoteExceptionMethod payload
+def startThrowRemoteExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target throwRemoteExceptionMethod payload
+def awaitThrowRemoteException (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev throwRemoteExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def throwRemoteExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5693,6 +6557,22 @@ def callThrowRemoteExceptionTyped (backend : Capnp.Rpc.Backend) (target : TestMo
 def callThrowRemoteExceptionTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
   throwRemoteExceptionResponseOfPayload response
+def awaitThrowRemoteExceptionTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  throwRemoteExceptionResponseOfPayload response
+def getThrowRemoteExceptionPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callThrowRemoteExceptionPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target throwRemoteExceptionMethod payload
+def callThrowRemoteExceptionPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Results.Reader × Capnp.CapTable) := do
+  let response ← callThrowRemoteExceptionPipelinedM pendingCall pointerPath payload
+  throwRemoteExceptionResponseOfPayload response
 
 def throwExceptionWithDetailMethodId : UInt16 := UInt16.ofNat 16
 def throwExceptionWithDetailMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := throwExceptionWithDetailMethodId }
@@ -5700,6 +6580,12 @@ def callThrowExceptionWithDetail (backend : Capnp.Rpc.Backend) (target : TestMor
   Capnp.Rpc.call backend target throwExceptionWithDetailMethod payload
 def callThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
+def startThrowExceptionWithDetail (runtime : Capnp.Rpc.Runtime) (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target throwExceptionWithDetailMethod payload
+def startThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target throwExceptionWithDetailMethod payload
+def awaitThrowExceptionWithDetail (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev throwExceptionWithDetailTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def throwExceptionWithDetailRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -5716,6 +6602,22 @@ def callThrowExceptionWithDetailTyped (backend : Capnp.Rpc.Backend) (target : Te
   throwExceptionWithDetailResponseOfPayload response
 def callThrowExceptionWithDetailTypedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
+  throwExceptionWithDetailResponseOfPayload response
+def awaitThrowExceptionWithDetailTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  throwExceptionWithDetailResponseOfPayload response
+def getThrowExceptionWithDetailPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
+  pendingCall.getPipelinedCap pointerPath
+def callThrowExceptionWithDetailPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target throwExceptionWithDetailMethod payload
+def callThrowExceptionWithDetailPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Results.Reader × Capnp.CapTable) := do
+  let response ← callThrowExceptionWithDetailPipelinedM pendingCall pointerPath payload
   throwExceptionWithDetailResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -5994,6 +6896,12 @@ def callMakeThing (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload
   Capnp.Rpc.call backend target makeThingMethod payload
 def callMakeThingM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target makeThingMethod payload
+def startMakeThing (runtime : Capnp.Rpc.Runtime) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target makeThingMethod payload
+def startMakeThingM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target makeThingMethod payload
+def awaitMakeThing (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev makeThingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def makeThingRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6011,6 +6919,22 @@ def callMakeThingTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (pa
 def callMakeThingTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target makeThingMethod payload
   makeThingResponseOfPayload response
+def awaitMakeThingTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  makeThingResponseOfPayload response
+def getMakeThingPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
+  pendingCall.getPipelinedCap pointerPath
+def callMakeThingPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target makeThingMethod payload
+def callMakeThingPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Results.Reader × Capnp.CapTable) := do
+  let response ← callMakeThingPipelinedM pendingCall pointerPath payload
+  makeThingResponseOfPayload response
 
 def callPassThroughMethodId : UInt16 := UInt16.ofNat 1
 def callPassThroughMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callPassThroughMethodId }
@@ -6018,6 +6942,12 @@ def callCallPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane) (p
   Capnp.Rpc.call backend target callPassThroughMethod payload
 def callCallPassThroughM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
+def startCallPassThrough (runtime : Capnp.Rpc.Runtime) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callPassThroughMethod payload
+def startCallPassThroughM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callPassThroughMethod payload
+def awaitCallPassThrough (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callPassThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callPassThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6035,6 +6965,22 @@ def callCallPassThroughTyped (backend : Capnp.Rpc.Backend) (target : TestMembran
 def callCallPassThroughTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
   callPassThroughResponseOfPayload response
+def awaitCallPassThroughTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callPassThroughResponseOfPayload response
+def getCallPassThroughPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallPassThroughPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callPassThroughMethod payload
+def callCallPassThroughPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← callCallPassThroughPipelinedM pendingCall pointerPath payload
+  callPassThroughResponseOfPayload response
 
 def callInterceptMethodId : UInt16 := UInt16.ofNat 2
 def callInterceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := callInterceptMethodId }
@@ -6042,6 +6988,12 @@ def callCallIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane) (pay
   Capnp.Rpc.call backend target callInterceptMethod payload
 def callCallInterceptM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
+def startCallIntercept (runtime : Capnp.Rpc.Runtime) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target callInterceptMethod payload
+def startCallInterceptM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target callInterceptMethod payload
+def awaitCallIntercept (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev callInterceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def callInterceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6059,6 +7011,22 @@ def callCallInterceptTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane)
 def callCallInterceptTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
   callInterceptResponseOfPayload response
+def awaitCallInterceptTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  callInterceptResponseOfPayload response
+def getCallInterceptPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
+  pendingCall.getPipelinedCap pointerPath
+def callCallInterceptPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target callInterceptMethod payload
+def callCallInterceptPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← callCallInterceptPipelinedM pendingCall pointerPath payload
+  callInterceptResponseOfPayload response
 
 def loopbackMethodId : UInt16 := UInt16.ofNat 3
 def loopbackMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := loopbackMethodId }
@@ -6066,6 +7034,12 @@ def callLoopback (backend : Capnp.Rpc.Backend) (target : TestMembrane) (payload 
   Capnp.Rpc.call backend target loopbackMethod payload
 def callLoopbackM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target loopbackMethod payload
+def startLoopback (runtime : Capnp.Rpc.Runtime) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target loopbackMethod payload
+def startLoopbackM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target loopbackMethod payload
+def awaitLoopback (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev loopbackTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def loopbackRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6083,6 +7057,22 @@ def callLoopbackTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (pay
 def callLoopbackTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target loopbackMethod payload
   loopbackResponseOfPayload response
+def awaitLoopbackTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  loopbackResponseOfPayload response
+def getLoopbackPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
+  pendingCall.getPipelinedCap pointerPath
+def callLoopbackPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target loopbackMethod payload
+def callLoopbackPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Results.Reader × Capnp.CapTable) := do
+  let response ← callLoopbackPipelinedM pendingCall pointerPath payload
+  loopbackResponseOfPayload response
 
 def waitForeverMethodId : UInt16 := UInt16.ofNat 4
 def waitForeverMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := waitForeverMethodId }
@@ -6090,6 +7080,12 @@ def callWaitForever (backend : Capnp.Rpc.Backend) (target : TestMembrane) (paylo
   Capnp.Rpc.call backend target waitForeverMethod payload
 def callWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
+def startWaitForever (runtime : Capnp.Rpc.Runtime) (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target waitForeverMethod payload
+def startWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target waitForeverMethod payload
+def awaitWaitForever (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev waitForeverTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def waitForeverRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6106,6 +7102,22 @@ def callWaitForeverTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane) (
   waitForeverResponseOfPayload response
 def callWaitForeverTypedM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
+  waitForeverResponseOfPayload response
+def awaitWaitForeverTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  waitForeverResponseOfPayload response
+def getWaitForeverPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
+  pendingCall.getPipelinedCap pointerPath
+def callWaitForeverPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target waitForeverMethod payload
+def callWaitForeverPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Results.Reader × Capnp.CapTable) := do
+  let response ← callWaitForeverPipelinedM pendingCall pointerPath payload
   waitForeverResponseOfPayload response
 
 def TestMembrane.waitForeverMethod._ann_allowCancellation : Unit := ()
@@ -6230,6 +7242,12 @@ def callPassThrough (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) 
   Capnp.Rpc.call backend target passThroughMethod payload
 def callPassThroughM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target passThroughMethod payload
+def startPassThrough (runtime : Capnp.Rpc.Runtime) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target passThroughMethod payload
+def startPassThroughM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target passThroughMethod payload
+def awaitPassThrough (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev passThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def passThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6247,6 +7265,22 @@ def callPassThroughTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane.Th
 def callPassThroughTypedM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target passThroughMethod payload
   passThroughResponseOfPayload response
+def awaitPassThroughTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  passThroughResponseOfPayload response
+def getPassThroughPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane.Thing := do
+  pendingCall.getPipelinedCap pointerPath
+def callPassThroughPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target passThroughMethod payload
+def callPassThroughPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← callPassThroughPipelinedM pendingCall pointerPath payload
+  passThroughResponseOfPayload response
 
 def interceptMethodId : UInt16 := UInt16.ofNat 1
 def interceptMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := interceptMethodId }
@@ -6254,6 +7288,12 @@ def callIntercept (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thing) (p
   Capnp.Rpc.call backend target interceptMethod payload
 def callInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target interceptMethod payload
+def startIntercept (runtime : Capnp.Rpc.Runtime) (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target interceptMethod payload
+def startInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target interceptMethod payload
+def awaitIntercept (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev interceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def interceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6270,6 +7310,22 @@ def callInterceptTyped (backend : Capnp.Rpc.Backend) (target : TestMembrane.Thin
   interceptResponseOfPayload response
 def callInterceptTypedM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target interceptMethod payload
+  interceptResponseOfPayload response
+def awaitInterceptTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  interceptResponseOfPayload response
+def getInterceptPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestMembrane.Thing := do
+  pendingCall.getPipelinedCap pointerPath
+def callInterceptPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target interceptMethod payload
+def callInterceptPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestMembrane.Result.Reader × Capnp.CapTable) := do
+  let response ← callInterceptPipelinedM pendingCall pointerPath payload
   interceptResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -6353,6 +7409,12 @@ def callDelete (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payl
   Capnp.Rpc.call backend target deleteMethod payload
 def callDeleteM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target deleteMethod payload
+def startDelete (runtime : Capnp.Rpc.Runtime) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target deleteMethod payload
+def startDeleteM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target deleteMethod payload
+def awaitDelete (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev deleteTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def deleteRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6370,6 +7432,22 @@ def callDeleteTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) 
 def callDeleteTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target deleteMethod payload
   deleteResponseOfPayload response
+def awaitDeleteTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  deleteResponseOfPayload response
+def getDeletePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
+  pendingCall.getPipelinedCap pointerPath
+def callDeletePipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target deleteMethod payload
+def callDeletePipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Results.Reader × Capnp.CapTable) := do
+  let response ← callDeletePipelinedM pendingCall pointerPath payload
+  deleteResponseOfPayload response
 
 def _classMethodId : UInt16 := UInt16.ofNat 1
 def _classMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _classMethodId }
@@ -6377,6 +7455,12 @@ def call_class (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payl
   Capnp.Rpc.call backend target _classMethod payload
 def call_classM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target _classMethod payload
+def start_class (runtime : Capnp.Rpc.Runtime) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target _classMethod payload
+def start_classM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target _classMethod payload
+def await_class (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev _classTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def _classRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6394,6 +7478,22 @@ def call_classTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) 
 def call_classTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target _classMethod payload
   _classResponseOfPayload response
+def await_classTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  _classResponseOfPayload response
+def get_classPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
+  pendingCall.getPipelinedCap pointerPath
+def call_classPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target _classMethod payload
+def call_classPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Results.Reader × Capnp.CapTable) := do
+  let response ← call_classPipelinedM pendingCall pointerPath payload
+  _classResponseOfPayload response
 
 def voidMethodId : UInt16 := UInt16.ofNat 2
 def voidMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := voidMethodId }
@@ -6401,6 +7501,12 @@ def callVoid (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (payloa
   Capnp.Rpc.call backend target voidMethod payload
 def callVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target voidMethod payload
+def startVoid (runtime : Capnp.Rpc.Runtime) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target voidMethod payload
+def startVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target voidMethod payload
+def awaitVoid (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev voidTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def voidRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6418,6 +7524,22 @@ def callVoidTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (p
 def callVoidTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target voidMethod payload
   voidResponseOfPayload response
+def awaitVoidTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  voidResponseOfPayload response
+def getVoidPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
+  pendingCall.getPipelinedCap pointerPath
+def callVoidPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target voidMethod payload
+def callVoidPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Results.Reader × Capnp.CapTable) := do
+  let response ← callVoidPipelinedM pendingCall pointerPath payload
+  voidResponseOfPayload response
 
 def _returnMethodId : UInt16 := UInt16.ofNat 3
 def _returnMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := _returnMethodId }
@@ -6425,6 +7547,12 @@ def call_return (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods) (pay
   Capnp.Rpc.call backend target _returnMethod payload
 def call_returnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target _returnMethod payload
+def start_return (runtime : Capnp.Rpc.Runtime) (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target _returnMethod payload
+def start_returnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target _returnMethod payload
+def await_return (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev _returnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def _returnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6441,6 +7569,22 @@ def call_returnTyped (backend : Capnp.Rpc.Backend) (target : TestKeywordMethods)
   _returnResponseOfPayload response
 def call_returnTypedM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target _returnMethod payload
+  _returnResponseOfPayload response
+def await_returnTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  _returnResponseOfPayload response
+def get_returnPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
+  pendingCall.getPipelinedCap pointerPath
+def call_returnPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target _returnMethod payload
+def call_returnPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Results.Reader × Capnp.CapTable) := do
+  let response ← call_returnPipelinedM pendingCall pointerPath payload
   _returnResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -6550,6 +7694,12 @@ def callGetCallerId (backend : Capnp.Rpc.Backend) (target : TestAuthenticatedBoo
   Capnp.Rpc.call backend target getCallerIdMethod payload
 def callGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+def startGetCallerId (runtime : Capnp.Rpc.Runtime) (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target getCallerIdMethod payload
+def startGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target getCallerIdMethod payload
+def awaitGetCallerId (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev getCallerIdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def getCallerIdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6566,6 +7716,22 @@ def callGetCallerIdTyped (backend : Capnp.Rpc.Backend) (target : TestAuthenticat
   getCallerIdResponseOfPayload response
 def callGetCallerIdTypedM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+  getCallerIdResponseOfPayload response
+def awaitGetCallerIdTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  getCallerIdResponseOfPayload response
+def getGetCallerIdPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestAuthenticatedBootstrap := do
+  pendingCall.getPipelinedCap pointerPath
+def callGetCallerIdPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target getCallerIdMethod payload
+def callGetCallerIdPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Results.Reader × Capnp.CapTable) := do
+  let response ← callGetCallerIdPipelinedM pendingCall pointerPath payload
   getCallerIdResponseOfPayload response
 
 abbrev Handler := Capnp.Rpc.Handler
@@ -6687,6 +7853,12 @@ def callBadlyNamedMethod (backend : Capnp.Rpc.Backend) (target : TestNameAnnotat
   Capnp.Rpc.call backend target badlyNamedMethodMethod payload
 def callBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
+def startBadlyNamedMethod (runtime : Capnp.Rpc.Runtime) (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCall runtime target badlyNamedMethodMethod payload
+def startBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCall target badlyNamedMethodMethod payload
+def awaitBadlyNamedMethod (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
+  pendingCall.await
 abbrev badlyNamedMethodTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 def badlyNamedMethodRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.readChecked (Capnp.getRoot payload.msg) with
@@ -6703,6 +7875,22 @@ def callBadlyNamedMethodTyped (backend : Capnp.Rpc.Backend) (target : TestNameAn
   badlyNamedMethodResponseOfPayload response
 def callBadlyNamedMethodTypedM (target : TestNameAnnotationInterface) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
   let response ← Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
+  badlyNamedMethodResponseOfPayload response
+def awaitBadlyNamedMethodTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
+  let response ← pendingCall.await
+  badlyNamedMethodResponseOfPayload response
+def getBadlyNamedMethodPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[]) : IO TestNameAnnotationInterface := do
+  pendingCall.getPipelinedCap pointerPath
+def callBadlyNamedMethodPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  let target ← Capnp.Rpc.RuntimeM.pendingCallGetPipelinedCap pendingCall pointerPath
+  Capnp.Rpc.RuntimeM.call target badlyNamedMethodMethod payload
+def callBadlyNamedMethodPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Results.Reader × Capnp.CapTable) := do
+  let response ← callBadlyNamedMethodPipelinedM pendingCall pointerPath payload
   badlyNamedMethodResponseOfPayload response
 
 def TestNameAnnotationInterface.badlyNamedMethodMethod._ann_name : Capnp.Text := "renamedMethod"

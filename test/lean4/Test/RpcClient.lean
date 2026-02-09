@@ -212,6 +212,35 @@ def testGeneratedRegisterTypedTargetNetwork : IO Unit := do
       pure ()
 
 @[test]
+def testGeneratedAsyncHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+    let pending1 ← Echo.startFoo runtime target capPayload
+    let pipelinedCap ← Echo.getFooPipelinedCap pending1
+    let pipelinedViaCap ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload
+    assertEqual pipelinedViaCap.capTable.caps.size 0
+    let response1 ← Echo.awaitFoo pending1
+    assertEqual response1.capTable.caps.size 1
+    runtime.releaseCapTable response1.capTable
+    runtime.releaseTarget pipelinedCap
+
+    let pending2 ← Echo.startFoo runtime target capPayload
+    let pipelinedResponse ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooPipelinedM pending2 #[] payload
+    assertEqual pipelinedResponse.capTable.caps.size 0
+    let response2 ← Echo.awaitFoo pending2
+    assertEqual response2.capTable.caps.size 1
+    runtime.releaseCapTable response2.capTable
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testBackendOfRawCall : IO Unit := do
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
   let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope
@@ -489,6 +518,82 @@ def testRuntimeServerDrain : IO Unit := do
     server.drain
     server.release
     runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeAsyncConnectAndWhenResolvedStart : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let connectPromise ← runtime.connectStart address
+    server.accept listener
+    let target ← connectPromise.awaitTarget
+    let whenResolvedPromise ← runtime.targetWhenResolvedStart target
+    whenResolvedPromise.await
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let clientPromise ← runtime.newClientStart address
+    let acceptPromise ← server.acceptStart listener
+    let client ← clientPromise.awaitClient
+    acceptPromise.await
+
+    let target ← client.bootstrap
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+    let disconnectPromise ← client.onDisconnectStart
+    client.release
+    disconnectPromise.await
+    let drainPromise ← server.drainStart
+    drainPromise.await
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
   finally
     runtime.shutdown
     try
@@ -1523,6 +1628,55 @@ def testRuntimeTailCallForwardingTarget : IO Unit := do
     assertEqual method.methodId Echo.fooMethodId
     runtime.releaseTarget forwarder
     runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeTailCallHandlerTargetFromRequestCapability : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  try
+    let sink ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload sink
+    let forwarder ← runtime.registerTailCallHandlerTarget (fun _ method req => do
+      assertEqual method.interfaceId Echo.interfaceId
+      assertEqual method.methodId Echo.fooMethodId
+      let cap? := Capnp.readCapabilityFromTable req.capTable (Capnp.getRoot req.msg)
+      match cap? with
+      | some cap => pure cap
+      | none =>
+          throw (IO.userError "tail-call handler expected request capability"))
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder capPayload
+    assertEqual response.capTable.caps.size 1
+    let returnedCap? := Capnp.readCapabilityFromTable response.capTable (Capnp.getRoot response.msg)
+    assertEqual returnedCap?.isSome true
+    match returnedCap? with
+    | none =>
+        throw (IO.userError "tail-call response missing expected capability")
+    | some returnedCap =>
+        let echoed ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM returnedCap payload
+        assertEqual echoed.capTable.caps.size 0
+
+    runtime.releaseCapTable response.capTable
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeInitWithFdLimit : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.initWithFdLimit (UInt32.ofNat 4)
+  try
+    assertEqual (← runtime.isAlive) true
+    let target ← runtime.registerEchoTarget
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget target
   finally
     runtime.shutdown
 
