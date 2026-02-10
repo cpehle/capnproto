@@ -1703,6 +1703,42 @@ def testInteropCppClientReceivesLeanAdvancedRemoteDetail : IO Unit := do
       pure ()
 
 @[test]
+def testInteropCppClientReceivesLeanAdvancedRemoteExceptionType : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let throwing ← runtime.registerAdvancedHandlerTarget (fun _ _ _ => do
+      pure <| Capnp.Rpc.Advanced.throwRemoteWithType
+        Capnp.Rpc.RemoteExceptionType.overloaded "lean overloaded failure")
+    let server ← runtime.newServer throwing
+    let listener ← server.listen address
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.Interop.cppCallWithAccept
+          runtime server listener address Echo.fooMethod payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "exception type: OVERLOADED") then
+      throw (IO.userError s!"missing exception type text: {errMsg}")
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget throwing
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimePendingCallPipeline : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

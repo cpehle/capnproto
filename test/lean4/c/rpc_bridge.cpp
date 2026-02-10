@@ -59,8 +59,25 @@ lean_obj_res mkIoUserError(const std::string& message) {
 
 void mkIoOkUnit(lean_obj_res& out) { out = lean_io_result_mk_ok(lean_box(0)); }
 
+const char* kjExceptionTypeName(kj::Exception::Type type) {
+  switch (type) {
+    case kj::Exception::Type::FAILED:
+      return "FAILED";
+    case kj::Exception::Type::OVERLOADED:
+      return "OVERLOADED";
+    case kj::Exception::Type::DISCONNECTED:
+      return "DISCONNECTED";
+    case kj::Exception::Type::UNIMPLEMENTED:
+      return "UNIMPLEMENTED";
+    default:
+      return "OTHER";
+  }
+}
+
 std::string describeKjException(const kj::Exception& e) {
   std::string message(e.getDescription().cStr());
+  message += "\nexception type: ";
+  message += kjExceptionTypeName(e.getType());
   auto remoteTrace = e.getRemoteTrace();
   if (remoteTrace != nullptr) {
     message += "\nremote trace: ";
@@ -282,15 +299,15 @@ struct LeanAdvancedHandlerAction {
   std::vector<uint8_t> payloadBytes;
   std::vector<uint8_t> payloadCaps;
   std::string message;
+  kj::Exception::Type remoteExceptionType = kj::Exception::Type::FAILED;
   std::vector<uint8_t> detailBytes;
   kj::Own<DeferredLeanTask> deferredWaitTask;
   kj::Own<DeferredLeanTask> deferredCancelTask;
 };
 
-[[noreturn]] void throwRemoteException(const std::string& message,
+[[noreturn]] void throwRemoteException(kj::Exception::Type type, const std::string& message,
                                        const std::vector<uint8_t>& detailBytes) {
-  auto ex = kj::Exception(
-      kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str(message.c_str()));
+  auto ex = kj::Exception(type, __FILE__, __LINE__, kj::str(message.c_str()));
   if (!detailBytes.empty()) {
     auto copy = kj::heapArray<kj::byte>(detailBytes.size());
     std::memcpy(copy.begin(), detailBytes.data(), detailBytes.size());
@@ -3538,6 +3555,12 @@ class RuntimeLoop {
         throw std::runtime_error(
             "Lean RPC advanced handler: forward options are only valid with forwardCall");
       }
+      if (action.remoteExceptionType != kj::Exception::Type::FAILED &&
+          action.kind != LeanAdvancedHandlerAction::Kind::THROW_REMOTE) {
+        cleanupRequestCaps(cleanupState, {});
+        throw std::runtime_error(
+            "Lean RPC advanced handler: exceptionType is only valid with throwRemote");
+      }
 
       if (action.releaseParams) {
         context.releaseParams();
@@ -3614,7 +3637,7 @@ class RuntimeLoop {
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::THROW_REMOTE) {
         cleanupRequestCaps(cleanupState, {});
-        throwRemoteException(action.message, action.detailBytes);
+        throwRemoteException(action.remoteExceptionType, action.message, action.detailBytes);
       }
 
       auto deferredTaskState =
@@ -3666,6 +3689,7 @@ class RuntimeLoop {
       constexpr unsigned kRawAdvancedControlStreamingOffset = kRawAdvancedWrapperScalarBase + 2;
       constexpr unsigned kRawAdvancedHintsNoPromiseOffset = kRawAdvancedWrapperScalarBase;
       constexpr unsigned kRawAdvancedHintsOnlyPipelineOffset = kRawAdvancedWrapperScalarBase + 1;
+      constexpr unsigned kRawAdvancedExceptionTypeOffset = kRawAdvancedWrapperScalarBase;
       constexpr unsigned kRawAdvancedScalarBase = sizeof(void*) * 2;
       constexpr unsigned kRawAdvancedInterfaceIdOffset = kRawAdvancedScalarBase;
       constexpr unsigned kRawAdvancedTargetOffset = kRawAdvancedScalarBase + 8;
@@ -3697,6 +3721,28 @@ class RuntimeLoop {
           }
           if (lean_ctor_get_uint8(actionObj, kRawAdvancedHintsOnlyPipelineOffset) != 0) {
             action.onlyPromisePipeline = true;
+          }
+          actionObj = lean_ctor_get(actionObj, 0);
+          continue;
+        }
+        if (tag == 8) {
+          auto exTypeTag = lean_ctor_get_uint8(actionObj, kRawAdvancedExceptionTypeOffset);
+          switch (exTypeTag) {
+            case 0:
+              action.remoteExceptionType = kj::Exception::Type::FAILED;
+              break;
+            case 1:
+              action.remoteExceptionType = kj::Exception::Type::OVERLOADED;
+              break;
+            case 2:
+              action.remoteExceptionType = kj::Exception::Type::DISCONNECTED;
+              break;
+            case 3:
+              action.remoteExceptionType = kj::Exception::Type::UNIMPLEMENTED;
+              break;
+            default:
+              action.remoteExceptionType = kj::Exception::Type::FAILED;
+              break;
           }
           actionObj = lean_ctor_get(actionObj, 0);
           continue;

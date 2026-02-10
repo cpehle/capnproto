@@ -93,6 +93,19 @@ structure AdvancedForwardOptions where
   callHints : AdvancedCallHints := {}
   deriving Inhabited, BEq, Repr
 
+inductive RemoteExceptionType where
+  | failed
+  | overloaded
+  | disconnected
+  | unimplemented
+  deriving Inhabited, BEq, Repr
+
+@[inline] def RemoteExceptionType.toUInt8 : RemoteExceptionType -> UInt8
+  | .failed => 0
+  | .overloaded => 1
+  | .disconnected => 2
+  | .unimplemented => 3
+
 inductive AdvancedHandlerResult where
   | respond (payload : Payload)
   | asyncCall (target : Client) (method : Method)
@@ -103,6 +116,8 @@ inductive AdvancedHandlerResult where
   | tailCall (target : Client) (method : Method)
       (payload : Payload := Capnp.emptyRpcEnvelope)
   | throwRemote (message : String) (detail : ByteArray := ByteArray.empty)
+  | throwRemoteWithType (type : RemoteExceptionType) (message : String)
+      (detail : ByteArray := ByteArray.empty)
   | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult)
 
 inductive AdvancedHandlerReply where
@@ -170,6 +185,7 @@ inductive RawAdvancedHandlerResult where
   | sendResultsToCaller (next : RawAdvancedHandlerResult)
   | callHints (noPromisePipelining : Bool) (onlyPromisePipeline : Bool)
       (next : RawAdvancedHandlerResult)
+  | exceptionType (type : UInt8) (next : RawAdvancedHandlerResult)
 
 abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO RawAdvancedHandlerResult
@@ -238,6 +254,10 @@ namespace Advanced
 @[inline] def throwRemote (message : String)
     (detail : ByteArray := ByteArray.empty) : AdvancedHandlerResult :=
   .throwRemote message detail
+
+@[inline] def throwRemoteWithType (type : RemoteExceptionType) (message : String)
+    (detail : ByteArray := ByteArray.empty) : AdvancedHandlerResult :=
+  .throwRemoteWithType type message detail
 
 @[inline] def streaming (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
   .control { isStreaming := true } next
@@ -747,6 +767,8 @@ end CapTable
         nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
   | .throwRemote message detail =>
       pure (.throwRemote message detail)
+  | .throwRemoteWithType type message detail =>
+      pure (.exceptionType type.toUInt8 (.throwRemote message detail))
   | .control opts next =>
       pure (.control opts.releaseParams opts.allowCancellation opts.isStreaming
         (← toRawAdvancedHandlerResult next))
