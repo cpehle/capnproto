@@ -5474,6 +5474,18 @@ class RuntimeLoop {
       RuntimeTaskErrorHandler taskErrorHandler;
       kj::TaskSet tasks(taskErrorHandler);
 
+      auto scheduleRawCallCompletion =
+          [&tasks](kj::Promise<RawCallResult>&& promise,
+                   const std::shared_ptr<RawCallCompletion>& completion) {
+            tasks.add(kj::mv(promise).then(
+                [completion](RawCallResult&& result) mutable {
+                  completeSuccess(completion, kj::mv(result));
+                },
+                [completion](kj::Exception&& e) mutable {
+                  completeFailureKj(completion, e);
+                }));
+          };
+
       while (true) {
         QueuedOperation op;
         bool haveOp = false;
@@ -5511,14 +5523,7 @@ class RuntimeLoop {
             auto promise =
                 processRawCall(call.target, call.interfaceId, call.methodId, call.request,
                                call.requestCaps);
-            tasks.add(
-                kj::mv(promise).then(
-                    [completion = call.completion](RawCallResult&& result) mutable {
-                      completeSuccess(completion, kj::mv(result));
-                    },
-                    [completion = call.completion](kj::Exception&& e) mutable {
-                      completeFailureKj(completion, e);
-                    }));
+            scheduleRawCallCompletion(kj::mv(promise), call.completion);
           } catch (const kj::Exception& e) {
             completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
@@ -5546,14 +5551,7 @@ class RuntimeLoop {
           auto call = std::get<QueuedAwaitPendingCall>(std::move(op));
           try {
             auto promise = awaitPendingCall(call.pendingCallId);
-            tasks.add(
-                kj::mv(promise).then(
-                    [completion = call.completion](RawCallResult&& result) mutable {
-                      completeSuccess(completion, kj::mv(result));
-                    },
-                    [completion = call.completion](kj::Exception&& e) mutable {
-                      completeFailureKj(completion, e);
-                    }));
+            scheduleRawCallCompletion(kj::mv(promise), call.completion);
           } catch (const kj::Exception& e) {
             completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
