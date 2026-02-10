@@ -25,16 +25,97 @@ private def appendByteArray (dst src : ByteArray) : ByteArray :=
       out := out.push b
     pure out
 
-private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
+private def tlsSelfSignedCertPem : String :=
+  String.intercalate "\n" [
+    "-----BEGIN CERTIFICATE-----",
+    "MIIDHzCCAgegAwIBAgIUV7L9GipFL+gICKG4kfi2jLAoGiIwDQYJKoZIhvcNAQEL",
+    "BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MDIxMDAyNTMzNVoXDTM2MDIw",
+    "ODAyNTMzNVowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF",
+    "AAOCAQ8AMIIBCgKCAQEA1SEmm5FXCI56n7aKcrTSar1AqLzPhJNau/GqfYKzM8CC",
+    "97lHb03F3izgWl3ahTQyb1ZQl0TSjWs1BIZ4iB9txwDoxHE0fiZX/Q05JcHOowjO",
+    "joQ/ac6s6c1UqY1a0ZlwP4TYpd4DayF8aynkgjneS4iGXGpjX8/RZAs0kcLuInK7",
+    "jNQfnv+dCKpQRLCCogzdCuPCGCR61UK7cV537N6Q5m1+7Vr0T97xbzldTekXpUdF",
+    "IVadn7smCopTGCRyWMMFgxxnFXTTggETHAzuMWZZGt6MWHp2tVYucqRc5yqHKSeu",
+    "rQCgkOlCLQfgLoRyAUaxUQEmo08EOljCBURIZBBDQQIDAQABo2kwZzAdBgNVHQ4E",
+    "FgQUVJlXR0v/AVF1towFmGBo4yTUwjUwHwYDVR0jBBgwFoAUVJlXR0v/AVF1towF",
+    "mGBo4yTUwjUwDwYDVR0TAQH/BAUwAwEB/zAUBgNVHREEDTALgglsb2NhbGhvc3Qw",
+    "DQYJKoZIhvcNAQELBQADggEBACBJMUhkjlN6odfxdqJoUbuecYYaeL8szXH2+/51",
+    "g26WmFO9Jxv98/w5spTiYT6yJwHZTwVZmjTWuD7iPmGWyrxHMUwmO86rQ9sJu0z6",
+    "yc8PBDajsBCtw/sa1nhA/XJVUVdVwCTJ2A21Odhe1ONAuAKX1FNHHpgMXrKKwwDT",
+    "nY6G+EYP2EWSJCl+uMO8D+yDwNlGxTrCXqJphQifR5XyPnojYw2vc//FPODLNCpr",
+    "v0WxhCVjgh/XxJKjmKNEIkLpU2tUuAapvU5IuRif62o7OVG7PqpuR8zehFSbK706",
+    "IQdNs0jRB9vRLFFR7A17RL79972kmFNe4j6thhjtakX6Eho=",
+    "-----END CERTIFICATE-----",
+    ""
+  ]
+
+private def tlsSelfSignedKeyPem : String :=
+  String.intercalate "\n" [
+    "-----BEGIN PRIVATE KEY-----",
+    "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDVISabkVcIjnqf",
+    "topytNJqvUCovM+Ek1q78ap9grMzwIL3uUdvTcXeLOBaXdqFNDJvVlCXRNKNazUE",
+    "hniIH23HAOjEcTR+Jlf9DTklwc6jCM6OhD9pzqzpzVSpjVrRmXA/hNil3gNrIXxr",
+    "KeSCOd5LiIZcamNfz9FkCzSRwu4icruM1B+e/50IqlBEsIKiDN0K48IYJHrVQrtx",
+    "Xnfs3pDmbX7tWvRP3vFvOV1N6RelR0UhVp2fuyYKilMYJHJYwwWDHGcVdNOCARMc",
+    "DO4xZlka3oxYena1Vi5ypFznKocpJ66tAKCQ6UItB+AuhHIBRrFRASajTwQ6WMIF",
+    "REhkEENBAgMBAAECggEAAZPTjGOXr2D3FkEojotpMogsrycJGeoJihIyhOfrjcCx",
+    "M3ZOCZxLsG6YeUDANBvQGv/6fBkivhBW4c4BPMAvTMGUZ3ZPSTb9UBqZw35XCkC/",
+    "nyFKUx0YDWmzNIdO3pXmNVklTZp6X9/NQwGKDv7wxtI3jN3udvxDuGvnD2RgBPYd",
+    "GE7puZVmjw8eQJ7Ri0Lpo2nNaJhgbvxbWgkCRqk5HAlf7k60474mDYHQz8qCSsup",
+    "ila4boobm+eAN3mJll0ESebJzdLT0QUKBOd5LVR6pIRiCrPhMgr4VOKFFZv97Er0",
+    "2Oha9vFPcH4qjLLLScMuq4K+afz9M9iFs2TRLSZtQQKBgQD0T+GjqQV2Vzahq+4t",
+    "na4mkVTEqiK4bty5KFIB7uHFVMrDiyGfBAXu31I7Cglg0G/HdrX8Ul+vkGhmz+gf",
+    "rbwIIlLvy20EFDKDk5pfZFbqC5BfTrn08quv4adbKUbNw6yWeq2hBIn9EN+IMNfA",
+    "W6cloXKF2rmpoWwZJWoAqkZQ4QKBgQDfU1+EPfN6mK9zwbj599NNo9gdHeZM4SYi",
+    "zMzVKhboqCxMY/cxPKd5jq+VQxPzwn4v2nNc++2kUge8EgFgziKEscqk2VlPMj7S",
+    "lt23tTIEWpj9IYr+BkPHLYy1JbhuI2idXVRJPtfca0zFLZ5zid12RnphuY9qMAtH",
+    "UJZkX9leYQKBgBujZc1T87A9kYqcnqc+bVMjoclVzfO7ZvDzZMOfOJ9QRlf0x2rr",
+    "05gAX5caPZFcQyj3fwL6dqSv23+2CXZ7+weYinViOAT8G/LSoeYkvchgYobFqzfQ",
+    "tCeDiaFAfCgO+NlVK4tJriqY3BDWJbI3LCOPrhsCcXqFLmtx1hoZKTdBAoGBALxL",
+    "lphwh47Rl/VY3DbezqmCwN/j6t7dYwMqfHYqk8A8s4UBMFWyV161gLOwJ+16Cl0c",
+    "qfI3c+n9RAo9gC33/8C0CzEtFREiQzfZ/j07qF1laeLb2k5OR+1zKVU+5Z7vefBc",
+    "1YkgVG7DhaomyZePIUvtJpipFROqSIgrmXIuIp9hAoGBAL332byiu/CqGAdXDQYO",
+    "qGuCopLuVt9kIwerDnGF6DJaR69HBYN03jALNMsQ6whXLHQILvIALJex96vOwBeU",
+    "VZ7kkjIl0eKSgOUhh/z4r8UtfFXfENV/uhR6zafty6qLN/9pM799jo8YLMXbAz7n",
+    "ASrGhFMZlqDXB3vTwmCiQEqp",
+    "-----END PRIVATE KEY-----",
+    ""
+  ]
+
+private partial def readHttpServerRequestBodyAll
+    (requestBody : Capnp.KjAsync.HttpServerRequestBody) : IO ByteArray := do
+  let mut out := ByteArray.empty
+  let mut done := false
+  while !done do
+    let chunk ← requestBody.read (UInt32.ofNat 1) (UInt32.ofNat 4096)
+    if chunk.size == 0 then
+      done := true
+    else
+      out := appendByteArray out chunk
+  requestBody.release
+  pure out
+
+private partial def waitForHttpServerRequestRaw (runtime : Capnp.KjAsync.Runtime)
     (server : Capnp.KjAsync.HttpServer) (attempts : Nat := 400) :
     IO Capnp.KjAsync.HttpServerRequest := do
   if attempts == 0 then
     throw (IO.userError "timed out waiting for HTTP server request")
-  match (← runtime.httpServerPollRequest? server) with
+  match (← runtime.httpServerPollRequestStreaming? server) with
   | some request => pure request
   | none =>
     runtime.sleepMillis (UInt32.ofNat 5)
-    waitForHttpServerRequest runtime server (attempts - 1)
+    waitForHttpServerRequestRaw runtime server (attempts - 1)
+
+private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
+    (server : Capnp.KjAsync.HttpServer) (attempts : Nat := 400) :
+    IO Capnp.KjAsync.HttpServerRequest := do
+  let request ← waitForHttpServerRequestRaw runtime server attempts
+  match request.bodyStream? with
+  | some requestBody =>
+    let body ← readHttpServerRequestBodyAll requestBody
+    pure { request with body := body, bodyStream? := none }
+  | none =>
+    pure request
 
 @[test]
 def testKjAsyncRuntimeLifecycle : IO Unit := do
@@ -568,6 +649,67 @@ def testKjAsyncHttpStreamingRequestAndResponse : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncHttpServerStreamingRequestAndResponse : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestPartA := "server-stream-request-a".toUTF8
+    let requestPartB := "-and-b".toUTF8
+    let expectedRequestBody := appendByteArray requestPartA requestPartB
+
+    let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
+      .post "127.0.0.1" "/lean-http-server-stream" #[{ name := "x-server-stream", value := "1" }]
+      server.boundPort
+    let requestBody ←
+      match requestBody? with
+      | some body => pure body
+      | none => throw (IO.userError "expected HTTP request body stream")
+    requestBody.write requestPartA
+    requestBody.write requestPartB
+    requestBody.finish
+
+    let request ← waitForHttpServerRequestRaw runtime server
+    assertEqual request.path "/lean-http-server-stream"
+    assertEqual request.body.size 0
+    let requestBodyStream ←
+      match request.bodyStream? with
+      | some body => pure body
+      | none => throw (IO.userError "expected server request body stream handle")
+    let streamedRequestBody ← readHttpServerRequestBodyAll requestBodyStream
+    assertEqual streamedRequestBody expectedRequestBody
+
+    let responseBody ← runtime.httpServerRespondStartStreaming server request.requestId
+      (UInt32.ofNat 202) "Accepted" #[{ name := "x-server-stream-response", value := "1" }]
+    let responsePartA := "server-stream-response-a".toUTF8
+    let responsePartB := "-and-b".toUTF8
+    let expectedResponseBody := appendByteArray responsePartA responsePartB
+    responseBody.write responsePartA
+    responseBody.write responsePartB
+    responseBody.finish
+
+    let response ← responsePromise.awaitStreamingWithHeaders
+    assertEqual response.status (UInt32.ofNat 202)
+    assertEqual response.statusText "Accepted"
+    assertTrue
+      (response.headers.any
+        (fun h => h.name == "x-server-stream-response" && h.value == "1"))
+      "expected response header x-server-stream-response"
+
+    let mut received := ByteArray.empty
+    let mut done := false
+    while !done do
+      let chunk ← response.body.read (UInt32.ofNat 1) (UInt32.ofNat 4)
+      if chunk.size == 0 then
+        done := true
+      else
+        received := appendByteArray received chunk
+    assertEqual received expectedResponseBody
+    response.body.release
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncTlsEnableIsExplicit : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -595,6 +737,80 @@ def testKjAsyncTlsEnableIsExplicit : IO Unit := do
         pure (toString e)
     assertTrue (!errAfterEnable.contains "TLS is not enabled")
       "expected secure request error to no longer be the TLS-not-enabled guard after Runtime.enableTls"
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpsAndWssWithCustomTlsConfig : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    runtime.configureTls {
+      useSystemTrustStore := false
+      verifyClients := false
+      trustedCertificatesPem := tlsSelfSignedCertPem
+      certificateChainPem := tlsSelfSignedCertPem
+      privateKeyPem := tlsSelfSignedKeyPem
+    }
+    let server ← runtime.httpServerListenSecure "localhost" 0
+    assertTrue (server.boundPort != UInt32.ofNat 0) "secure server must bind a non-zero port"
+    let requestBody := "https-request-body".toUTF8
+    let responsePromise ← runtime.httpRequestStartWithHeadersSecure
+      .post "localhost" "/lean-https" #[] requestBody server.boundPort
+
+    let request ←
+      try
+        waitForHttpServerRequest runtime server
+      catch _ =>
+        responsePromise.cancel
+        let err ←
+          try
+            let _ ← responsePromise.awaitWithHeaders
+            pure "request unexpectedly completed without reaching server"
+          catch e =>
+            pure (toString e)
+        throw (IO.userError s!"timed out waiting for HTTPS request; client error: {err}")
+    assertEqual request.path "/lean-https"
+    assertEqual request.body requestBody
+
+    let responseBody := "https-response-body".toUTF8
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 200) "OK"
+      #[{ name := "x-https", value := "1" }] responseBody
+
+    let response ← responsePromise.awaitWithHeaders
+    assertEqual response.status (UInt32.ofNat 200)
+    assertEqual response.body responseBody
+    assertTrue
+      (response.headers.any (fun h => h.name == "x-https" && h.value == "1"))
+      "expected response header x-https"
+
+    let wsPromise ← runtime.webSocketConnectStartWithHeadersSecure
+      "localhost" "/lean-wss" #[] server.boundPort
+    let wsRequest ← waitForHttpServerRequestRaw runtime server
+    assertEqual wsRequest.path "/lean-wss"
+    assertEqual wsRequest.webSocketRequested true
+
+    let serverWs ← runtime.httpServerRespondWebSocket server wsRequest.requestId
+    let clientWs ← wsPromise.await
+
+    (← clientWs.sendTextStart "hello-over-wss").await
+    let serverMessage ← serverWs.receive
+    match serverMessage with
+    | .text value =>
+      assertEqual value "hello-over-wss"
+    | _ =>
+      throw (IO.userError "expected websocket text message on secure server side")
+
+    (← serverWs.sendTextStart "hello-over-wss-reply").await
+    let clientMessage ← clientWs.receive
+    match clientMessage with
+    | .text value =>
+      assertEqual value "hello-over-wss-reply"
+    | _ =>
+      throw (IO.userError "expected websocket text message on secure client side")
+
+    clientWs.release
+    serverWs.release
+    server.release
   finally
     runtime.shutdown
 
