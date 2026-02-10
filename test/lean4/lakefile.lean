@@ -40,7 +40,10 @@ target rpc_bridge.o pkg : FilePath := do
   let oFile := pkg.buildDir / "c" / "rpc_bridge.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
-    "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString
+    "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
+    "-I", (pkg.dir / ".." / ".." / "build-lean4-apple" / "c++" / "src" / "capnp" / "test_capnp").toString,
+    "-I", (pkg.dir / ".." / ".." / "build-lean4" / "c++" / "src" / "capnp" / "test_capnp").toString,
+    "-I", (pkg.dir / ".." / ".." / "build" / "c++" / "src" / "capnp" / "test_capnp").toString
   ]
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
@@ -49,7 +52,10 @@ target kj_async_bridge.o pkg : FilePath := do
   let oFile := pkg.buildDir / "c" / "kj_async_bridge.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
-    "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString
+    "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
+    "-I", (pkg.dir / ".." / ".." / "build-lean4-apple" / "c++" / "src" / "capnp" / "test_capnp").toString,
+    "-I", (pkg.dir / ".." / ".." / "build-lean4" / "c++" / "src" / "capnp" / "test_capnp").toString,
+    "-I", (pkg.dir / ".." / ".." / "build" / "c++" / "src" / "capnp" / "test_capnp").toString
   ]
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 

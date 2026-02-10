@@ -2388,3 +2388,162 @@ def testRuntimePendingCallSharedAsyncHelpers : IO Unit := do
     runtime.releaseTarget target
   finally
     runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatBasicThreePartyHandoff : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let bobCallCount ← IO.mkRef (0 : Nat)
+  let heldCap ← IO.mkRef (none : Option Capnp.Rpc.Client)
+  try
+    let bobBootstrap ← runtime.registerHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        bobCallCount.modify (fun n => n + 1)
+      pure req)
+    let carolBootstrap ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        let cap? := Capnp.readCapabilityFromTable req.capTable (Capnp.getRoot req.msg)
+        match cap? with
+        | some cap =>
+            let retained ← runtime.retainTarget cap
+            match (← heldCap.get) with
+            | some previous => runtime.releaseTarget previous
+            | none => pure ()
+            heldCap.set (some retained)
+        | none => heldCap.set none
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+      else if method.interfaceId == Echo.interfaceId && method.methodId == Echo.barMethodId then
+        match (← heldCap.get) with
+        | some target =>
+            pure (Capnp.Rpc.Advanced.asyncForward target Echo.fooMethod payload)
+        | none =>
+            throw (IO.userError "Carol has no held capability")
+      else
+        pure (Capnp.Rpc.Advanced.respond req))
+
+    let alice ← runtime.newMultiVatClient "alice"
+    let bob ← runtime.newMultiVatServer "bob" bobBootstrap
+    let carol ← runtime.newMultiVatServer "carol" carolBootstrap
+
+    let bobCap ← alice.bootstrap { host := "bob", unique := false }
+    let carolCap ← alice.bootstrap { host := "carol", unique := false }
+    assertEqual (← runtime.multiVatHasConnection carol bob) false
+
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM carolCap (mkCapabilityPayload bobCap)
+    assertEqual (← bobCallCount.get) 0
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM carolCap payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← bobCallCount.get) 1
+    assertEqual (← runtime.multiVatHasConnection carol bob) true
+
+    runtime.releaseTarget bobCap
+    runtime.releaseTarget carolCap
+    alice.release
+    bob.release
+    carol.release
+    match (← heldCap.get) with
+    | some cap => runtime.releaseTarget cap
+    | none => pure ()
+    runtime.releaseTarget bobBootstrap
+    runtime.releaseTarget carolBootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatBootstrapFactoryAuth : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let seenCaller ← IO.mkRef ({ host := "", unique := false } : Capnp.Rpc.VatId)
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice"
+    let bob ← runtime.newMultiVatServerWithBootstrapFactory "bob" (fun caller => do
+      seenCaller.set caller
+      pure bootstrap)
+
+    let target ← alice.bootstrap { host := "bob", unique := true }
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    let caller := (← seenCaller.get)
+    assertEqual caller.host "alice"
+    assertEqual caller.unique true
+
+    runtime.releaseTarget target
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatSturdyRefRestoreCallback : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let seenCaller ← IO.mkRef ({ host := "", unique := false } : Capnp.Rpc.VatId)
+  let seenObjectId ← IO.mkRef ByteArray.empty
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice"
+    let bob ← runtime.newMultiVatServer "bob" bootstrap
+    bob.setRestorer (fun caller objectId => do
+      seenCaller.set caller
+      seenObjectId.set objectId
+      pure bootstrap)
+
+    let sturdyRef : Capnp.Rpc.SturdyRef := {
+      vat := { host := "bob", unique := false }
+      objectId := ByteArray.mk #[10, 20, 30, 40]
+    }
+    let target ← alice.restoreSturdyRef sturdyRef
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    let caller := (← seenCaller.get)
+    assertEqual caller.host "alice"
+    assertEqual caller.unique false
+    assertEqual ((← seenObjectId.get) == sturdyRef.objectId) true
+
+    runtime.releaseTarget target
+    bob.clearRestorer
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatPublishedSturdyRefAndStats : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice"
+    let bob ← runtime.newMultiVatServer "bob" bootstrap
+
+    runtime.multiVatSetForwardingEnabled false
+    assertEqual (← runtime.multiVatForwardCount) (UInt64.ofNat 0)
+    assertEqual (← runtime.multiVatDeniedForwardCount) (UInt64.ofNat 0)
+
+    bob.publishSturdyRef (ByteArray.mk #[1, 2, 3]) bootstrap
+    let restored ← alice.restoreSturdyRef
+      { vat := { host := "bob", unique := false }, objectId := ByteArray.mk #[1, 2, 3] }
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM restored payload
+    assertEqual response.capTable.caps.size 0
+
+    let bootTarget ← alice.bootstrap { host := "bob", unique := false }
+    assertEqual (← runtime.multiVatHasConnection alice bob) true
+
+    runtime.releaseTarget bootTarget
+    runtime.releaseTarget restored
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
