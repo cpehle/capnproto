@@ -6,6 +6,8 @@
 #include <kj/compat/tls.h>
 #include <kj/time.h>
 
+#include "rpc_bridge_runtime.h"
+
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -6920,7 +6922,6 @@ class KjAsyncRuntimeLoop {
 
 std::mutex gKjAsyncRuntimeRegistryMutex;
 std::unordered_map<uint64_t, std::shared_ptr<KjAsyncRuntimeLoop>> gKjAsyncRuntimes;
-uint64_t gNextKjAsyncRuntimeId = 1;
 
 kj::Promise<void> KjAsyncRuntimeLoop::RuntimeHttpService::request(
     kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
@@ -7030,7 +7031,8 @@ kj::Promise<void> KjAsyncRuntimeLoop::RuntimeHttpService::request(
 
 uint64_t allocateKjAsyncRuntimeIdLocked() {
   while (true) {
-    uint64_t id = gNextKjAsyncRuntimeId++;
+    uint64_t id =
+        capnp_lean_rpc::gNextRuntimeId.fetch_add(1, std::memory_order_relaxed);
     if (id == 0) {
       continue;
     }

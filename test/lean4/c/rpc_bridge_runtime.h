@@ -2,6 +2,7 @@
 
 #include <lean/lean.h>
 
+#include <atomic>
 #include <kj/exception.h>
 
 #include <condition_variable>
@@ -112,6 +113,10 @@ struct RegisterPairCompletion {
 };
 
 class RuntimeLoop;
+
+// Shared runtime id generator used by both the RPC and KjAsync test runtimes to avoid collisions
+// when a single process creates both kinds of runtimes.
+extern std::atomic<uint64_t> gNextRuntimeId;
 
 uint64_t createRuntime(uint32_t maxFdsPerMessage);
 std::shared_ptr<RuntimeLoop> getRuntime(uint64_t runtimeId);
