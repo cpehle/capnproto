@@ -1048,6 +1048,95 @@ def testRuntimeClientOnDisconnectAfterServerRelease : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeListenerRuntimeMismatchErrors : IO Unit := do
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtimeA ← Capnp.Rpc.Runtime.init
+  let runtimeB ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrapA ← runtimeA.registerEchoTarget
+    let serverA ← runtimeA.newServer bootstrapA
+    let listenerA ← serverA.listen address
+
+    let bootstrapB ← runtimeB.registerEchoTarget
+    let serverB ← runtimeB.newServer bootstrapB
+
+    let releaseErr ←
+      try
+        runtimeB.releaseListener listenerA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(releaseErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected listener runtime mismatch error, got: {releaseErr}")
+
+    let acceptErr ←
+      try
+        serverB.accept listenerA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(acceptErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected server/listener runtime mismatch error, got: {acceptErr}")
+
+    runtimeA.releaseListener listenerA
+    serverA.release
+    runtimeA.releaseTarget bootstrapA
+    serverB.release
+    runtimeB.releaseTarget bootstrapB
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeTransportRuntimeMismatchErrors : IO Unit := do
+  let runtimeA ← Capnp.Rpc.Runtime.init
+  let runtimeB ← Capnp.Rpc.Runtime.init
+  try
+    let (transportA, transportB) ← runtimeA.newTransportPipe
+
+    let connectErr ←
+      try
+        let _ ← runtimeB.connectTransport transportA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(connectErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected transport runtime mismatch error, got: {connectErr}")
+
+    let getFdErr ←
+      try
+        let _ ← runtimeB.transportGetFd? transportA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(getFdErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected transport fd runtime mismatch error, got: {getFdErr}")
+
+    let releaseErr ←
+      try
+        runtimeB.releaseTransport transportA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(releaseErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected transport release runtime mismatch error, got: {releaseErr}")
+
+    runtimeA.releaseTransport transportA
+    runtimeA.releaseTransport transportB
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+
+@[test]
 def testRuntimeMScopedResources : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress

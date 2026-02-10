@@ -14,6 +14,7 @@ structure Method where
 abbrev Client := Capnp.Capability
 
 structure Listener where
+  runtimeHandle : UInt64
   raw : UInt32
   deriving Inhabited, BEq, Repr
 
@@ -30,6 +31,7 @@ structure RuntimePendingCall where
   deriving Inhabited, BEq, Repr
 
 structure RuntimeTransport where
+  runtimeHandle : UInt64
   raw : UInt32
   deriving Inhabited, BEq, Repr
 
@@ -652,6 +654,15 @@ structure RuntimeUnitPromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+@[inline] private def ensureSameRuntimeHandle
+    (runtime : Runtime) (ownerHandle : UInt64) (resource : String) : IO Unit := do
+  if runtime.handle != ownerHandle then
+    throw (IO.userError s!"{resource} belongs to a different Capnp.Rpc runtime")
+
+@[inline] private def ensureSameRuntime
+    (runtime : Runtime) (owner : Runtime) (resource : String) : IO Unit :=
+  ensureSameRuntimeHandle runtime owner.handle resource
+
 namespace PipelinePath
 
 @[inline] def toBytes (ops : Array UInt16) : ByteArray := Id.run do
@@ -856,16 +867,21 @@ namespace Runtime
 
 @[inline] def newTransportPipe (runtime : Runtime) : IO (RuntimeTransport × RuntimeTransport) := do
   let (first, second) ← ffiRuntimeNewTransportPipeImpl runtime.handle
-  return ({ raw := first }, { raw := second })
+  return (
+    { runtimeHandle := runtime.handle, raw := first },
+    { runtimeHandle := runtime.handle, raw := second }
+  )
 
 @[inline] def newTransportFromFd (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
-  return { raw := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
+  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
 
-@[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit :=
+@[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit := do
+  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
   ffiRuntimeReleaseTransportImpl runtime.handle transport.raw
 
 @[inline] def transportGetFd? (runtime : Runtime) (transport : RuntimeTransport) :
     IO (Option UInt32) := do
+  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
   let noneSentinel : UInt32 := UInt32.ofNat 4294967295
   let fd ← ffiRuntimeTransportGetFdImpl runtime.handle transport.raw
   if fd == noneSentinel then
@@ -873,7 +889,8 @@ namespace Runtime
   else
     return some fd
 
-@[inline] def connectTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Client :=
+@[inline] def connectTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Client := do
+  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
   ffiRuntimeConnectTransportImpl runtime.handle transport.raw
 
 @[inline] def connectTransportFd (runtime : Runtime) (fd : UInt32) : IO Client := do
@@ -882,12 +899,14 @@ namespace Runtime
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
-  return { raw := (← ffiRuntimeListenEchoImpl runtime.handle address portHint) }
+  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeListenEchoImpl runtime.handle address portHint) }
 
-@[inline] def acceptEcho (runtime : Runtime) (listener : Listener) : IO Unit :=
+@[inline] def acceptEcho (runtime : Runtime) (listener : Listener) : IO Unit := do
+  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   ffiRuntimeAcceptEchoImpl runtime.handle listener.raw
 
-@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
+@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit := do
+  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   ffiRuntimeReleaseListenerImpl runtime.handle listener.raw
 
 @[inline] def newClient (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
@@ -953,7 +972,9 @@ namespace Runtime
 
 @[inline] def multiVatBootstrapPeer (runtime : Runtime)
     (sourcePeer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
-    (unique : Bool := false) : IO Client :=
+    (unique : Bool := false) : IO Client := do
+  ensureSameRuntime runtime sourcePeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime targetPeer.runtime "RuntimeVatPeerRef"
   ffiRuntimeMultiVatBootstrapPeerImpl runtime.handle sourcePeer.handle.raw targetPeer.handle.raw
     (boolToUInt8 unique)
 
@@ -973,7 +994,9 @@ namespace Runtime
   ffiRuntimeMultiVatDeniedForwardCountImpl runtime.handle
 
 @[inline] def multiVatHasConnection (runtime : Runtime)
-    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool :=
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
   ffiRuntimeMultiVatHasConnectionImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
 
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
@@ -1092,7 +1115,7 @@ namespace Runtime
     requestBytes requestCaps
 
 @[inline] def targetGetFd? (runtime : Runtime) (target : Client) : IO (Option UInt32) := do
-  let noneSentinel := UInt32.ofNat 4294967295
+  let noneSentinel : UInt32 := UInt32.ofNat 4294967295
   let fd ← ffiRuntimeTargetGetFdImpl runtime.handle target
   if fd == noneSentinel then
     return none
@@ -1191,14 +1214,17 @@ namespace RuntimeServerRef
 @[inline] def listen (server : RuntimeServerRef) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
   return {
+    runtimeHandle := server.runtime.handle
     raw := (← ffiRuntimeServerListenImpl server.runtime.handle server.handle.raw address portHint)
   }
 
-@[inline] def accept (server : RuntimeServerRef) (listener : Listener) : IO Unit :=
+@[inline] def accept (server : RuntimeServerRef) (listener : Listener) : IO Unit := do
+  ensureSameRuntimeHandle server.runtime listener.runtimeHandle "Listener"
   ffiRuntimeServerAcceptImpl server.runtime.handle server.handle.raw listener.raw
 
 @[inline] def acceptStart (server : RuntimeServerRef) (listener : Listener) :
     IO RuntimeUnitPromiseRef := do
+  ensureSameRuntimeHandle server.runtime listener.runtimeHandle "Listener"
   return {
     runtime := server.runtime
     handle := (← ffiRuntimeServerAcceptStartImpl
@@ -1208,7 +1234,8 @@ namespace RuntimeServerRef
 @[inline] def acceptFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit :=
   ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.raw fd
 
-@[inline] def acceptTransport (server : RuntimeServerRef) (transport : RuntimeTransport) : IO Unit :=
+@[inline] def acceptTransport (server : RuntimeServerRef) (transport : RuntimeTransport) : IO Unit := do
+  ensureSameRuntimeHandle server.runtime transport.runtimeHandle "RuntimeTransport"
   ffiRuntimeServerAcceptTransportImpl server.runtime.handle server.handle.raw transport.raw
 
 @[inline] def acceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit := do
@@ -1353,7 +1380,7 @@ namespace RuntimeRegisterPromiseRef
   }
 
 @[inline] def awaitListener (promise : RuntimeRegisterPromiseRef) : IO Listener := do
-  return { raw := (← promise.await) }
+  return { runtimeHandle := promise.runtime.handle, raw := (← promise.await) }
 
 @[inline] def awaitServer (promise : RuntimeRegisterPromiseRef) : IO RuntimeServerRef := do
   return {
@@ -1830,6 +1857,8 @@ namespace Interop
 @[inline] def cppCallWithAccept (runtime : Runtime) (server : RuntimeServerRef) (listener : Listener)
     (address : String) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
+  ensureSameRuntime runtime server.runtime "RuntimeServerRef"
+  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := payload.toBytes
   let requestCaps := CapTable.toBytes payload.capTable
   let (responseBytes, responseCaps) ←
@@ -1842,6 +1871,8 @@ namespace Interop
     (request : Payload := Capnp.emptyRpcEnvelope)
     (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
     IO Payload := do
+  ensureSameRuntime runtime server.runtime "RuntimeServerRef"
+  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := request.toBytes
   let requestCaps := CapTable.toBytes request.capTable
   let pipelinedRequestBytes := pipelinedRequest.toBytes
