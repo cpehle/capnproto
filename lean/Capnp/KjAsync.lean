@@ -76,6 +76,23 @@ structure HttpResponsePromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure HttpRequestBody where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure HttpResponseBody where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure HttpResponseStreaming where
+  status : UInt32
+  statusText : String
+  headers : Array HttpHeader
+  body : HttpResponseBody
+  deriving Inhabited, BEq, Repr
+
 structure HttpServer where
   runtime : Runtime
   handle : UInt32
@@ -111,6 +128,9 @@ opaque ffiRuntimeReleaseImpl (runtime : UInt64) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_is_alive"]
 opaque ffiRuntimeIsAliveImpl (runtime : UInt64) : IO Bool
+
+@[extern "capnp_lean_kj_async_runtime_enable_tls"]
+opaque ffiRuntimeEnableTlsImpl (runtime : UInt64) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_sleep_nanos_start"]
 opaque ffiRuntimeSleepNanosStartImpl (runtime : UInt64) (delayNanos : UInt64) : IO UInt32
@@ -289,10 +309,21 @@ opaque ffiRuntimeHttpRequestImpl
     (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
     (path : @& String) (body : @& ByteArray) : IO (UInt32 × ByteArray)
 
+@[extern "capnp_lean_kj_async_runtime_http_request_with_response_limit"]
+opaque ffiRuntimeHttpRequestWithResponseLimitImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (body : @& ByteArray) (responseBodyLimit : UInt64) :
+    IO (UInt32 × ByteArray)
+
 @[extern "capnp_lean_kj_async_runtime_http_request_start"]
 opaque ffiRuntimeHttpRequestStartImpl
     (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
     (path : @& String) (body : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_with_response_limit"]
+opaque ffiRuntimeHttpRequestStartWithResponseLimitImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (body : @& ByteArray) (responseBodyLimit : UInt64) : IO UInt32
 
 @[extern "capnp_lean_kj_async_runtime_http_response_promise_await"]
 opaque ffiRuntimeHttpResponsePromiseAwaitImpl
@@ -310,14 +341,97 @@ opaque ffiRuntimeHttpRequestWithHeadersImpl
     (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) :
     IO (UInt32 × String × ByteArray × ByteArray)
 
+@[extern "capnp_lean_kj_async_runtime_http_request_with_headers_secure"]
+opaque ffiRuntimeHttpRequestWithHeadersSecureImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) :
+    IO (UInt32 × String × ByteArray × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit"]
+opaque ffiRuntimeHttpRequestWithHeadersWithResponseLimitImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray)
+    (responseBodyLimit : UInt64) : IO (UInt32 × String × ByteArray × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure"]
+opaque ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray)
+    (responseBodyLimit : UInt64) : IO (UInt32 × String × ByteArray × ByteArray)
+
 @[extern "capnp_lean_kj_async_runtime_http_request_start_with_headers"]
 opaque ffiRuntimeHttpRequestStartWithHeadersImpl
     (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
     (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_http_request_start_with_headers_secure"]
+opaque ffiRuntimeHttpRequestStartWithHeadersSecureImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_streaming_with_headers"]
+opaque ffiRuntimeHttpRequestStartStreamingWithHeadersImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_streaming_with_headers_secure"]
+opaque ffiRuntimeHttpRequestStartStreamingWithHeadersSecureImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit"]
+opaque ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray)
+    (responseBodyLimit : UInt64) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_secure"]
+opaque ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitSecureImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray)
+    (responseBodyLimit : UInt64) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_http_response_promise_await_with_headers"]
 opaque ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl
     (runtime : UInt64) (promise : UInt32) : IO (UInt32 × String × ByteArray × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_response_promise_await_streaming_with_headers"]
+opaque ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl
+    (runtime : UInt64) (promise : UInt32) : IO (UInt32 × String × ByteArray × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_body_write_start"]
+opaque ffiRuntimeHttpRequestBodyWriteStartImpl
+    (runtime : UInt64) (requestBody : UInt32) (bytes : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_request_body_write"]
+opaque ffiRuntimeHttpRequestBodyWriteImpl
+    (runtime : UInt64) (requestBody : UInt32) (bytes : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_request_body_finish_start"]
+opaque ffiRuntimeHttpRequestBodyFinishStartImpl
+    (runtime : UInt64) (requestBody : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_request_body_finish"]
+opaque ffiRuntimeHttpRequestBodyFinishImpl
+    (runtime : UInt64) (requestBody : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_request_body_release"]
+opaque ffiRuntimeHttpRequestBodyReleaseImpl
+    (runtime : UInt64) (requestBody : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_response_body_read_start"]
+opaque ffiRuntimeHttpResponseBodyReadStartImpl
+    (runtime : UInt64) (responseBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_response_body_read"]
+opaque ffiRuntimeHttpResponseBodyReadImpl
+    (runtime : UInt64) (responseBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
+    IO ByteArray
+
+@[extern "capnp_lean_kj_async_runtime_http_response_body_release"]
+opaque ffiRuntimeHttpResponseBodyReleaseImpl
+    (runtime : UInt64) (responseBody : UInt32) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_http_server_listen"]
 opaque ffiRuntimeHttpServerListenImpl
@@ -355,8 +469,18 @@ opaque ffiRuntimeWebSocketConnectWithHeadersImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
     (requestHeaders : @& ByteArray) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_websocket_connect_with_headers_secure"]
+opaque ffiRuntimeWebSocketConnectWithHeadersSecureImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
+    (requestHeaders : @& ByteArray) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_websocket_connect_start_with_headers"]
 opaque ffiRuntimeWebSocketConnectStartWithHeadersImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
+    (requestHeaders : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_websocket_connect_start_with_headers_secure"]
+opaque ffiRuntimeWebSocketConnectStartWithHeadersSecureImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
     (requestHeaders : @& ByteArray) : IO UInt32
 
@@ -392,6 +516,10 @@ opaque ffiRuntimeWebSocketSendBinaryImpl
 opaque ffiRuntimeWebSocketReceiveStartImpl
     (runtime : UInt64) (webSocket : UInt32) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_websocket_receive_start_with_max"]
+opaque ffiRuntimeWebSocketReceiveStartWithMaxImpl
+    (runtime : UInt64) (webSocket : UInt32) (maxBytes : UInt32) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_websocket_message_promise_await"]
 opaque ffiRuntimeWebSocketMessagePromiseAwaitImpl
     (runtime : UInt64) (promise : UInt32) : IO (UInt32 × UInt32 × String × ByteArray)
@@ -405,6 +533,11 @@ opaque ffiRuntimeWebSocketMessagePromiseReleaseImpl (runtime : UInt64) (promise 
 @[extern "capnp_lean_kj_async_runtime_websocket_receive"]
 opaque ffiRuntimeWebSocketReceiveImpl
     (runtime : UInt64) (webSocket : UInt32) : IO (UInt32 × UInt32 × String × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_websocket_receive_with_max"]
+opaque ffiRuntimeWebSocketReceiveWithMaxImpl
+    (runtime : UInt64) (webSocket : UInt32) (maxBytes : UInt32) :
+    IO (UInt32 × UInt32 × String × ByteArray)
 
 @[extern "capnp_lean_kj_async_runtime_websocket_close_start"]
 opaque ffiRuntimeWebSocketCloseStartImpl
@@ -637,6 +770,9 @@ namespace Runtime
 
 @[inline] def isAlive (runtime : Runtime) : IO Bool :=
   ffiRuntimeIsAliveImpl runtime.handle
+
+@[inline] def enableTls (runtime : Runtime) : IO Unit :=
+  ffiRuntimeEnableTlsImpl runtime.handle
 
 @[inline] def sleepNanosStart (runtime : Runtime) (delayNanos : UInt64) : IO PromiseRef := do
   return {
@@ -887,12 +1023,62 @@ namespace Runtime
     ffiRuntimeHttpRequestImpl runtime.handle (httpMethodToTag method) address portHint path body
   return { status := status, body := responseBody }
 
+@[inline] def httpRequestWithResponseLimit (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponse := do
+  let (status, responseBody) ←
+    ffiRuntimeHttpRequestWithResponseLimitImpl runtime.handle (httpMethodToTag method) address
+      portHint path body responseBodyLimit
+  return { status := status, body := responseBody }
+
 @[inline] def httpRequestWithHeaders (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : IO HttpResponseEx := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersImpl runtime.handle (httpMethodToTag method) address
       portHint path (encodeHeaders requestHeaders) body
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
+
+@[inline] def httpRequestWithHeadersSecure (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersSecureImpl runtime.handle (httpMethodToTag method) address
+      portHint path (encodeHeaders requestHeaders) body
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
+
+@[inline] def httpRequestWithHeadersWithResponseLimit (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersWithResponseLimitImpl runtime.handle (httpMethodToTag method)
+      address portHint path (encodeHeaders requestHeaders) body responseBodyLimit
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
+
+@[inline] def httpRequestWithHeadersWithResponseLimitSecure (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureImpl runtime.handle
+      (httpMethodToTag method) address portHint path (encodeHeaders requestHeaders) body
+      responseBodyLimit
   return {
     status := status
     statusText := statusText
@@ -909,6 +1095,16 @@ namespace Runtime
       runtime.handle (httpMethodToTag method) address portHint path body)
   }
 
+@[inline] def httpRequestStartWithResponseLimit (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO HttpResponsePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithResponseLimitImpl
+      runtime.handle (httpMethodToTag method) address portHint path body responseBodyLimit)
+  }
+
 @[inline] def httpRequestStartWithHeaders (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
@@ -918,6 +1114,70 @@ namespace Runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersImpl
       runtime.handle (httpMethodToTag method) address portHint path
       (encodeHeaders requestHeaders) body)
+  }
+
+@[inline] def httpRequestStartWithHeadersSecure (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO HttpResponsePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersSecureImpl
+      runtime.handle (httpMethodToTag method) address portHint path
+      (encodeHeaders requestHeaders) body)
+  }
+
+@[inline] def httpRequestStartStreamingWithHeaders (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (portHint : UInt32 := 0) : IO (Option HttpRequestBody × HttpResponsePromiseRef) := do
+  let (requestBodyHandle, promiseHandle) ←
+    ffiRuntimeHttpRequestStartStreamingWithHeadersImpl runtime.handle (httpMethodToTag method)
+      address portHint path (encodeHeaders requestHeaders)
+  let requestBody? :=
+    if requestBodyHandle == (UInt32.ofNat 0) then
+      none
+    else
+      some { runtime := runtime, handle := requestBodyHandle }
+  let responsePromise : HttpResponsePromiseRef := { runtime := runtime, handle := promiseHandle }
+  return (requestBody?, responsePromise)
+
+@[inline] def httpRequestStartStreamingWithHeadersSecure (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO (Option HttpRequestBody × HttpResponsePromiseRef) := do
+  let (requestBodyHandle, promiseHandle) ←
+    ffiRuntimeHttpRequestStartStreamingWithHeadersSecureImpl runtime.handle (httpMethodToTag method)
+      address portHint path (encodeHeaders requestHeaders)
+  let requestBody? :=
+    if requestBodyHandle == (UInt32.ofNat 0) then
+      none
+    else
+      some { runtime := runtime, handle := requestBodyHandle }
+  let responsePromise : HttpResponsePromiseRef := { runtime := runtime, handle := promiseHandle }
+  return (requestBody?, responsePromise)
+
+@[inline] def httpRequestStartWithHeadersWithResponseLimit (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO HttpResponsePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitImpl
+      runtime.handle (httpMethodToTag method) address portHint path
+      (encodeHeaders requestHeaders) body responseBodyLimit)
+  }
+
+@[inline] def httpRequestStartWithHeadersWithResponseLimitSecure (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO HttpResponsePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitSecureImpl
+      runtime.handle (httpMethodToTag method) address portHint path
+      (encodeHeaders requestHeaders) body responseBodyLimit)
   }
 
 @[inline] def httpResponsePromiseAwait (runtime : Runtime)
@@ -937,6 +1197,17 @@ namespace Runtime
     body := responseBody
   }
 
+@[inline] def httpResponsePromiseAwaitStreamingWithHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseStreaming := do
+  let (status, statusText, responseHeaderBytes, responseBodyHandle) ←
+    ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl runtime.handle promise.handle
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := { runtime := runtime, handle := responseBodyHandle }
+  }
+
 @[inline] def httpResponsePromiseCancel (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO Unit :=
   ffiRuntimeHttpResponsePromiseCancelImpl runtime.handle promise.handle
@@ -944,6 +1215,50 @@ namespace Runtime
 @[inline] def httpResponsePromiseRelease (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO Unit :=
   ffiRuntimeHttpResponsePromiseReleaseImpl runtime.handle promise.handle
+
+@[inline] def httpRequestBodyWriteStart (runtime : Runtime) (requestBody : HttpRequestBody)
+    (bytes : ByteArray) : IO PromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartImpl runtime.handle requestBody.handle bytes)
+  }
+
+@[inline] def httpRequestBodyWrite (runtime : Runtime) (requestBody : HttpRequestBody)
+    (bytes : ByteArray) : IO Unit := do
+  let promise ← runtime.httpRequestBodyWriteStart requestBody bytes
+  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+
+@[inline] def httpRequestBodyFinishStart (runtime : Runtime) (requestBody : HttpRequestBody) :
+    IO PromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestBodyFinishStartImpl runtime.handle requestBody.handle)
+  }
+
+@[inline] def httpRequestBodyFinish (runtime : Runtime) (requestBody : HttpRequestBody) :
+    IO Unit := do
+  let promise ← runtime.httpRequestBodyFinishStart requestBody
+  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+
+@[inline] def httpRequestBodyRelease (runtime : Runtime) (requestBody : HttpRequestBody) :
+    IO Unit :=
+  ffiRuntimeHttpRequestBodyReleaseImpl runtime.handle requestBody.handle
+
+@[inline] def httpResponseBodyReadStart (runtime : Runtime) (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : IO BytesPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpResponseBodyReadStartImpl runtime.handle responseBody.handle
+      minBytes maxBytes)
+  }
+
+@[inline] def httpResponseBodyRead (runtime : Runtime) (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : IO ByteArray :=
+  ffiRuntimeHttpResponseBodyReadImpl runtime.handle responseBody.handle minBytes maxBytes
+
+@[inline] def httpResponseBodyRelease (runtime : Runtime) (responseBody : HttpResponseBody) :
+    IO Unit :=
+  ffiRuntimeHttpResponseBodyReleaseImpl runtime.handle responseBody.handle
 
 @[inline] def httpGet (runtime : Runtime) (address : String) (path : String)
     (portHint : UInt32 := 0) : IO HttpResponse :=
@@ -991,11 +1306,27 @@ namespace Runtime
       (encodeHeaders #[]))
   }
 
+@[inline] def webSocketConnectSecure (runtime : Runtime) (address : String)
+    (path : String) (portHint : UInt32 := 0) : IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersSecureImpl runtime.handle address portHint path
+      (encodeHeaders #[]))
+  }
+
 @[inline] def webSocketConnectStart (runtime : Runtime) (address : String)
     (path : String) (portHint : UInt32 := 0) : IO WebSocketPromiseRef := do
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
+      runtime.handle address portHint path (encodeHeaders #[]))
+  }
+
+@[inline] def webSocketConnectStartSecure (runtime : Runtime) (address : String)
+    (path : String) (portHint : UInt32 := 0) : IO WebSocketPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersSecureImpl
       runtime.handle address portHint path (encodeHeaders #[]))
   }
 
@@ -1008,12 +1339,30 @@ namespace Runtime
       (encodeHeaders requestHeaders))
   }
 
+@[inline] def webSocketConnectWithHeadersSecure (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersSecureImpl runtime.handle address portHint path
+      (encodeHeaders requestHeaders))
+  }
+
 @[inline] def webSocketConnectStartWithHeaders (runtime : Runtime) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     IO WebSocketPromiseRef := do
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
+      runtime.handle address portHint path (encodeHeaders requestHeaders))
+  }
+
+@[inline] def webSocketConnectStartWithHeadersSecure (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO WebSocketPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersSecureImpl
       runtime.handle address portHint path (encodeHeaders requestHeaders))
   }
 
@@ -1066,6 +1415,14 @@ namespace Runtime
     handle := (← ffiRuntimeWebSocketReceiveStartImpl runtime.handle webSocket.handle)
   }
 
+@[inline] def webSocketReceiveStartWithMax (runtime : Runtime) (webSocket : WebSocket)
+    (maxBytes : UInt32) : IO WebSocketMessagePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketReceiveStartWithMaxImpl runtime.handle
+      webSocket.handle maxBytes)
+  }
+
 @[inline] def webSocketMessagePromiseAwait (runtime : Runtime)
     (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
   let (tag, closeCode, text, bytes) ←
@@ -1083,6 +1440,12 @@ namespace Runtime
 @[inline] def webSocketReceive (runtime : Runtime) (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← runtime.webSocketReceiveStart webSocket
   runtime.webSocketMessagePromiseAwait promise
+
+@[inline] def webSocketReceiveWithMax (runtime : Runtime) (webSocket : WebSocket)
+    (maxBytes : UInt32) : IO WebSocketMessage := do
+  let (tag, closeCode, text, bytes) ←
+    ffiRuntimeWebSocketReceiveWithMaxImpl runtime.handle webSocket.handle maxBytes
+  decodeWebSocketMessage tag closeCode text bytes
 
 @[inline] def webSocketCloseStart (runtime : Runtime) (webSocket : WebSocket)
     (code : UInt16) (reason : String := "") : IO PromiseRef := do
@@ -1197,6 +1560,18 @@ namespace HttpResponsePromiseRef
     statusText := statusText
     headers := (← decodeHeaders responseHeaderBytes)
     body := responseBody
+  }
+
+@[inline] def awaitStreamingWithHeaders (promise : HttpResponsePromiseRef) :
+    IO HttpResponseStreaming := do
+  let (status, statusText, responseHeaderBytes, responseBodyHandle) ←
+    ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl promise.runtime.handle
+      promise.handle
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := { runtime := promise.runtime, handle := responseBodyHandle }
   }
 
 @[inline] def cancel (promise : HttpResponsePromiseRef) : IO Unit :=
@@ -1611,6 +1986,55 @@ namespace HttpServer
 
 end HttpServer
 
+namespace HttpRequestBody
+
+@[inline] def writeStart (requestBody : HttpRequestBody) (bytes : ByteArray) : IO PromiseRef := do
+  return {
+    runtime := requestBody.runtime
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartImpl
+      requestBody.runtime.handle requestBody.handle bytes)
+  }
+
+@[inline] def write (requestBody : HttpRequestBody) (bytes : ByteArray) : IO Unit := do
+  let promise ← requestBody.writeStart bytes
+  promise.await
+
+@[inline] def finishStart (requestBody : HttpRequestBody) : IO PromiseRef := do
+  return {
+    runtime := requestBody.runtime
+    handle := (← ffiRuntimeHttpRequestBodyFinishStartImpl
+      requestBody.runtime.handle requestBody.handle)
+  }
+
+@[inline] def finish (requestBody : HttpRequestBody) : IO Unit := do
+  let promise ← requestBody.finishStart
+  promise.await
+
+@[inline] def release (requestBody : HttpRequestBody) : IO Unit :=
+  ffiRuntimeHttpRequestBodyReleaseImpl requestBody.runtime.handle requestBody.handle
+
+end HttpRequestBody
+
+namespace HttpResponseBody
+
+@[inline] def readStart (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO BytesPromiseRef := do
+  return {
+    runtime := responseBody.runtime
+    handle := (← ffiRuntimeHttpResponseBodyReadStartImpl
+      responseBody.runtime.handle responseBody.handle minBytes maxBytes)
+  }
+
+@[inline] def read (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO ByteArray :=
+  ffiRuntimeHttpResponseBodyReadImpl responseBody.runtime.handle responseBody.handle
+    minBytes maxBytes
+
+@[inline] def release (responseBody : HttpResponseBody) : IO Unit :=
+  ffiRuntimeHttpResponseBodyReleaseImpl responseBody.runtime.handle responseBody.handle
+
+end HttpResponseBody
+
 namespace WebSocket
 
 @[inline] def release (webSocket : WebSocket) : IO Unit :=
@@ -1644,10 +2068,24 @@ namespace WebSocket
     handle := (← ffiRuntimeWebSocketReceiveStartImpl webSocket.runtime.handle webSocket.handle)
   }
 
+@[inline] def receiveStartWithMax (webSocket : WebSocket)
+    (maxBytes : UInt32) : IO WebSocketMessagePromiseRef := do
+  return {
+    runtime := webSocket.runtime
+    handle := (← ffiRuntimeWebSocketReceiveStartWithMaxImpl webSocket.runtime.handle
+      webSocket.handle maxBytes)
+  }
+
 @[inline] def receive (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← webSocket.receiveStart
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketMessagePromiseAwaitImpl webSocket.runtime.handle promise.handle
+  decodeWebSocketMessage tag closeCode text bytes
+
+@[inline] def receiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO WebSocketMessage := do
+  let (tag, closeCode, text, bytes) ←
+    ffiRuntimeWebSocketReceiveWithMaxImpl webSocket.runtime.handle webSocket.handle maxBytes
   decodeWebSocketMessage tag closeCode text bytes
 
 @[inline] def closeStart (webSocket : WebSocket) (code : UInt16)
@@ -1684,6 +2122,9 @@ namespace RuntimeM
 
 @[inline] def isAlive : RuntimeM Bool := do
   Runtime.isAlive (← runtime)
+
+@[inline] def enableTls : RuntimeM Unit := do
+  Runtime.enableTls (← runtime)
 
 @[inline] def sleepNanosStart (delayNanos : UInt64) : RuntimeM PromiseRef := do
   Runtime.sleepNanosStart (← runtime) delayNanos
@@ -1876,21 +2317,85 @@ namespace RuntimeM
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : RuntimeM HttpResponse := do
   Runtime.httpRequest (← runtime) method address path body portHint
 
+@[inline] def httpRequestWithResponseLimit (method : HttpMethod) (address : String)
+    (path : String) (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponse := do
+  Runtime.httpRequestWithResponseLimit
+    (← runtime) method address path responseBodyLimit body portHint
+
 @[inline] def httpRequestWithHeaders (method : HttpMethod) (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
   Runtime.httpRequestWithHeaders (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersSecure (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
+  Runtime.httpRequestWithHeadersSecure (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersWithResponseLimit (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM HttpResponseEx := do
+  Runtime.httpRequestWithHeadersWithResponseLimit
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
+
+@[inline] def httpRequestWithHeadersWithResponseLimitSecure (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
+  Runtime.httpRequestWithHeadersWithResponseLimitSecure
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
 
 @[inline] def httpRequestStart (method : HttpMethod) (address : String) (path : String)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStart (← runtime) method address path body portHint
 
+@[inline] def httpRequestStartWithResponseLimit (method : HttpMethod) (address : String)
+    (path : String) (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponsePromiseRef := do
+  Runtime.httpRequestStartWithResponseLimit
+    (← runtime) method address path responseBodyLimit body portHint
+
 @[inline] def httpRequestStartWithHeaders (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStartWithHeaders (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestStartWithHeadersSecure (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM HttpResponsePromiseRef := do
+  Runtime.httpRequestStartWithHeadersSecure
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestStartStreamingWithHeaders (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM (Option HttpRequestBody × HttpResponsePromiseRef) := do
+  Runtime.httpRequestStartStreamingWithHeaders
+    (← runtime) method address path requestHeaders portHint
+
+@[inline] def httpRequestStartStreamingWithHeadersSecure (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (portHint : UInt32 := 0) : RuntimeM (Option HttpRequestBody × HttpResponsePromiseRef) := do
+  Runtime.httpRequestStartStreamingWithHeadersSecure
+    (← runtime) method address path requestHeaders portHint
+
+@[inline] def httpRequestStartWithHeadersWithResponseLimit (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponsePromiseRef := do
+  Runtime.httpRequestStartWithHeadersWithResponseLimit
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
+
+@[inline] def httpRequestStartWithHeadersWithResponseLimitSecure (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponsePromiseRef := do
+  Runtime.httpRequestStartWithHeadersWithResponseLimitSecure
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
 
 @[inline] def awaitHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM HttpResponse := do
   promise.await
@@ -1899,11 +2404,43 @@ namespace RuntimeM
     RuntimeM HttpResponseEx := do
   promise.awaitWithHeaders
 
+@[inline] def awaitHttpResponseStreamingWithHeaders (promise : HttpResponsePromiseRef) :
+    RuntimeM HttpResponseStreaming := do
+  promise.awaitStreamingWithHeaders
+
 @[inline] def cancelHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
   promise.cancel
 
 @[inline] def releaseHttpResponsePromise (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
   promise.release
+
+@[inline] def httpRequestBodyWriteStart (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    RuntimeM PromiseRef := do
+  Runtime.httpRequestBodyWriteStart (← runtime) requestBody bytes
+
+@[inline] def httpRequestBodyWrite (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    RuntimeM Unit := do
+  Runtime.httpRequestBodyWrite (← runtime) requestBody bytes
+
+@[inline] def httpRequestBodyFinishStart (requestBody : HttpRequestBody) : RuntimeM PromiseRef := do
+  Runtime.httpRequestBodyFinishStart (← runtime) requestBody
+
+@[inline] def httpRequestBodyFinish (requestBody : HttpRequestBody) : RuntimeM Unit := do
+  Runtime.httpRequestBodyFinish (← runtime) requestBody
+
+@[inline] def httpRequestBodyRelease (requestBody : HttpRequestBody) : RuntimeM Unit := do
+  Runtime.httpRequestBodyRelease (← runtime) requestBody
+
+@[inline] def httpResponseBodyReadStart (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM BytesPromiseRef := do
+  Runtime.httpResponseBodyReadStart (← runtime) responseBody minBytes maxBytes
+
+@[inline] def httpResponseBodyRead (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
+  Runtime.httpResponseBodyRead (← runtime) responseBody minBytes maxBytes
+
+@[inline] def httpResponseBodyRelease (responseBody : HttpResponseBody) : RuntimeM Unit := do
+  Runtime.httpResponseBodyRelease (← runtime) responseBody
 
 @[inline] def httpGet (address : String) (path : String) (portHint : UInt32 := 0) :
     RuntimeM HttpResponse := do
@@ -1937,19 +2474,37 @@ namespace RuntimeM
     RuntimeM WebSocket := do
   Runtime.webSocketConnect (← runtime) address path portHint
 
+@[inline] def webSocketConnectSecure (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM WebSocket := do
+  Runtime.webSocketConnectSecure (← runtime) address path portHint
+
 @[inline] def webSocketConnectWithHeaders (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     RuntimeM WebSocket := do
   Runtime.webSocketConnectWithHeaders (← runtime) address path requestHeaders portHint
 
+@[inline] def webSocketConnectWithHeadersSecure (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM WebSocket := do
+  Runtime.webSocketConnectWithHeadersSecure (← runtime) address path requestHeaders portHint
+
 @[inline] def webSocketConnectStart (address : String) (path : String)
     (portHint : UInt32 := 0) : RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStart (← runtime) address path portHint
+
+@[inline] def webSocketConnectStartSecure (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM WebSocketPromiseRef := do
+  Runtime.webSocketConnectStartSecure (← runtime) address path portHint
 
 @[inline] def webSocketConnectStartWithHeaders (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStartWithHeaders (← runtime) address path requestHeaders portHint
+
+@[inline] def webSocketConnectStartWithHeadersSecure (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM WebSocketPromiseRef := do
+  Runtime.webSocketConnectStartWithHeadersSecure (← runtime) address path requestHeaders portHint
 
 @[inline] def awaitWebSocket (promise : WebSocketPromiseRef) : RuntimeM WebSocket := do
   promise.await
@@ -1981,6 +2536,10 @@ namespace RuntimeM
     RuntimeM WebSocketMessagePromiseRef := do
   Runtime.webSocketReceiveStart (← runtime) webSocket
 
+@[inline] def webSocketReceiveStartWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM WebSocketMessagePromiseRef := do
+  Runtime.webSocketReceiveStartWithMax (← runtime) webSocket maxBytes
+
 @[inline] def awaitWebSocketMessage (promise : WebSocketMessagePromiseRef) :
     RuntimeM WebSocketMessage := do
   promise.await
@@ -1995,6 +2554,10 @@ namespace RuntimeM
 
 @[inline] def webSocketReceive (webSocket : WebSocket) : RuntimeM WebSocketMessage := do
   webSocket.receive
+
+@[inline] def webSocketReceiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM WebSocketMessage := do
+  webSocket.receiveWithMax maxBytes
 
 @[inline] def webSocketCloseStart (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM PromiseRef := do

@@ -18,6 +18,13 @@ private def mkPayload : ByteArray :=
     |>.push (UInt8.ofNat 107)
     |>.push (UInt8.ofNat 106)
 
+private def appendByteArray (dst src : ByteArray) : ByteArray :=
+  Id.run do
+    let mut out := dst
+    for b in src do
+      out := out.push b
+    pure out
+
 private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
     (server : Capnp.KjAsync.HttpServer) (attempts : Nat := 400) :
     IO Capnp.KjAsync.HttpServerRequest := do
@@ -412,6 +419,38 @@ def testKjAsyncWebSocketReceiveCancel : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncWebSocketReceiveWithMaxRejectsOversize : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let connectPromise ← runtime.webSocketConnectStart "127.0.0.1" "/lean-ws-max" server.boundPort
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.webSocketRequested true
+    let serverWs ← runtime.httpServerRespondWebSocket server request.requestId
+    let clientWs ← connectPromise.await
+
+    let receivePromise ← serverWs.receiveStartWithMax (UInt32.ofNat 4)
+    let sendFailed ←
+      try
+        (← clientWs.sendTextStart "oversized-websocket-message").await
+        pure false
+      catch _ =>
+        pure true
+    let receiveFailed ←
+      try
+        let _ ← receivePromise.await
+        pure false
+      catch _ =>
+        pure true
+    assertEqual (sendFailed || receiveFailed) true
+
+    clientWs.release
+    serverWs.release
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -441,6 +480,121 @@ def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
       "expected response header x-lean-server"
 
     server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpResponseBodyLimit : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let responsePromise ← runtime.httpRequestStartWithResponseLimit
+      .post "127.0.0.1" "/lean-http-limit" (UInt64.ofNat 8) mkPayload server.boundPort
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/lean-http-limit"
+
+    let body := ByteArray.empty
+      |>.push (UInt8.ofNat 49)
+      |>.push (UInt8.ofNat 50)
+      |>.push (UInt8.ofNat 51)
+      |>.push (UInt8.ofNat 52)
+      |>.push (UInt8.ofNat 53)
+      |>.push (UInt8.ofNat 54)
+      |>.push (UInt8.ofNat 55)
+      |>.push (UInt8.ofNat 56)
+      |>.push (UInt8.ofNat 57)
+      |>.push (UInt8.ofNat 48)
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 200) "OK" #[] body
+
+    let failed ←
+      try
+        let _ ← responsePromise.await
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failed true
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpStreamingRequestAndResponse : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestPartA := "stream-request-part-a".toUTF8
+    let requestPartB := "-and-b".toUTF8
+    let expectedRequestBody := appendByteArray requestPartA requestPartB
+
+    let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
+      .post "127.0.0.1" "/lean-http-stream" #[{ name := "x-stream", value := "1" }]
+      server.boundPort
+    let requestBody ←
+      match requestBody? with
+      | some body => pure body
+      | none => throw (IO.userError "streaming HTTP request did not provide a request body handle")
+    requestBody.write requestPartA
+    requestBody.write requestPartB
+    requestBody.finish
+
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/lean-http-stream"
+    assertEqual request.body expectedRequestBody
+
+    let responseBody := "streaming-response-body-for-lean".toUTF8
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 200) "OK"
+      #[{ name := "x-stream-response", value := "1" }] responseBody
+
+    let response ← responsePromise.awaitStreamingWithHeaders
+    assertEqual response.status (UInt32.ofNat 200)
+    assertEqual response.statusText "OK"
+    assertTrue
+      (response.headers.any
+        (fun h => h.name == "x-stream-response" && h.value == "1"))
+      "expected response header x-stream-response"
+
+    let mut received := ByteArray.empty
+    let mut done := false
+    while !done do
+      let chunk ← response.body.read (UInt32.ofNat 1) (UInt32.ofNat 5)
+      if chunk.size == 0 then
+        done := true
+      else
+        received := appendByteArray received chunk
+    assertEqual received responseBody
+    response.body.release
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncTlsEnableIsExplicit : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let errBeforeEnable ←
+      try
+        let p ← runtime.httpRequestStartWithHeadersSecure
+          .get "localhost" "/" #[] ByteArray.empty (UInt32.ofNat 1)
+        p.release
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (errBeforeEnable.contains "TLS is not enabled")
+      "expected secure request to fail before Runtime.enableTls"
+
+    runtime.enableTls
+    runtime.enableTls
+
+    let errAfterEnable ←
+      try
+        let p ← runtime.httpRequestStartWithHeadersSecure
+          .get "localhost" "/" #[] ByteArray.empty (UInt32.ofNat 1)
+        p.release
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (!errAfterEnable.contains "TLS is not enabled")
+      "expected secure request error to no longer be the TLS-not-enabled guard after Runtime.enableTls"
   finally
     runtime.shutdown
 

@@ -9,9 +9,12 @@ def capnpBridgeLinkArgs : Array String :=
       "-L../../build-lean4-apple/c++/src/kj",
       "-L../../build-lean4/c++/src/capnp",
       "-L../../build-lean4/c++/src/kj",
+      "-L/opt/homebrew/opt/openssl@3/lib",
+      "-L/usr/local/opt/openssl@3/lib",
       "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
       "-L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib",
-      "-lcapnp-rpc", "-lcapnp", "-lkj-http", "-lkj-gzip", "-lkj-async", "-lkj", "-lz", "-lc++"
+      "-lcapnp-rpc", "-lcapnp", "-lkj-http", "-lkj-gzip", "-lkj-tls", "-lkj-async", "-lkj",
+      "-lssl", "-lcrypto", "-lz", "-lc++"
     ]
   else
     #[
@@ -19,7 +22,10 @@ def capnpBridgeLinkArgs : Array String :=
       "-L../../build-lean4/c++/src/kj",
       "-L../../build-lean4-apple/c++/src/capnp",
       "-L../../build-lean4-apple/c++/src/kj",
-      "-lcapnp-rpc", "-lcapnp", "-lkj-http", "-lkj-gzip", "-lkj-async", "-lkj", "-lstdc++",
+      "-L/opt/homebrew/opt/openssl@3/lib",
+      "-L/usr/local/opt/openssl@3/lib",
+      "-lcapnp-rpc", "-lcapnp", "-lkj-http", "-lkj-gzip", "-lkj-tls", "-lkj-async", "-lkj",
+      "-lssl", "-lcrypto", "-lstdc++",
       "-lz", "-pthread"
     ]
 
