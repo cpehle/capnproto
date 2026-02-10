@@ -626,6 +626,14 @@ void completeWebSocketMessageFailure(const std::shared_ptr<WebSocketMessageCompl
 
 class KjAsyncRuntimeLoop {
  public:
+  struct HttpServerConfig {
+    uint64_t headerTimeoutNanos = 15ULL * 1000ULL * 1000ULL * 1000ULL;
+    uint64_t pipelineTimeoutNanos = 5ULL * 1000ULL * 1000ULL * 1000ULL;
+    uint64_t canceledUploadGracePeriodNanos = 1ULL * 1000ULL * 1000ULL * 1000ULL;
+    uint64_t canceledUploadGraceBytes = 65536;
+    uint32_t webSocketCompressionMode = 0;
+  };
+
   KjAsyncRuntimeLoop() : worker_(&KjAsyncRuntimeLoop::run, this) {
     std::unique_lock<std::mutex> lock(startupMutex_);
     startupCv_.wait(lock, [this]() { return startupComplete_; });
@@ -1386,9 +1394,13 @@ class KjAsyncRuntimeLoop {
 
   std::shared_ptr<UnitCompletion> enqueueConfigureTls(uint32_t useSystemTrustStore,
                                                       uint32_t verifyClients,
+                                                      uint32_t minVersionTag,
                                                       std::string trustedCertificatesPem,
                                                       std::string certificateChainPem,
-                                                      std::string privateKeyPem) {
+                                                      std::string privateKeyPem,
+                                                      std::string cipherList,
+                                                      std::string curveList,
+                                                      uint64_t acceptTimeoutNanos) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1399,9 +1411,13 @@ class KjAsyncRuntimeLoop {
       queue_.emplace_back(QueuedConfigureTls{
           useSystemTrustStore,
           verifyClients,
+          minVersionTag,
           std::move(trustedCertificatesPem),
           std::move(certificateChainPem),
           std::move(privateKeyPem),
+          std::move(cipherList),
+          std::move(curveList),
+          acceptTimeoutNanos,
           completion});
     }
     queueCv_.notify_one();
@@ -2000,9 +2016,13 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<HandlePairCompletion> enqueueHttpServerListen(std::string address,
-                                                                uint32_t portHint,
-                                                                bool useTls = false) {
+  static HttpServerConfig defaultHttpServerConfig() {
+    return HttpServerConfig{};
+  }
+
+  std::shared_ptr<HandlePairCompletion> enqueueHttpServerListen(
+      std::string address, uint32_t portHint, bool useTls = false,
+      HttpServerConfig config = defaultHttpServerConfig()) {
     auto completion = std::make_shared<HandlePairCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2010,8 +2030,8 @@ class KjAsyncRuntimeLoop {
         completeHandlePairFailure(completion, "Capnp.KjAsync runtime is shutting down");
         return completion;
       }
-      queue_.emplace_back(
-          QueuedHttpServerListen{std::move(address), portHint, useTls, completion});
+      queue_.emplace_back(QueuedHttpServerListen{
+          std::move(address), portHint, useTls, std::move(config), completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -2026,6 +2046,34 @@ class KjAsyncRuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedHttpServerRelease{serverId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<PromiseIdCompletion> enqueueHttpServerDrainStart(uint32_t serverId) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedHttpServerDrainStart{serverId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueHttpServerDrain(uint32_t serverId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedHttpServerDrain{serverId, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -2719,9 +2767,13 @@ class KjAsyncRuntimeLoop {
   struct QueuedConfigureTls {
     uint32_t useSystemTrustStore;
     uint32_t verifyClients;
+    uint32_t minVersionTag;
     std::string trustedCertificatesPem;
     std::string certificateChainPem;
     std::string privateKeyPem;
+    std::string cipherList;
+    std::string curveList;
+    uint64_t acceptTimeoutNanos;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -2910,10 +2962,21 @@ class KjAsyncRuntimeLoop {
     std::string address;
     uint32_t portHint;
     bool useTls;
+    HttpServerConfig config;
     std::shared_ptr<HandlePairCompletion> completion;
   };
 
   struct QueuedHttpServerRelease {
+    uint32_t serverId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedHttpServerDrainStart {
+    uint32_t serverId;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedHttpServerDrain {
     uint32_t serverId;
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -3069,7 +3132,8 @@ class KjAsyncRuntimeLoop {
                    QueuedWebSocketMessagePromiseCancel, QueuedWebSocketMessagePromiseRelease,
                    QueuedWebSocketReceive, QueuedWebSocketCloseStart, QueuedWebSocketClose,
                    QueuedWebSocketDisconnect, QueuedWebSocketAbort, QueuedNewWebSocketPipe,
-                   QueuedHttpServerListen, QueuedHttpServerRelease, QueuedHttpServerPollRequest,
+                   QueuedHttpServerListen, QueuedHttpServerRelease, QueuedHttpServerDrainStart,
+                   QueuedHttpServerDrain, QueuedHttpServerPollRequest,
                    QueuedHttpServerRespond, QueuedHttpServerRespondWebSocket,
                    QueuedHttpServerRespondStartStreaming,
                    QueuedHttpServerResponseBodyWriteStart, QueuedHttpServerResponseBodyWrite,
@@ -3982,10 +4046,54 @@ class KjAsyncRuntimeLoop {
     }
   }
 
+  static kj::Maybe<kj::TlsVersion> decodeTlsVersionTag(uint32_t tag) {
+    switch (tag) {
+      case 0:
+        return kj::none;
+      case 1:
+        return kj::TlsVersion::SSL_3;
+      case 2:
+        return kj::TlsVersion::TLS_1_0;
+      case 3:
+        return kj::TlsVersion::TLS_1_1;
+      case 4:
+        return kj::TlsVersion::TLS_1_2;
+      case 5:
+        return kj::TlsVersion::TLS_1_3;
+      default:
+        throw std::runtime_error("unknown TLS minVersion tag: " + std::to_string(tag));
+    }
+  }
+
+  static kj::HttpServerSettings::WebSocketCompressionMode decodeWebSocketCompressionMode(
+      uint32_t tag) {
+    switch (tag) {
+      case 0:
+        return kj::HttpServerSettings::NO_COMPRESSION;
+      case 1:
+        return kj::HttpServerSettings::MANUAL_COMPRESSION;
+      case 2:
+        return kj::HttpServerSettings::AUTOMATIC_COMPRESSION;
+      default:
+        throw std::runtime_error("unknown websocket compression mode tag: " +
+                                 std::to_string(tag));
+    }
+  }
+
+  static kj::Duration nanosToDuration(uint64_t nanos, const char* what) {
+    constexpr uint64_t maxI64 = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    if (nanos > maxI64) {
+      throw std::runtime_error(std::string(what) + " exceeds Int64 nanoseconds range");
+    }
+    return static_cast<int64_t>(nanos) * kj::NANOSECONDS;
+  }
+
   void configureTls(kj::AsyncIoProvider& ioProvider, bool useSystemTrustStore, bool verifyClients,
+                    uint32_t minVersionTag,
                     const std::string& trustedCertificatesPem,
                     const std::string& certificateChainPem,
-                    const std::string& privateKeyPem) {
+                    const std::string& privateKeyPem, const std::string& cipherList,
+                    const std::string& curveList, uint64_t acceptTimeoutNanos) {
     if (certificateChainPem.empty() != privateKeyPem.empty()) {
       throw std::runtime_error(
           "TLS configuration requires both certificateChainPem and privateKeyPem to be set");
@@ -3994,6 +4102,9 @@ class KjAsyncRuntimeLoop {
     kj::TlsContext::Options options;
     options.useSystemTrustStore = useSystemTrustStore;
     options.verifyClients = verifyClients;
+    KJ_IF_SOME(minVersion, decodeTlsVersionTag(minVersionTag)) {
+      options.minVersion = minVersion;
+    }
 
     kj::Maybe<kj::TlsCertificate> trustedCertificates = kj::none;
     if (!trustedCertificatesPem.empty()) {
@@ -4012,6 +4123,27 @@ class KjAsyncRuntimeLoop {
       options.defaultKeypair = keypairValue;
     }
 
+    kj::Maybe<kj::String> cipherListOwned = kj::none;
+    if (!cipherList.empty()) {
+      cipherListOwned = kj::str(cipherList.c_str());
+    }
+    KJ_IF_SOME(cipherListValue, cipherListOwned) {
+      options.cipherList = cipherListValue;
+    }
+
+    kj::Maybe<kj::String> curveListOwned = kj::none;
+    if (!curveList.empty()) {
+      curveListOwned = kj::str(curveList.c_str());
+    }
+    KJ_IF_SOME(curveListValue, curveListOwned) {
+      options.curveList = curveListValue;
+    }
+
+    if (acceptTimeoutNanos != 0) {
+      options.timer = ioProvider.getTimer();
+      options.acceptTimeout = nanosToDuration(acceptTimeoutNanos, "TLS accept timeout");
+    }
+
     auto context = kj::heap<kj::TlsContext>(kj::mv(options));
     auto network = context->wrapNetwork(ioProvider.getNetwork());
     tlsContext_ = kj::mv(context);
@@ -4022,7 +4154,7 @@ class KjAsyncRuntimeLoop {
     KJ_IF_SOME(_, tlsContext_) {
       return;
     }
-    configureTls(ioProvider, true, false, "", "", "");
+    configureTls(ioProvider, true, false, 0, "", "", "", "", "", 0);
   }
 
   kj::Maybe<kj::Network&> resolveTlsNetwork(bool useTls) {
@@ -4369,7 +4501,7 @@ class KjAsyncRuntimeLoop {
 
   uint32_t httpServerListen(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
                             const std::string& address, uint32_t portHint, bool useTls,
-                            uint32_t& boundPort) {
+                            const HttpServerConfig& config, uint32_t& boundPort) {
     auto networkAddress =
         ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
     auto listener = networkAddress->listen();
@@ -4387,8 +4519,20 @@ class KjAsyncRuntimeLoop {
     state->listener = kj::mv(listener);
     state->headerTable = kj::heap<kj::HttpHeaderTable>();
     state->service = kj::heap<RuntimeHttpService>(*this, *state);
+    kj::HttpServerSettings settings;
+    settings.headerTimeout = nanosToDuration(config.headerTimeoutNanos, "HTTP header timeout");
+    settings.pipelineTimeout = nanosToDuration(config.pipelineTimeoutNanos, "HTTP pipeline timeout");
+    settings.canceledUploadGracePeriod = nanosToDuration(
+        config.canceledUploadGracePeriodNanos, "HTTP canceled upload grace period");
+    if (config.canceledUploadGraceBytes >
+        static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+      throw std::runtime_error("HTTP canceled upload grace bytes exceeds size_t range");
+    }
+    settings.canceledUploadGraceBytes = static_cast<size_t>(config.canceledUploadGraceBytes);
+    settings.webSocketCompressionMode =
+        decodeWebSocketCompressionMode(config.webSocketCompressionMode);
     state->server = kj::heap<kj::HttpServer>(ioProvider.getTimer(), *state->headerTable,
-                                             *state->service);
+                                             *state->service, settings);
     auto serverId = addHttpServer(kj::mv(state));
 
     auto stateIt = httpServers_.find(serverId);
@@ -4399,6 +4543,21 @@ class KjAsyncRuntimeLoop {
     stateIt->second->listenPromiseId =
         addPromise(PendingPromise(kj::mv(listenPromise), kj::mv(canceler)));
     return serverId;
+  }
+
+  uint32_t httpServerDrainStart(uint32_t serverId) {
+    auto serverIt = httpServers_.find(serverId);
+    if (serverIt == httpServers_.end()) {
+      throw std::runtime_error("unknown KJ HTTP server id: " + std::to_string(serverId));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(serverIt->second->server->drain());
+    return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  void httpServerDrain(kj::WaitScope& waitScope, uint32_t serverId) {
+    auto promiseId = httpServerDrainStart(serverId);
+    awaitPromise(waitScope, promiseId);
   }
 
   void httpServerRelease(uint32_t serverId) {
@@ -4992,6 +5151,10 @@ class KjAsyncRuntimeLoop {
         completeHandlePairFailure(std::get<QueuedHttpServerListen>(op).completion, message);
       } else if (std::holds_alternative<QueuedHttpServerRelease>(op)) {
         completeUnitFailure(std::get<QueuedHttpServerRelease>(op).completion, message);
+      } else if (std::holds_alternative<QueuedHttpServerDrainStart>(op)) {
+        completePromiseIdFailure(std::get<QueuedHttpServerDrainStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedHttpServerDrain>(op)) {
+        completeUnitFailure(std::get<QueuedHttpServerDrain>(op).completion, message);
       } else if (std::holds_alternative<QueuedHttpServerPollRequest>(op)) {
         completeHttpServerRequestFailure(std::get<QueuedHttpServerPollRequest>(op).completion,
                                          message);
@@ -5726,8 +5889,10 @@ class KjAsyncRuntimeLoop {
           auto configure = std::get<QueuedConfigureTls>(std::move(op));
           try {
             configureTls(*io.provider, configure.useSystemTrustStore != 0,
-                         configure.verifyClients != 0, configure.trustedCertificatesPem,
-                         configure.certificateChainPem, configure.privateKeyPem);
+                         configure.verifyClients != 0, configure.minVersionTag,
+                         configure.trustedCertificatesPem, configure.certificateChainPem,
+                         configure.privateKeyPem, configure.cipherList, configure.curveList,
+                         configure.acceptTimeoutNanos);
             completeUnitSuccess(configure.completion);
           } catch (const kj::Exception& e) {
             completeUnitFailure(configure.completion, describeKjException(e));
@@ -6279,7 +6444,8 @@ class KjAsyncRuntimeLoop {
           try {
             uint32_t boundPort = 0;
             auto serverId = httpServerListen(*io.provider, io.waitScope, listenReq.address,
-                                             listenReq.portHint, listenReq.useTls, boundPort);
+                                             listenReq.portHint, listenReq.useTls,
+                                             listenReq.config, boundPort);
             completeHandlePairSuccess(listenReq.completion, serverId, boundPort);
           } catch (const kj::Exception& e) {
             completeHandlePairFailure(listenReq.completion, describeKjException(e));
@@ -6301,6 +6467,32 @@ class KjAsyncRuntimeLoop {
           } catch (...) {
             completeUnitFailure(release.completion,
                                 "unknown exception in Capnp.KjAsync http server release");
+          }
+        } else if (std::holds_alternative<QueuedHttpServerDrainStart>(op)) {
+          auto drain = std::get<QueuedHttpServerDrainStart>(std::move(op));
+          try {
+            auto promiseId = httpServerDrainStart(drain.serverId);
+            completePromiseIdSuccess(drain.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(drain.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(drain.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(drain.completion,
+                                     "unknown exception in Capnp.KjAsync http server drain start");
+          }
+        } else if (std::holds_alternative<QueuedHttpServerDrain>(op)) {
+          auto drain = std::get<QueuedHttpServerDrain>(std::move(op));
+          try {
+            httpServerDrain(io.waitScope, drain.serverId);
+            completeUnitSuccess(drain.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(drain.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(drain.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(drain.completion,
+                                "unknown exception in Capnp.KjAsync http server drain");
           }
         } else if (std::holds_alternative<QueuedHttpServerPollRequest>(op)) {
           auto poll = std::get<QueuedHttpServerPollRequest>(std::move(op));
@@ -6804,8 +6996,9 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_enable_tls(uint6
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_configure_tls(
     uint64_t runtimeId, uint32_t useSystemTrustStore, uint32_t verifyClients,
-    b_lean_obj_arg trustedCertificatesPem, b_lean_obj_arg certificateChainPem,
-    b_lean_obj_arg privateKeyPem) {
+    uint32_t minVersionTag, b_lean_obj_arg trustedCertificatesPem,
+    b_lean_obj_arg certificateChainPem, b_lean_obj_arg privateKeyPem,
+    b_lean_obj_arg cipherList, b_lean_obj_arg curveList, uint64_t acceptTimeoutNanos) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
@@ -6813,9 +7006,12 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_configure_tls(
 
   try {
     auto completion = runtime->enqueueConfigureTls(
-        useSystemTrustStore, verifyClients, std::string(lean_string_cstr(trustedCertificatesPem)),
+        useSystemTrustStore, verifyClients, minVersionTag,
+        std::string(lean_string_cstr(trustedCertificatesPem)),
         std::string(lean_string_cstr(certificateChainPem)),
-        std::string(lean_string_cstr(privateKeyPem)));
+        std::string(lean_string_cstr(privateKeyPem)),
+        std::string(lean_string_cstr(cipherList)),
+        std::string(lean_string_cstr(curveList)), acceptTimeoutNanos);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9214,6 +9410,45 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_list
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_listen_with_config(
+    uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint, uint64_t headerTimeoutNanos,
+    uint64_t pipelineTimeoutNanos, uint64_t canceledUploadGracePeriodNanos,
+    uint64_t canceledUploadGraceBytes, uint32_t webSocketCompressionMode) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    KjAsyncRuntimeLoop::HttpServerConfig config;
+    config.headerTimeoutNanos = headerTimeoutNanos;
+    config.pipelineTimeoutNanos = pipelineTimeoutNanos;
+    config.canceledUploadGracePeriodNanos = canceledUploadGracePeriodNanos;
+    config.canceledUploadGraceBytes = canceledUploadGraceBytes;
+    config.webSocketCompressionMode = webSocketCompressionMode;
+    auto completion = runtime->enqueueHttpServerListen(std::string(lean_string_cstr(address)),
+                                                       portHint, false, config);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_listen_with_config");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_listen_secure(
     uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint) {
   auto runtime = getKjAsyncRuntime(runtimeId);
@@ -9245,6 +9480,46 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_list
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_server_listen_secure_with_config(
+    uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint, uint64_t headerTimeoutNanos,
+    uint64_t pipelineTimeoutNanos, uint64_t canceledUploadGracePeriodNanos,
+    uint64_t canceledUploadGraceBytes, uint32_t webSocketCompressionMode) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    KjAsyncRuntimeLoop::HttpServerConfig config;
+    config.headerTimeoutNanos = headerTimeoutNanos;
+    config.pipelineTimeoutNanos = pipelineTimeoutNanos;
+    config.canceledUploadGracePeriodNanos = canceledUploadGracePeriodNanos;
+    config.canceledUploadGraceBytes = canceledUploadGraceBytes;
+    config.webSocketCompressionMode = webSocketCompressionMode;
+    auto completion = runtime->enqueueHttpServerListen(std::string(lean_string_cstr(address)),
+                                                       portHint, true, config);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_listen_secure_with_config");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_release(
     uint64_t runtimeId, uint32_t serverId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
@@ -9270,6 +9545,61 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_rele
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_server_release");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_drain_start(
+    uint64_t runtimeId, uint32_t serverId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpServerDrainStart(serverId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_drain_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_drain(
+    uint64_t runtimeId, uint32_t serverId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpServerDrain(serverId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_server_drain");
   }
 }
 

@@ -59,12 +59,24 @@ structure HttpHeader where
   value : String
   deriving Inhabited, BEq, Repr
 
+inductive TlsVersion where
+  | ssl3
+  | tls10
+  | tls11
+  | tls12
+  | tls13
+  deriving Inhabited, BEq, Repr
+
 structure TlsConfig where
   useSystemTrustStore : Bool := true
   verifyClients : Bool := false
+  minVersion : Option TlsVersion := none
   trustedCertificatesPem : String := ""
   certificateChainPem : String := ""
   privateKeyPem : String := ""
+  cipherList : String := ""
+  curveList : String := ""
+  acceptTimeoutNanos : UInt64 := 0
   deriving Inhabited, BEq, Repr
 
 structure HttpResponse where
@@ -117,6 +129,20 @@ structure HttpServer where
   boundPort : UInt32
   deriving Inhabited, BEq, Repr
 
+inductive HttpWebSocketCompressionMode where
+  | none
+  | manual
+  | automatic
+  deriving Inhabited, BEq, Repr
+
+structure HttpServerConfig where
+  headerTimeoutNanos : UInt64 := 15000000000
+  pipelineTimeoutNanos : UInt64 := 5000000000
+  canceledUploadGracePeriodNanos : UInt64 := 1000000000
+  canceledUploadGraceBytes : UInt64 := 65536
+  webSocketCompressionMode : HttpWebSocketCompressionMode := .none
+  deriving Inhabited, BEq, Repr
+
 structure WebSocket where
   runtime : Runtime
   handle : UInt32
@@ -153,8 +179,10 @@ opaque ffiRuntimeEnableTlsImpl (runtime : UInt64) : IO Unit
 @[extern "capnp_lean_kj_async_runtime_configure_tls"]
 opaque ffiRuntimeConfigureTlsImpl
     (runtime : UInt64) (useSystemTrustStore : UInt32) (verifyClients : UInt32)
+    (minVersionTag : UInt32)
     (trustedCertificatesPem : @& String) (certificateChainPem : @& String)
-    (privateKeyPem : @& String) : IO Unit
+    (privateKeyPem : @& String) (cipherList : @& String) (curveList : @& String)
+    (acceptTimeoutNanos : UInt64) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_sleep_nanos_start"]
 opaque ffiRuntimeSleepNanosStartImpl (runtime : UInt64) (delayNanos : UInt64) : IO UInt32
@@ -479,8 +507,28 @@ opaque ffiRuntimeHttpServerListenImpl
 opaque ffiRuntimeHttpServerListenSecureImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO (UInt32 × UInt32)
 
+@[extern "capnp_lean_kj_async_runtime_http_server_listen_with_config"]
+opaque ffiRuntimeHttpServerListenWithConfigImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32)
+    (headerTimeoutNanos : UInt64) (pipelineTimeoutNanos : UInt64)
+    (canceledUploadGracePeriodNanos : UInt64) (canceledUploadGraceBytes : UInt64)
+    (webSocketCompressionMode : UInt32) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_http_server_listen_secure_with_config"]
+opaque ffiRuntimeHttpServerListenSecureWithConfigImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32)
+    (headerTimeoutNanos : UInt64) (pipelineTimeoutNanos : UInt64)
+    (canceledUploadGracePeriodNanos : UInt64) (canceledUploadGraceBytes : UInt64)
+    (webSocketCompressionMode : UInt32) : IO (UInt32 × UInt32)
+
 @[extern "capnp_lean_kj_async_runtime_http_server_release"]
 opaque ffiRuntimeHttpServerReleaseImpl (runtime : UInt64) (server : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_server_drain_start"]
+opaque ffiRuntimeHttpServerDrainStartImpl (runtime : UInt64) (server : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_server_drain"]
+opaque ffiRuntimeHttpServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_http_server_poll_request"]
 opaque ffiRuntimeHttpServerPollRequestImpl
@@ -627,7 +675,29 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
   millis.toUInt64 * (1000000 : UInt64)
 
 @[inline] private def boolToUInt32 (value : Bool) : UInt32 :=
-  if value then UInt32.ofNat 1 else UInt32.ofNat 0
+  if value then 1 else 0
+
+@[inline] private def tlsVersionToTag (version : Option TlsVersion) : UInt32 :=
+  match version with
+  | none => 0
+  | some .ssl3 => 1
+  | some .tls10 => 2
+  | some .tls11 => 3
+  | some .tls12 => 4
+  | some .tls13 => 5
+
+@[inline] private def webSocketCompressionModeToTag (mode : HttpWebSocketCompressionMode) :
+    UInt32 :=
+  match mode with
+  | .none => 0
+  | .manual => 1
+  | .automatic => 2
+
+@[inline] private def ensureSameRuntime (runtime : Runtime) (owner : Runtime)
+    (resource : String) : IO Unit := do
+  if runtime.handle != owner.handle then
+    throw (IO.userError
+      s!"{resource} belongs to a different Capnp.KjAsync runtime")
 
 @[inline] private def encodeUInt32Array (values : Array UInt32) : ByteArray :=
   Id.run do
@@ -883,8 +953,9 @@ namespace Runtime
     throw (IO.userError
       "TLS configuration requires both certificateChainPem and privateKeyPem")
   ffiRuntimeConfigureTlsImpl runtime.handle (boolToUInt32 config.useSystemTrustStore)
-    (boolToUInt32 config.verifyClients) config.trustedCertificatesPem
-    config.certificateChainPem config.privateKeyPem
+    (boolToUInt32 config.verifyClients) (tlsVersionToTag config.minVersion)
+    config.trustedCertificatesPem config.certificateChainPem config.privateKeyPem
+    config.cipherList config.curveList config.acceptTimeoutNanos
 
 @[inline] def sleepNanosStart (runtime : Runtime) (delayNanos : UInt64) : IO PromiseRef := do
   return {
@@ -1294,12 +1365,14 @@ namespace Runtime
 
 @[inline] def httpResponsePromiseAwait (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponse := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, responseBody) ←
     ffiRuntimeHttpResponsePromiseAwaitImpl runtime.handle promise.handle
   return { status := status, body := responseBody }
 
 @[inline] def httpResponsePromiseAwaitWithHeaders (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl runtime.handle promise.handle
   return {
@@ -1311,6 +1384,7 @@ namespace Runtime
 
 @[inline] def httpResponsePromiseAwaitStreamingWithHeaders (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponseStreaming := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, statusText, responseHeaderBytes, responseBodyHandle) ←
     ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl runtime.handle promise.handle
   return {
@@ -1321,15 +1395,18 @@ namespace Runtime
   }
 
 @[inline] def httpResponsePromiseCancel (runtime : Runtime)
-    (promise : HttpResponsePromiseRef) : IO Unit :=
+    (promise : HttpResponsePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   ffiRuntimeHttpResponsePromiseCancelImpl runtime.handle promise.handle
 
 @[inline] def httpResponsePromiseRelease (runtime : Runtime)
-    (promise : HttpResponsePromiseRef) : IO Unit :=
+    (promise : HttpResponsePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   ffiRuntimeHttpResponsePromiseReleaseImpl runtime.handle promise.handle
 
 @[inline] def httpRequestBodyWriteStart (runtime : Runtime) (requestBody : HttpRequestBody)
     (bytes : ByteArray) : IO PromiseRef := do
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestBodyWriteStartImpl runtime.handle requestBody.handle bytes)
@@ -1342,6 +1419,7 @@ namespace Runtime
 
 @[inline] def httpRequestBodyFinishStart (runtime : Runtime) (requestBody : HttpRequestBody) :
     IO PromiseRef := do
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestBodyFinishStartImpl runtime.handle requestBody.handle)
@@ -1353,11 +1431,13 @@ namespace Runtime
   ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
 
 @[inline] def httpRequestBodyRelease (runtime : Runtime) (requestBody : HttpRequestBody) :
-    IO Unit :=
+    IO Unit := do
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
   ffiRuntimeHttpRequestBodyReleaseImpl runtime.handle requestBody.handle
 
 @[inline] def httpResponseBodyReadStart (runtime : Runtime) (responseBody : HttpResponseBody)
     (minBytes maxBytes : UInt32) : IO BytesPromiseRef := do
+  ensureSameRuntime runtime responseBody.runtime "HttpResponseBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpResponseBodyReadStartImpl runtime.handle responseBody.handle
@@ -1365,16 +1445,19 @@ namespace Runtime
   }
 
 @[inline] def httpResponseBodyRead (runtime : Runtime) (responseBody : HttpResponseBody)
-    (minBytes maxBytes : UInt32) : IO ByteArray :=
+    (minBytes maxBytes : UInt32) : IO ByteArray := do
+  ensureSameRuntime runtime responseBody.runtime "HttpResponseBody"
   ffiRuntimeHttpResponseBodyReadImpl runtime.handle responseBody.handle minBytes maxBytes
 
 @[inline] def httpResponseBodyRelease (runtime : Runtime) (responseBody : HttpResponseBody) :
-    IO Unit :=
+    IO Unit := do
+  ensureSameRuntime runtime responseBody.runtime "HttpResponseBody"
   ffiRuntimeHttpResponseBodyReleaseImpl runtime.handle responseBody.handle
 
 @[inline] def httpServerRequestBodyReadStart (runtime : Runtime)
     (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO BytesPromiseRef := do
+  ensureSameRuntime runtime requestBody.runtime "HttpServerRequestBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpServerRequestBodyReadStartImpl runtime.handle requestBody.handle
@@ -1383,11 +1466,13 @@ namespace Runtime
 
 @[inline] def httpServerRequestBodyRead (runtime : Runtime)
     (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
-    IO ByteArray :=
+    IO ByteArray := do
+  ensureSameRuntime runtime requestBody.runtime "HttpServerRequestBody"
   ffiRuntimeHttpServerRequestBodyReadImpl runtime.handle requestBody.handle minBytes maxBytes
 
 @[inline] def httpServerRequestBodyRelease (runtime : Runtime)
-    (requestBody : HttpServerRequestBody) : IO Unit :=
+    (requestBody : HttpServerRequestBody) : IO Unit := do
+  ensureSameRuntime runtime requestBody.runtime "HttpServerRequestBody"
   ffiRuntimeHttpServerRequestBodyReleaseImpl runtime.handle requestBody.handle
 
 @[inline] def httpGet (runtime : Runtime) (address : String) (path : String)
@@ -1398,26 +1483,55 @@ namespace Runtime
     (body : ByteArray) (portHint : UInt32 := 0) : IO HttpResponse :=
   runtime.httpRequest .post address path body portHint
 
-@[inline] def httpServerListen (runtime : Runtime) (address : String)
-    (portHint : UInt32 := 0) : IO HttpServer := do
-  let (serverId, boundPort) ← ffiRuntimeHttpServerListenImpl runtime.handle address portHint
+@[inline] def httpServerListenWithConfig (runtime : Runtime) (address : String)
+    (config : HttpServerConfig) (portHint : UInt32 := 0) : IO HttpServer := do
+  let (serverId, boundPort) ← ffiRuntimeHttpServerListenWithConfigImpl runtime.handle
+    address portHint config.headerTimeoutNanos config.pipelineTimeoutNanos
+    config.canceledUploadGracePeriodNanos config.canceledUploadGraceBytes
+    (webSocketCompressionModeToTag config.webSocketCompressionMode)
   return { runtime := runtime, handle := serverId, boundPort := boundPort }
+
+@[inline] def httpServerListenSecureWithConfig (runtime : Runtime) (address : String)
+    (config : HttpServerConfig) (portHint : UInt32 := 0) : IO HttpServer := do
+  let (serverId, boundPort) ← ffiRuntimeHttpServerListenSecureWithConfigImpl runtime.handle
+    address portHint config.headerTimeoutNanos config.pipelineTimeoutNanos
+    config.canceledUploadGracePeriodNanos config.canceledUploadGraceBytes
+    (webSocketCompressionModeToTag config.webSocketCompressionMode)
+  return { runtime := runtime, handle := serverId, boundPort := boundPort }
+
+@[inline] def httpServerListen (runtime : Runtime) (address : String)
+    (portHint : UInt32 := 0) : IO HttpServer :=
+  runtime.httpServerListenWithConfig address {} portHint
 
 @[inline] def httpServerListenSecure (runtime : Runtime) (address : String)
-    (portHint : UInt32 := 0) : IO HttpServer := do
-  let (serverId, boundPort) ← ffiRuntimeHttpServerListenSecureImpl runtime.handle address portHint
-  return { runtime := runtime, handle := serverId, boundPort := boundPort }
+    (portHint : UInt32 := 0) : IO HttpServer :=
+  runtime.httpServerListenSecureWithConfig address {} portHint
 
-@[inline] def httpServerRelease (runtime : Runtime) (server : HttpServer) : IO Unit :=
+@[inline] def httpServerRelease (runtime : Runtime) (server : HttpServer) : IO Unit := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
   ffiRuntimeHttpServerReleaseImpl runtime.handle server.handle
 
 @[inline] def httpServerPollRequestStreaming? (runtime : Runtime) (server : HttpServer) :
     IO (Option HttpServerRequest) := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
   let (hasRequest, payload) ← ffiRuntimeHttpServerPollRequestImpl runtime.handle server.handle
   if hasRequest then
     return some (← decodeHttpServerRequest runtime payload)
   else
     return none
+
+@[inline] def httpServerDrainStart (runtime : Runtime) (server : HttpServer) :
+    IO PromiseRef := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpServerDrainStartImpl runtime.handle server.handle)
+  }
+
+@[inline] def httpServerDrain (runtime : Runtime) (server : HttpServer) :
+    IO Unit := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
+  ffiRuntimeHttpServerDrainImpl runtime.handle server.handle
 
 @[inline] def httpServerPollRequest? (runtime : Runtime) (server : HttpServer) :
     IO (Option HttpServerRequest) := do
@@ -1427,12 +1541,14 @@ namespace Runtime
 
 @[inline] def httpServerRespond (runtime : Runtime) (server : HttpServer) (requestId : UInt32)
     (status : UInt32) (statusText : String) (responseHeaders : Array HttpHeader := #[])
-    (body : ByteArray := ByteArray.empty) : IO Unit :=
+    (body : ByteArray := ByteArray.empty) : IO Unit := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
   ffiRuntimeHttpServerRespondImpl runtime.handle server.handle requestId status statusText
     (encodeHeaders responseHeaders) body
 
 @[inline] def httpServerRespondWebSocket (runtime : Runtime) (server : HttpServer)
     (requestId : UInt32) (responseHeaders : Array HttpHeader := #[]) : IO WebSocket := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpServerRespondWebSocketImpl runtime.handle server.handle requestId
@@ -1442,6 +1558,7 @@ namespace Runtime
 @[inline] def httpServerRespondStartStreaming (runtime : Runtime) (server : HttpServer)
     (requestId : UInt32) (status : UInt32) (statusText : String)
     (responseHeaders : Array HttpHeader := #[]) : IO HttpServerResponseBody := do
+  ensureSameRuntime runtime server.runtime "HttpServer"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpServerRespondStartStreamingImpl
@@ -1450,6 +1567,7 @@ namespace Runtime
 
 @[inline] def httpServerResponseBodyWriteStart (runtime : Runtime)
     (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO PromiseRef := do
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpServerResponseBodyWriteStartImpl runtime.handle
@@ -1463,6 +1581,7 @@ namespace Runtime
 
 @[inline] def httpServerResponseBodyFinishStart (runtime : Runtime)
     (responseBody : HttpServerResponseBody) : IO PromiseRef := do
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpServerResponseBodyFinishStartImpl runtime.handle
@@ -1475,7 +1594,8 @@ namespace Runtime
   ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
 
 @[inline] def httpServerResponseBodyRelease (runtime : Runtime)
-    (responseBody : HttpServerResponseBody) : IO Unit :=
+    (responseBody : HttpServerResponseBody) : IO Unit := do
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
   ffiRuntimeHttpServerResponseBodyReleaseImpl runtime.handle responseBody.handle
 
 @[inline] def webSocketConnect (runtime : Runtime) (address : String)
@@ -1688,6 +1808,14 @@ namespace Runtime
 @[inline] def httpServerListenSecureEndpoint (runtime : Runtime) (endpoint : Endpoint) :
     IO HttpServer :=
   runtime.httpServerListenSecure endpoint.address endpoint.portHint
+
+@[inline] def httpServerListenWithConfigEndpoint (runtime : Runtime) (endpoint : Endpoint)
+    (config : HttpServerConfig) : IO HttpServer :=
+  runtime.httpServerListenWithConfig endpoint.address config endpoint.portHint
+
+@[inline] def httpServerListenSecureWithConfigEndpoint (runtime : Runtime) (endpoint : Endpoint)
+    (config : HttpServerConfig) : IO HttpServer :=
+  runtime.httpServerListenSecureWithConfig endpoint.address config endpoint.portHint
 
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
@@ -2146,6 +2274,15 @@ namespace HttpServer
 
 @[inline] def release (server : HttpServer) : IO Unit :=
   ffiRuntimeHttpServerReleaseImpl server.runtime.handle server.handle
+
+@[inline] def drainStart (server : HttpServer) : IO PromiseRef := do
+  return {
+    runtime := server.runtime
+    handle := (← ffiRuntimeHttpServerDrainStartImpl server.runtime.handle server.handle)
+  }
+
+@[inline] def drain (server : HttpServer) : IO Unit :=
+  ffiRuntimeHttpServerDrainImpl server.runtime.handle server.handle
 
 @[inline] def pollRequestStreaming? (server : HttpServer) : IO (Option HttpServerRequest) := do
   let (hasRequest, payload) ← ffiRuntimeHttpServerPollRequestImpl server.runtime.handle server.handle
@@ -2721,8 +2858,22 @@ namespace RuntimeM
     RuntimeM HttpServer := do
   Runtime.httpServerListenSecure (← runtime) address portHint
 
+@[inline] def httpServerListenWithConfig (address : String) (config : HttpServerConfig)
+    (portHint : UInt32 := 0) : RuntimeM HttpServer := do
+  Runtime.httpServerListenWithConfig (← runtime) address config portHint
+
+@[inline] def httpServerListenSecureWithConfig (address : String) (config : HttpServerConfig)
+    (portHint : UInt32 := 0) : RuntimeM HttpServer := do
+  Runtime.httpServerListenSecureWithConfig (← runtime) address config portHint
+
 @[inline] def httpServerRelease (server : HttpServer) : RuntimeM Unit := do
   server.release
+
+@[inline] def httpServerDrainStart (server : HttpServer) : RuntimeM PromiseRef := do
+  Runtime.httpServerDrainStart (← runtime) server
+
+@[inline] def httpServerDrain (server : HttpServer) : RuntimeM Unit := do
+  Runtime.httpServerDrain (← runtime) server
 
 @[inline] def httpServerPollRequest? (server : HttpServer) :
     RuntimeM (Option HttpServerRequest) := do
@@ -2904,6 +3055,14 @@ namespace RuntimeM
 
 @[inline] def httpServerListenSecureEndpoint (endpoint : Endpoint) : RuntimeM HttpServer := do
   Runtime.httpServerListenSecureEndpoint (← runtime) endpoint
+
+@[inline] def httpServerListenWithConfigEndpoint (endpoint : Endpoint)
+    (config : HttpServerConfig) : RuntimeM HttpServer := do
+  Runtime.httpServerListenWithConfigEndpoint (← runtime) endpoint config
+
+@[inline] def httpServerListenSecureWithConfigEndpoint (endpoint : Endpoint)
+    (config : HttpServerConfig) : RuntimeM HttpServer := do
+  Runtime.httpServerListenSecureWithConfigEndpoint (← runtime) endpoint config
 
 end RuntimeM
 

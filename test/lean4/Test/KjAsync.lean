@@ -747,9 +747,11 @@ def testKjAsyncHttpsAndWssWithCustomTlsConfig : IO Unit := do
     runtime.configureTls {
       useSystemTrustStore := false
       verifyClients := false
+      minVersion := some .tls12
       trustedCertificatesPem := tlsSelfSignedCertPem
       certificateChainPem := tlsSelfSignedCertPem
       privateKeyPem := tlsSelfSignedKeyPem
+      acceptTimeoutNanos := 2000000000
     }
     let server ← runtime.httpServerListenSecure "localhost" 0
     assertTrue (server.boundPort != UInt32.ofNat 0) "secure server must bind a non-zero port"
@@ -813,6 +815,56 @@ def testKjAsyncHttpsAndWssWithCustomTlsConfig : IO Unit := do
     server.release
   finally
     runtime.shutdown
+
+@[test]
+def testKjAsyncHttpServerListenWithConfigAndDrainStart : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListenWithConfig "127.0.0.1" {
+      headerTimeoutNanos := 12000000000
+      pipelineTimeoutNanos := 4000000000
+      canceledUploadGracePeriodNanos := 1500000000
+      canceledUploadGraceBytes := 32768
+      webSocketCompressionMode := .manual
+    } 0
+    assertTrue (server.boundPort != 0) "server with config must bind a non-zero port"
+
+    let responsePromise ← runtime.httpRequestStartWithHeaders
+      .get "127.0.0.1" "/config-listen" #[] ByteArray.empty server.boundPort
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/config-listen"
+    runtime.httpServerRespond server request.requestId 204 "No Content"
+      #[{ name := "x-config", value := "1" }] ByteArray.empty
+
+    let response ← responsePromise.awaitWithHeaders
+    assertEqual response.status 204
+    assertTrue (response.headers.any (fun h => h.name == "x-config" && h.value == "1"))
+      "expected response header x-config"
+
+    let drainPromise ← server.drainStart
+    drainPromise.await
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncRuntimeMismatchGuardForHttpServer : IO Unit := do
+  let runtimeA ← Capnp.KjAsync.Runtime.init
+  let runtimeB ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtimeA.httpServerListen "127.0.0.1" 0
+    let mismatchErr ←
+      try
+        runtimeB.httpServerRelease server
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (mismatchErr.contains "different Capnp.KjAsync runtime")
+      "expected runtime mismatch guard when using a server handle with another runtime"
+    server.release
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
 
 @[test]
 def testKjAsyncWebSocketServerAccept : IO Unit := do
