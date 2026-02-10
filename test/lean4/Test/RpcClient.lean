@@ -2234,6 +2234,40 @@ def testRuntimeConnectTransportAndServerAcceptTransport : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeTransportInjectionFromFd : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let payload : Capnp.Rpc.Payload := mkNullPayload
+    let (clientFd, serverFd) ← ffiNewSocketPairImpl
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      let bootstrap ← runtime.registerEchoTarget
+      let server ← runtime.newServer bootstrap
+      let clientTransport ← runtime.newTransportFromFd clientFd
+      let serverTransport ← runtime.newTransportFromFd serverFd
+      assertEqual (Option.isSome (← runtime.transportGetFd? clientTransport)) true
+      assertEqual (Option.isSome (← runtime.transportGetFd? serverTransport)) true
+      server.acceptTransport serverTransport
+      let target ← runtime.connectTransport clientTransport
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      assertEqual response.capTable.caps.size 0
+      runtime.releaseTarget target
+      server.release
+      runtime.releaseTarget bootstrap
+    finally
+      runtime.shutdown
+      try
+        ffiCloseFdImpl clientFd
+      catch _ =>
+        pure ()
+      try
+        ffiCloseFdImpl serverFd
+      catch _ =>
+        pure ()
+
+@[test]
 def testRuntimeInitWithFdLimit : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.initWithFdLimit (UInt32.ofNat 4)
@@ -2545,5 +2579,89 @@ def testRuntimeMultiVatPublishedSturdyRefAndStats : IO Unit := do
     alice.release
     bob.release
     runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeVatNetworkBootstrapPeer : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let network := runtime.vatNetwork
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← network.newClient "alice-network"
+    let bob ← network.newServer "bob-network" bootstrap
+    let target ← network.bootstrap alice bob
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← network.hasConnection alice bob) true
+    runtime.releaseTarget target
+    network.releasePeer alice
+    network.releasePeer bob
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatThirdPartyTokenStats : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let heldCap ← IO.mkRef (none : Option Capnp.Rpc.Client)
+  try
+    let bobBootstrap ← runtime.registerHandlerTarget (fun _ _ req => pure req)
+    let carolBootstrap ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        let cap? := Capnp.readCapabilityFromTable req.capTable (Capnp.getRoot req.msg)
+        match cap? with
+        | some cap =>
+            let retained ← runtime.retainTarget cap
+            match (← heldCap.get) with
+            | some previous => runtime.releaseTarget previous
+            | none => pure ()
+            heldCap.set (some retained)
+        | none => heldCap.set none
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+      else if method.interfaceId == Echo.interfaceId && method.methodId == Echo.barMethodId then
+        match (← heldCap.get) with
+        | some target =>
+            pure (Capnp.Rpc.Advanced.asyncForward target Echo.fooMethod payload)
+        | none =>
+            throw (IO.userError "Carol has no held capability")
+      else
+        pure (Capnp.Rpc.Advanced.respond req))
+
+    let network := runtime.vatNetwork
+    let alice ← network.newClient "alice-token"
+    let bob ← network.newServer "bob-token" bobBootstrap
+    let carol ← network.newServer "carol-token" carolBootstrap
+
+    network.resetForwardingStats
+    let stats0 ← network.stats
+    assertEqual stats0.forwardCount (UInt64.ofNat 0)
+    assertEqual stats0.deniedForwardCount (UInt64.ofNat 0)
+    assertEqual stats0.thirdPartyTokenCount (UInt64.ofNat 0)
+
+    let bobCap ← network.bootstrap alice bob
+    let carolCap ← network.bootstrap alice carol
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM carolCap (mkCapabilityPayload bobCap)
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM carolCap payload
+
+    let stats1 ← network.stats
+    assertTrue (stats1.thirdPartyTokenCount > (UInt64.ofNat 0))
+      "expected third-party handoff token count to increase"
+
+    runtime.releaseTarget bobCap
+    runtime.releaseTarget carolCap
+    match (← heldCap.get) with
+    | some cap => runtime.releaseTarget cap
+    | none => pure ()
+    network.releasePeer alice
+    network.releasePeer bob
+    network.releasePeer carol
+    runtime.releaseTarget bobBootstrap
+    runtime.releaseTarget carolBootstrap
   finally
     runtime.shutdown

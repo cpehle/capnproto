@@ -823,9 +823,14 @@ class GenericVatNetwork {
   GenericVat* find(const std::string& name);
 
   uint64_t newToken() { return ++tokenCounter_; }
+  uint64_t tokenCount() const { return tokenCounter_; }
 
   bool forwardingEnabled() const { return forwardingEnabled_; }
   void setForwardingEnabled(bool enabled) { forwardingEnabled_ = enabled; }
+  void resetForwardingStats() {
+    forwardCount_ = 0;
+    deniedForwardCount_ = 0;
+  }
 
   uint64_t forwardCount() const { return forwardCount_; }
   uint64_t deniedForwardCount() const { return deniedForwardCount_; }
@@ -1648,6 +1653,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFd(uint32_t fd) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewTransportFromFd{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueReleaseTransport(uint32_t transportId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -1657,6 +1676,20 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedReleaseTransport{transportId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<Int64Completion> enqueueTransportGetFd(uint32_t transportId) {
+    auto completion = std::make_shared<Int64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTransportGetFd{transportId, completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -2257,6 +2290,22 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatBootstrapPeer(
+      uint32_t sourcePeerId, uint32_t targetPeerId, bool unique) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedMultiVatBootstrapPeer{sourcePeerId, targetPeerId, unique, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueMultiVatSetForwardingEnabled(bool enabled) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -2271,6 +2320,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueMultiVatResetForwardingStats() {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatResetForwardingStats{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UInt64Completion> enqueueMultiVatForwardCount() {
     auto completion = std::make_shared<UInt64Completion>();
     {
@@ -2280,6 +2343,20 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedMultiVatForwardCount{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueMultiVatThirdPartyTokenCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatThirdPartyTokenCount{completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -2584,9 +2661,19 @@ class RuntimeLoop {
     std::shared_ptr<RegisterPairCompletion> completion;
   };
 
+  struct QueuedNewTransportFromFd {
+    uint32_t fd;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedReleaseTransport {
     uint32_t transportId;
     std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedTransportGetFd {
+    uint32_t transportId;
+    std::shared_ptr<Int64Completion> completion;
   };
 
   struct QueuedConnectTargetTransport {
@@ -2802,12 +2889,27 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedMultiVatBootstrapPeer {
+    uint32_t sourcePeerId;
+    uint32_t targetPeerId;
+    bool unique;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedMultiVatSetForwardingEnabled {
     bool enabled;
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedMultiVatResetForwardingStats {
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   struct QueuedMultiVatForwardCount {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedMultiVatThirdPartyTokenCount {
     std::shared_ptr<UInt64Completion> completion;
   };
 
@@ -2860,7 +2962,8 @@ class RuntimeLoop {
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
                    QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
                    QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
-                   QueuedNewTransportPipe, QueuedReleaseTransport,
+                   QueuedNewTransportPipe, QueuedNewTransportFromFd,
+                   QueuedReleaseTransport, QueuedTransportGetFd,
                    QueuedConnectTargetTransport,
                    QueuedListenLoopback,
                    QueuedAcceptLoopback, QueuedReleaseListener, QueuedNewClient,
@@ -2880,8 +2983,10 @@ class RuntimeLoop {
                    QueuedReleaseUnitPromise, QueuedPump,
                    QueuedMultiVatNewClient, QueuedMultiVatNewServer,
                    QueuedMultiVatNewServerWithBootstrapFactory, QueuedMultiVatReleasePeer,
-                   QueuedMultiVatBootstrap, QueuedMultiVatSetForwardingEnabled,
-                   QueuedMultiVatForwardCount, QueuedMultiVatDeniedForwardCount,
+                   QueuedMultiVatBootstrap, QueuedMultiVatBootstrapPeer,
+                   QueuedMultiVatSetForwardingEnabled, QueuedMultiVatResetForwardingStats,
+                   QueuedMultiVatForwardCount, QueuedMultiVatThirdPartyTokenCount,
+                   QueuedMultiVatDeniedForwardCount,
                    QueuedMultiVatHasConnection, QueuedMultiVatSetRestorer,
                    QueuedMultiVatClearRestorer, QueuedMultiVatPublishSturdyRef,
                    QueuedMultiVatRestoreSturdyRef>;
@@ -3787,12 +3892,25 @@ class RuntimeLoop {
     return addTarget(kj::mv(cap));
   }
 
+  uint32_t multiVatBootstrapPeer(uint32_t sourcePeerId, uint32_t targetPeerId, bool unique) {
+    auto& target = requireMultiVatPeer(targetPeerId);
+    return multiVatBootstrap(sourcePeerId, LeanVatId{target.name, unique});
+  }
+
   void multiVatSetForwardingEnabled(bool enabled) {
     genericVatNetwork_.setForwardingEnabled(enabled);
   }
 
+  void multiVatResetForwardingStats() {
+    genericVatNetwork_.resetForwardingStats();
+  }
+
   uint64_t multiVatForwardCount() const {
     return genericVatNetwork_.forwardCount();
+  }
+
+  uint64_t multiVatThirdPartyTokenCount() const {
+    return genericVatNetwork_.tokenCount();
   }
 
   uint64_t multiVatDeniedForwardCount() const {
@@ -4467,11 +4585,43 @@ class RuntimeLoop {
     return {firstId, secondId};
   }
 
+  uint32_t newTransportFromFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("newTransportFromFd is not supported on Windows");
+#else
+    constexpr uint32_t maxInt = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxInt) {
+      throw std::runtime_error("fd exceeds platform int range");
+    }
+    int fdCopy = dup(static_cast<int>(fd));
+    if (fdCopy < 0) {
+      throw std::runtime_error("dup() failed while creating RPC transport from fd");
+    }
+    auto stream = lowLevelProvider.wrapUnixSocketFd(kj::LowLevelAsyncIoProvider::OwnFd{fdCopy});
+    return addTransport(kj::mv(stream));
+#endif
+  }
+
   void releaseTransport(uint32_t transportId) {
     auto erased = transports_.erase(transportId);
     if (erased == 0) {
       throw std::runtime_error("unknown RPC transport id: " + std::to_string(transportId));
     }
+  }
+
+  int64_t transportGetFd(kj::WaitScope& waitScope, uint32_t transportId) {
+    (void)waitScope;
+    auto transportIt = transports_.find(transportId);
+    if (transportIt == transports_.end()) {
+      throw std::runtime_error("unknown RPC transport id: " + std::to_string(transportId));
+    }
+    auto fdMaybe = transportIt->second->getFd();
+    if (fdMaybe == kj::none) {
+      return -1;
+    }
+    return static_cast<int64_t>(KJ_ASSERT_NONNULL(fdMaybe));
   }
 
   uint32_t connectTargetPeer(kj::Own<NetworkClientPeer>&& peer) {
@@ -5391,6 +5541,20 @@ class RuntimeLoop {
             completeRegisterPairFailure(pipe.completion,
                                         "unknown exception in capnp_lean_rpc_runtime_new_transport_pipe");
           }
+        } else if (std::holds_alternative<QueuedNewTransportFromFd>(op)) {
+          auto request = std::get<QueuedNewTransportFromFd>(std::move(op));
+          try {
+            auto transportId = newTransportFromFd(*io.lowLevelProvider, request.fd);
+            completeRegisterSuccess(request.completion, transportId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_new_transport_from_fd");
+          }
         } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
           auto release = std::get<QueuedReleaseTransport>(std::move(op));
           try {
@@ -5403,6 +5567,19 @@ class RuntimeLoop {
           } catch (...) {
             completeUnitFailure(release.completion,
                                 "unknown exception in capnp_lean_rpc_runtime_release_transport");
+          }
+        } else if (std::holds_alternative<QueuedTransportGetFd>(op)) {
+          auto request = std::get<QueuedTransportGetFd>(std::move(op));
+          try {
+            completeInt64Success(request.completion, transportGetFd(io.waitScope, request.transportId));
+          } catch (const kj::Exception& e) {
+            completeInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_transport_get_fd");
           }
         } else if (std::holds_alternative<QueuedConnectTargetTransport>(op)) {
           auto connect = std::get<QueuedConnectTargetTransport>(std::move(op));
@@ -5943,6 +6120,21 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_bootstrap");
           }
+        } else if (std::holds_alternative<QueuedMultiVatBootstrapPeer>(op)) {
+          auto request = std::get<QueuedMultiVatBootstrapPeer>(std::move(op));
+          try {
+            auto target = multiVatBootstrapPeer(
+                request.sourcePeerId, request.targetPeerId, request.unique);
+            completeRegisterSuccess(request.completion, target);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_bootstrap_peer");
+          }
         } else if (std::holds_alternative<QueuedMultiVatSetForwardingEnabled>(op)) {
           auto request = std::get<QueuedMultiVatSetForwardingEnabled>(std::move(op));
           try {
@@ -5957,6 +6149,20 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_set_forwarding_enabled");
           }
+        } else if (std::holds_alternative<QueuedMultiVatResetForwardingStats>(op)) {
+          auto request = std::get<QueuedMultiVatResetForwardingStats>(std::move(op));
+          try {
+            multiVatResetForwardingStats();
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_reset_forwarding_stats");
+          }
         } else if (std::holds_alternative<QueuedMultiVatForwardCount>(op)) {
           auto request = std::get<QueuedMultiVatForwardCount>(std::move(op));
           try {
@@ -5969,6 +6175,19 @@ class RuntimeLoop {
             completeUInt64Failure(
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_forward_count");
+          }
+        } else if (std::holds_alternative<QueuedMultiVatThirdPartyTokenCount>(op)) {
+          auto request = std::get<QueuedMultiVatThirdPartyTokenCount>(std::move(op));
+          try {
+            completeUInt64Success(request.completion, multiVatThirdPartyTokenCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_third_party_token_count");
           }
         } else if (std::holds_alternative<QueuedMultiVatDeniedForwardCount>(op)) {
           auto request = std::get<QueuedMultiVatDeniedForwardCount>(std::move(op));
@@ -6197,8 +6416,12 @@ class RuntimeLoop {
         completeRegisterFailure(std::get<QueuedConnectTargetFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewTransportPipe>(op)) {
         completeRegisterPairFailure(std::get<QueuedNewTransportPipe>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewTransportFromFd>(op)) {
+        completeRegisterFailure(std::get<QueuedNewTransportFromFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
         completeUnitFailure(std::get<QueuedReleaseTransport>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTransportGetFd>(op)) {
+        completeInt64Failure(std::get<QueuedTransportGetFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTargetTransport>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTargetTransport>(op).completion, message);
       } else if (std::holds_alternative<QueuedListenLoopback>(op)) {
@@ -6283,10 +6506,16 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedMultiVatReleasePeer>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatBootstrap>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatBootstrap>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatBootstrapPeer>(op)) {
+        completeRegisterFailure(std::get<QueuedMultiVatBootstrapPeer>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatSetForwardingEnabled>(op)) {
         completeUnitFailure(std::get<QueuedMultiVatSetForwardingEnabled>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatResetForwardingStats>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatResetForwardingStats>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatForwardCount>(op)) {
         completeUInt64Failure(std::get<QueuedMultiVatForwardCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatThirdPartyTokenCount>(op)) {
+        completeUInt64Failure(std::get<QueuedMultiVatThirdPartyTokenCount>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatDeniedForwardCount>(op)) {
         completeUInt64Failure(std::get<QueuedMultiVatDeniedForwardCount>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatHasConnection>(op)) {
@@ -7201,6 +7430,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_transport_pipe(ui
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_transport_from_fd(
+    uint64_t runtimeId, uint32_t fd) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNewTransportFromFd(fd);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_new_transport_from_fd");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_transport(
     uint64_t runtimeId, uint32_t transportId) {
   auto runtime = getRuntime(runtimeId);
@@ -7226,6 +7481,34 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_transport(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_transport");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_transport_get_fd(
+    uint64_t runtimeId, uint32_t transportId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueTransportGetFd(transportId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      uint32_t out = completion->value < 0 ? std::numeric_limits<uint32_t>::max()
+                                           : static_cast<uint32_t>(completion->value);
+      return lean_io_result_mk_ok(lean_box_uint32(out));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_transport_get_fd");
   }
 }
 
@@ -8368,6 +8651,30 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_bootstrap(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_bootstrap_peer(
+    uint64_t runtimeId, uint32_t sourcePeerId, uint32_t targetPeerId, uint8_t unique) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+  try {
+    auto completion =
+        runtime->enqueueMultiVatBootstrapPeer(sourcePeerId, targetPeerId, unique != 0);
+    std::unique_lock<std::mutex> lock(completion->mutex);
+    completion->cv.wait(lock, [&completion]() { return completion->done; });
+    if (!completion->ok) {
+      return mkIoUserError(completion->error);
+    }
+    return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_multivat_bootstrap_peer");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_set_forwarding_enabled(
     uint64_t runtimeId, uint8_t enabled) {
   auto runtime = getRuntime(runtimeId);
@@ -8394,6 +8701,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_set_forwardi
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_reset_forwarding_stats(
+    uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+  try {
+    auto completion = runtime->enqueueMultiVatResetForwardingStats();
+    std::unique_lock<std::mutex> lock(completion->mutex);
+    completion->cv.wait(lock, [&completion]() { return completion->done; });
+    if (!completion->ok) {
+      return mkIoUserError(completion->error);
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_multivat_reset_forwarding_stats");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_forward_count(
     uint64_t runtimeId) {
   auto runtime = getRuntime(runtimeId);
@@ -8414,6 +8747,30 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_forward_coun
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_multivat_forward_count");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_third_party_token_count(
+    uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+  try {
+    auto completion = runtime->enqueueMultiVatThirdPartyTokenCount();
+    std::unique_lock<std::mutex> lock(completion->mutex);
+    completion->cv.wait(lock, [&completion]() { return completion->done; });
+    if (!completion->ok) {
+      return mkIoUserError(completion->error);
+    }
+    return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_multivat_third_party_token_count");
   }
 }
 

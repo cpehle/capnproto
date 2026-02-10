@@ -33,6 +33,26 @@ structure RuntimeTransport where
   raw : UInt32
   deriving Inhabited, BEq, Repr
 
+structure RuntimeVatPeer where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure VatId where
+  host : String
+  unique : Bool := false
+  deriving Inhabited, BEq, Repr
+
+structure SturdyRef where
+  vat : VatId
+  objectId : ByteArray := ByteArray.empty
+  deriving Inhabited, BEq
+
+structure MultiVatStats where
+  forwardCount : UInt64
+  deniedForwardCount : UInt64
+  thirdPartyTokenCount : UInt64
+  deriving Inhabited, BEq, Repr
+
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
 @[inline] def Client.toCapability (client : Client) : Capnp.Capability := client
@@ -142,6 +162,8 @@ inductive RawAdvancedHandlerResult where
 abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO RawAdvancedHandlerResult
 abbrev RawBootstrapFactoryCall := UInt16 -> IO UInt32
+abbrev RawVatBootstrapFactoryCall := String -> Bool -> IO UInt32
+abbrev RawVatRestorerCall := String -> Bool -> ByteArray -> IO UInt32
 abbrev RawTraceEncoder := String -> IO String
 
 @[inline] def AdvancedForwardOptions.toCaller
@@ -361,8 +383,14 @@ opaque ffiRuntimeConnectFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 @[extern "capnp_lean_rpc_runtime_new_transport_pipe"]
 opaque ffiRuntimeNewTransportPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 
+@[extern "capnp_lean_rpc_runtime_new_transport_from_fd"]
+opaque ffiRuntimeNewTransportFromFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_release_transport"]
 opaque ffiRuntimeReleaseTransportImpl (runtime : UInt64) (transport : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_transport_get_fd"]
+opaque ffiRuntimeTransportGetFdImpl (runtime : UInt64) (transport : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_connect_transport"]
 opaque ffiRuntimeConnectTransportImpl (runtime : UInt64) (transport : UInt32) : IO UInt32
@@ -459,6 +487,68 @@ opaque ffiRuntimeServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
 @[extern "capnp_lean_rpc_runtime_server_drain_start"]
 opaque ffiRuntimeServerDrainStartImpl (runtime : UInt64) (server : UInt32) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_multivat_new_client"]
+opaque ffiRuntimeMultiVatNewClientImpl
+    (runtime : UInt64) (name : @& String) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_new_server"]
+opaque ffiRuntimeMultiVatNewServerImpl
+    (runtime : UInt64) (name : @& String) (bootstrap : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_new_server_with_bootstrap_factory"]
+opaque ffiRuntimeMultiVatNewServerWithBootstrapFactoryImpl
+    (runtime : UInt64) (name : @& String) (bootstrapFactory : @& RawVatBootstrapFactoryCall) :
+    IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_release_peer"]
+opaque ffiRuntimeMultiVatReleasePeerImpl
+    (runtime : UInt64) (peer : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_bootstrap"]
+opaque ffiRuntimeMultiVatBootstrapImpl
+    (runtime : UInt64) (sourcePeer : UInt32) (host : @& String) (unique : UInt8) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_bootstrap_peer"]
+opaque ffiRuntimeMultiVatBootstrapPeerImpl
+    (runtime : UInt64) (sourcePeer : UInt32) (targetPeer : UInt32) (unique : UInt8) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_set_forwarding_enabled"]
+opaque ffiRuntimeMultiVatSetForwardingEnabledImpl
+    (runtime : UInt64) (enabled : UInt8) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_reset_forwarding_stats"]
+opaque ffiRuntimeMultiVatResetForwardingStatsImpl (runtime : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_forward_count"]
+opaque ffiRuntimeMultiVatForwardCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_multivat_third_party_token_count"]
+opaque ffiRuntimeMultiVatThirdPartyTokenCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_multivat_denied_forward_count"]
+opaque ffiRuntimeMultiVatDeniedForwardCountImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_multivat_has_connection"]
+opaque ffiRuntimeMultiVatHasConnectionImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO Bool
+
+@[extern "capnp_lean_rpc_runtime_multivat_set_restorer"]
+opaque ffiRuntimeMultiVatSetRestorerImpl
+    (runtime : UInt64) (peer : UInt32) (restorer : @& RawVatRestorerCall) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_clear_restorer"]
+opaque ffiRuntimeMultiVatClearRestorerImpl
+    (runtime : UInt64) (peer : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_publish_sturdy_ref"]
+opaque ffiRuntimeMultiVatPublishSturdyRefImpl
+    (runtime : UInt64) (hostPeer : UInt32) (objectId : @& ByteArray) (target : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_restore_sturdy_ref"]
+opaque ffiRuntimeMultiVatRestoreSturdyRefImpl
+    (runtime : UInt64) (sourcePeer : UInt32) (host : @& String) (unique : UInt8)
+    (objectId : @& ByteArray) : IO UInt32
+
 @[extern "capnp_lean_rpc_cpp_call_one_shot"]
 opaque ffiCppCallOneShotImpl
     (address : @& String) (portHint : UInt32) (interfaceId : UInt64) (methodId : UInt16)
@@ -512,6 +602,15 @@ structure RuntimeClientRef where
 structure RuntimeServerRef where
   runtime : Runtime
   handle : RuntimeServer
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeVatPeerRef where
+  runtime : Runtime
+  handle : RuntimeVatPeer
+  deriving Inhabited, BEq, Repr
+
+structure VatNetwork where
+  runtime : Runtime
   deriving Inhabited, BEq, Repr
 
 structure RuntimePendingCallRef where
@@ -724,11 +823,27 @@ namespace Runtime
   let (first, second) ← ffiRuntimeNewTransportPipeImpl runtime.handle
   return ({ raw := first }, { raw := second })
 
+@[inline] def newTransportFromFd (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
+  return { raw := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
+
 @[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit :=
   ffiRuntimeReleaseTransportImpl runtime.handle transport.raw
 
+@[inline] def transportGetFd? (runtime : Runtime) (transport : RuntimeTransport) :
+    IO (Option UInt32) := do
+  let noneSentinel : UInt32 := UInt32.ofNat 4294967295
+  let fd ← ffiRuntimeTransportGetFdImpl runtime.handle transport.raw
+  if fd == noneSentinel then
+    return none
+  else
+    return some fd
+
 @[inline] def connectTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Client :=
   ffiRuntimeConnectTransportImpl runtime.handle transport.raw
+
+@[inline] def connectTransportFd (runtime : Runtime) (fd : UInt32) : IO Client := do
+  let transport ← runtime.newTransportFromFd fd
+  runtime.connectTransport transport
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
@@ -765,6 +880,94 @@ namespace Runtime
       raw := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle bootstrapFactory)
     }
   }
+
+@[inline] private def boolToUInt8 (b : Bool) : UInt8 :=
+  if b then (1 : UInt8) else (0 : UInt8)
+
+@[inline] def newMultiVatClient (runtime : Runtime) (name : String) : IO RuntimeVatPeerRef := do
+  return {
+    runtime := runtime
+    handle := { raw := (← ffiRuntimeMultiVatNewClientImpl runtime.handle name) }
+  }
+
+@[inline] def newMultiVatServer (runtime : Runtime) (name : String) (bootstrap : Client) :
+    IO RuntimeVatPeerRef := do
+  return {
+    runtime := runtime
+    handle := { raw := (← ffiRuntimeMultiVatNewServerImpl runtime.handle name bootstrap) }
+  }
+
+@[inline] def newMultiVatServerWithBootstrapFactory (runtime : Runtime) (name : String)
+    (bootstrapFactory : VatId -> IO Client) : IO RuntimeVatPeerRef := do
+  let rawFactory : RawVatBootstrapFactoryCall := fun host unique =>
+    bootstrapFactory { host := host, unique := unique }
+  return {
+    runtime := runtime
+    handle := {
+      raw := (← ffiRuntimeMultiVatNewServerWithBootstrapFactoryImpl
+        runtime.handle name rawFactory)
+    }
+  }
+
+@[inline] def releaseMultiVatPeer (peer : RuntimeVatPeerRef) : IO Unit :=
+  ffiRuntimeMultiVatReleasePeerImpl peer.runtime.handle peer.handle.raw
+
+@[inline] def multiVatBootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) : IO Client :=
+  ffiRuntimeMultiVatBootstrapImpl peer.runtime.handle peer.handle.raw vatId.host
+    (boolToUInt8 vatId.unique)
+
+@[inline] def multiVatBootstrapPeer (runtime : Runtime)
+    (sourcePeer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
+    (unique : Bool := false) : IO Client :=
+  ffiRuntimeMultiVatBootstrapPeerImpl runtime.handle sourcePeer.handle.raw targetPeer.handle.raw
+    (boolToUInt8 unique)
+
+@[inline] def multiVatSetForwardingEnabled (runtime : Runtime) (enabled : Bool) : IO Unit :=
+  ffiRuntimeMultiVatSetForwardingEnabledImpl runtime.handle (boolToUInt8 enabled)
+
+@[inline] def multiVatResetForwardingStats (runtime : Runtime) : IO Unit :=
+  ffiRuntimeMultiVatResetForwardingStatsImpl runtime.handle
+
+@[inline] def multiVatForwardCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeMultiVatForwardCountImpl runtime.handle
+
+@[inline] def multiVatThirdPartyTokenCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeMultiVatThirdPartyTokenCountImpl runtime.handle
+
+@[inline] def multiVatDeniedForwardCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeMultiVatDeniedForwardCountImpl runtime.handle
+
+@[inline] def multiVatHasConnection (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool :=
+  ffiRuntimeMultiVatHasConnectionImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+
+@[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
+  ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.raw
+    (fun host unique objectId =>
+      restorer { host := host, unique := unique } objectId)
+
+@[inline] def multiVatClearRestorer (peer : RuntimeVatPeerRef) : IO Unit :=
+  ffiRuntimeMultiVatClearRestorerImpl peer.runtime.handle peer.handle.raw
+
+@[inline] def multiVatPublishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client) : IO Unit :=
+  ffiRuntimeMultiVatPublishSturdyRefImpl peer.runtime.handle peer.handle.raw objectId target
+
+@[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
+    (sturdyRef : SturdyRef) : IO Client :=
+  ffiRuntimeMultiVatRestoreSturdyRefImpl peer.runtime.handle peer.handle.raw
+    sturdyRef.vat.host (boolToUInt8 sturdyRef.vat.unique) sturdyRef.objectId
+
+@[inline] def multiVatStats (runtime : Runtime) : IO MultiVatStats := do
+  return {
+    forwardCount := (← runtime.multiVatForwardCount)
+    deniedForwardCount := (← runtime.multiVatDeniedForwardCount)
+    thirdPartyTokenCount := (← runtime.multiVatThirdPartyTokenCount)
+  }
+
+@[inline] def vatNetwork (runtime : Runtime) : VatNetwork :=
+  { runtime := runtime }
 
 @[inline] def withClient (runtime : Runtime) (address : String)
     (action : RuntimeClientRef -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -973,6 +1176,10 @@ namespace RuntimeServerRef
 @[inline] def acceptTransport (server : RuntimeServerRef) (transport : RuntimeTransport) : IO Unit :=
   ffiRuntimeServerAcceptTransportImpl server.runtime.handle server.handle.raw transport.raw
 
+@[inline] def acceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit := do
+  let transport ← Runtime.newTransportFromFd server.runtime fd
+  server.acceptTransport transport
+
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
   ffiRuntimeServerDrainImpl server.runtime.handle server.handle.raw
 
@@ -991,6 +1198,73 @@ namespace RuntimeServerRef
     server.runtime.releaseListener listener
 
 end RuntimeServerRef
+
+namespace RuntimeVatPeerRef
+
+@[inline] def release (peer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.releaseMultiVatPeer peer
+
+@[inline] def bootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) : IO Client :=
+  Runtime.multiVatBootstrap peer vatId
+
+@[inline] def bootstrapPeer (peer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
+    (unique : Bool := false) : IO Client :=
+  Runtime.multiVatBootstrapPeer peer.runtime peer targetPeer unique
+
+@[inline] def setRestorer (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
+  Runtime.multiVatSetRestorer peer restorer
+
+@[inline] def clearRestorer (peer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.multiVatClearRestorer peer
+
+@[inline] def publishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client) : IO Unit :=
+  Runtime.multiVatPublishSturdyRef peer objectId target
+
+@[inline] def restoreSturdyRef (peer : RuntimeVatPeerRef)
+    (sturdyRef : SturdyRef) : IO Client :=
+  Runtime.multiVatRestoreSturdyRef peer sturdyRef
+
+end RuntimeVatPeerRef
+
+namespace VatNetwork
+
+@[inline] def newClient (network : VatNetwork) (name : String) : IO RuntimeVatPeerRef :=
+  Runtime.newMultiVatClient network.runtime name
+
+@[inline] def newServer (network : VatNetwork) (name : String) (bootstrap : Client) :
+    IO RuntimeVatPeerRef :=
+  Runtime.newMultiVatServer network.runtime name bootstrap
+
+@[inline] def newServerWithBootstrapFactory (network : VatNetwork) (name : String)
+    (bootstrapFactory : VatId -> IO Client) : IO RuntimeVatPeerRef :=
+  Runtime.newMultiVatServerWithBootstrapFactory network.runtime name bootstrapFactory
+
+@[inline] def bootstrap (network : VatNetwork) (sourcePeer : RuntimeVatPeerRef)
+    (targetPeer : RuntimeVatPeerRef) (unique : Bool := false) : IO Client :=
+  Runtime.multiVatBootstrapPeer network.runtime sourcePeer targetPeer unique
+
+@[inline] def setForwardingEnabled (network : VatNetwork) (enabled : Bool) : IO Unit :=
+  Runtime.multiVatSetForwardingEnabled network.runtime enabled
+
+@[inline] def resetForwardingStats (network : VatNetwork) : IO Unit :=
+  Runtime.multiVatResetForwardingStats network.runtime
+
+@[inline] def stats (network : VatNetwork) : IO MultiVatStats :=
+  Runtime.multiVatStats network.runtime
+
+@[inline] def hasConnection (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool :=
+  Runtime.multiVatHasConnection network.runtime fromPeer toPeer
+
+@[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit :=
+  if peer.runtime == network.runtime then
+    Runtime.releaseMultiVatPeer peer
+  else
+    throw (IO.userError "VatNetwork.releasePeer: peer belongs to a different runtime")
+
+end VatNetwork
 
 namespace RuntimePendingCallRef
 
@@ -1176,11 +1450,20 @@ namespace RuntimeM
 @[inline] def newTransportPipe : RuntimeM (RuntimeTransport × RuntimeTransport) := do
   Runtime.newTransportPipe (← runtime)
 
+@[inline] def newTransportFromFd (fd : UInt32) : RuntimeM RuntimeTransport := do
+  Runtime.newTransportFromFd (← runtime) fd
+
 @[inline] def releaseTransport (transport : RuntimeTransport) : RuntimeM Unit := do
   Runtime.releaseTransport (← runtime) transport
 
+@[inline] def transportGetFd? (transport : RuntimeTransport) : RuntimeM (Option UInt32) := do
+  Runtime.transportGetFd? (← runtime) transport
+
 @[inline] def connectTransport (transport : RuntimeTransport) : RuntimeM Client := do
   Runtime.connectTransport (← runtime) transport
+
+@[inline] def connectTransportFd (fd : UInt32) : RuntimeM Client := do
+  Runtime.connectTransportFd (← runtime) fd
 
 @[inline] def listenEcho (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
   Runtime.listenEcho (← runtime) address portHint
@@ -1204,6 +1487,68 @@ namespace RuntimeM
 @[inline] def newServerWithBootstrapFactory
     (bootstrapFactory : UInt16 -> IO Client) : RuntimeM RuntimeServerRef := do
   Runtime.newServerWithBootstrapFactory (← runtime) bootstrapFactory
+
+@[inline] def newMultiVatClient (name : String) : RuntimeM RuntimeVatPeerRef := do
+  Runtime.newMultiVatClient (← runtime) name
+
+@[inline] def newMultiVatServer (name : String) (bootstrap : Client) :
+    RuntimeM RuntimeVatPeerRef := do
+  Runtime.newMultiVatServer (← runtime) name bootstrap
+
+@[inline] def newMultiVatServerWithBootstrapFactory (name : String)
+    (bootstrapFactory : VatId -> IO Client) : RuntimeM RuntimeVatPeerRef := do
+  Runtime.newMultiVatServerWithBootstrapFactory (← runtime) name bootstrapFactory
+
+@[inline] def releaseMultiVatPeer (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
+  Runtime.releaseMultiVatPeer peer
+
+@[inline] def multiVatBootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) :
+    RuntimeM Client := do
+  Runtime.multiVatBootstrap peer vatId
+
+@[inline] def multiVatBootstrapPeer (sourcePeer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
+    (unique : Bool := false) : RuntimeM Client := do
+  Runtime.multiVatBootstrapPeer (← runtime) sourcePeer targetPeer unique
+
+@[inline] def multiVatSetForwardingEnabled (enabled : Bool) : RuntimeM Unit := do
+  Runtime.multiVatSetForwardingEnabled (← runtime) enabled
+
+@[inline] def multiVatResetForwardingStats : RuntimeM Unit := do
+  Runtime.multiVatResetForwardingStats (← runtime)
+
+@[inline] def multiVatForwardCount : RuntimeM UInt64 := do
+  Runtime.multiVatForwardCount (← runtime)
+
+@[inline] def multiVatThirdPartyTokenCount : RuntimeM UInt64 := do
+  Runtime.multiVatThirdPartyTokenCount (← runtime)
+
+@[inline] def multiVatDeniedForwardCount : RuntimeM UInt64 := do
+  Runtime.multiVatDeniedForwardCount (← runtime)
+
+@[inline] def multiVatStats : RuntimeM MultiVatStats := do
+  Runtime.multiVatStats (← runtime)
+
+@[inline] def multiVatHasConnection (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    RuntimeM Bool := do
+  Runtime.multiVatHasConnection (← runtime) fromPeer toPeer
+
+@[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client) : RuntimeM Unit := do
+  Runtime.multiVatSetRestorer peer restorer
+
+@[inline] def multiVatClearRestorer (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
+  Runtime.multiVatClearRestorer peer
+
+@[inline] def multiVatPublishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client) : RuntimeM Unit := do
+  Runtime.multiVatPublishSturdyRef peer objectId target
+
+@[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
+    (sturdyRef : SturdyRef) : RuntimeM Client := do
+  Runtime.multiVatRestoreSturdyRef peer sturdyRef
+
+@[inline] def vatNetwork : RuntimeM VatNetwork := do
+  return Runtime.vatNetwork (← runtime)
 
 @[inline] def clientRelease (client : RuntimeClientRef) : RuntimeM Unit := do
   client.release
@@ -1265,6 +1610,9 @@ namespace RuntimeM
 @[inline] def serverAcceptTransport (server : RuntimeServerRef)
     (transport : RuntimeTransport) : RuntimeM Unit := do
   server.acceptTransport transport
+
+@[inline] def serverAcceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
+  server.acceptTransportFd fd
 
 @[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
   server.drain
