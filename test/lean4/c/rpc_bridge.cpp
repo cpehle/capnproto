@@ -272,6 +272,7 @@ struct LeanAdvancedHandlerAction {
   Kind kind = Kind::RETURN_PAYLOAD;
   bool releaseParams = false;
   bool allowCancellation = false;
+  bool isStreaming = false;
   bool sendResultsToCaller = false;
   bool noPromisePipelining = false;
   bool onlyPromisePipeline = false;
@@ -3543,10 +3544,19 @@ class RuntimeLoop {
       }
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
-        auto retainedCaps = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
-        cleanupRequestCaps(cleanupState, retainedCaps);
-        setContextResultsFromPayload(context, action.payloadBytes, action.payloadCaps);
-        return {kj::READY_NOW, false, action.allowCancellation};
+        auto responseCapIds = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
+        if (action.isStreaming) {
+          cleanupRequestCaps(cleanupState, {});
+          for (auto capId : responseCapIds) {
+            if (capId != 0) {
+              runtime_.dropTargetIfPresent(capId);
+            }
+          }
+        } else {
+          cleanupRequestCaps(cleanupState, responseCapIds);
+          setContextResultsFromPayload(context, action.payloadBytes, action.payloadCaps);
+        }
+        return {kj::READY_NOW, action.isStreaming, action.allowCancellation};
       }
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
@@ -3563,7 +3573,8 @@ class RuntimeLoop {
         cleanupRequestCaps(cleanupState, {});
 
         if (action.sendResultsToCaller) {
-          return {context.tailCall(kj::mv(requestBuilder)), false, action.allowCancellation};
+          return {context.tailCall(kj::mv(requestBuilder)), action.isStreaming,
+                  action.allowCancellation};
         }
         if (action.onlyPromisePipeline) {
           throw std::runtime_error(
@@ -3571,13 +3582,18 @@ class RuntimeLoop {
         }
 
         auto promiseAndPipeline = requestBuilder.send();
+        if (action.isStreaming) {
+          auto completion = promiseAndPipeline.then(
+              [](capnp::Response<capnp::AnyPointer>&&) mutable {});
+          return {kj::mv(completion), true, action.allowCancellation};
+        }
         context.setPipeline(promiseAndPipeline.noop());
         auto completion = promiseAndPipeline.then(
             [this, context = kj::mv(context)](
                 capnp::Response<capnp::AnyPointer>&& response) mutable {
               setContextResultsFromResponse(context, response);
             });
-        return {kj::mv(completion), false, action.allowCancellation};
+        return {kj::mv(completion), action.isStreaming, action.allowCancellation};
       }
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::TAIL_CALL) {
@@ -3592,7 +3608,8 @@ class RuntimeLoop {
             targetIt->second.typelessRequest(action.interfaceId, action.methodId, kj::none, callHints);
         runtime_.setRequestPayload(requestBuilder, action.payloadBytes, requestCapIdsOut);
         cleanupRequestCaps(cleanupState, {});
-        return {context.tailCall(kj::mv(requestBuilder)), false, action.allowCancellation};
+        return {context.tailCall(kj::mv(requestBuilder)), action.isStreaming,
+                action.allowCancellation};
       }
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::THROW_REMOTE) {
@@ -3613,12 +3630,18 @@ class RuntimeLoop {
         }
       }
       auto completion = waitLeanActionTask(deferredTaskState).then(
-          [this, context = kj::mv(context), cleanupState, earlyAllowCancellation = action.allowCancellation](
+          [this, context = kj::mv(context), cleanupState, earlyAllowCancellation = action.allowCancellation,
+           earlyIsStreaming = action.isStreaming](
               LeanAdvancedHandlerAction nextAction) mutable -> kj::Promise<void> {
             if (nextAction.allowCancellation && !earlyAllowCancellation) {
               cleanupRequestCaps(cleanupState, {});
               throw std::runtime_error(
                   "Lean RPC advanced deferred handler: allowCancellation must be set before defer");
+            }
+            if (nextAction.isStreaming && !earlyIsStreaming) {
+              cleanupRequestCaps(cleanupState, {});
+              throw std::runtime_error(
+                  "Lean RPC advanced deferred handler: isStreaming must be set before defer");
             }
             auto nextResult = dispatchDecodedAction(kj::mv(nextAction), kj::mv(context), cleanupState);
             return kj::mv(nextResult.promise).then(
@@ -3632,7 +3655,7 @@ class RuntimeLoop {
             cleanupRequestCaps(cleanupState, {});
             return kj::mv(e);
           }).attach(std::move(deferredTaskState));
-      return {kj::mv(completion), false, action.allowCancellation};
+      return {kj::mv(completion), action.isStreaming, action.allowCancellation};
     }
 
     static LeanAdvancedHandlerAction decodeAction(lean_object* actionObj) {
@@ -3640,6 +3663,7 @@ class RuntimeLoop {
       constexpr unsigned kRawAdvancedWrapperScalarBase = sizeof(void*) * 1;
       constexpr unsigned kRawAdvancedControlReleaseOffset = kRawAdvancedWrapperScalarBase;
       constexpr unsigned kRawAdvancedControlAllowOffset = kRawAdvancedWrapperScalarBase + 1;
+      constexpr unsigned kRawAdvancedControlStreamingOffset = kRawAdvancedWrapperScalarBase + 2;
       constexpr unsigned kRawAdvancedHintsNoPromiseOffset = kRawAdvancedWrapperScalarBase;
       constexpr unsigned kRawAdvancedHintsOnlyPipelineOffset = kRawAdvancedWrapperScalarBase + 1;
       constexpr unsigned kRawAdvancedScalarBase = sizeof(void*) * 2;
@@ -3655,6 +3679,9 @@ class RuntimeLoop {
           }
           if (lean_ctor_get_uint8(actionObj, kRawAdvancedControlAllowOffset) != 0) {
             action.allowCancellation = true;
+          }
+          if (lean_ctor_get_uint8(actionObj, kRawAdvancedControlStreamingOffset) != 0) {
+            action.isStreaming = true;
           }
           actionObj = lean_ctor_get(actionObj, 0);
           continue;

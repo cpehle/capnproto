@@ -73,6 +73,7 @@ abbrev RawTailCallHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> Byte
 structure AdvancedHandlerControl where
   releaseParams : Bool := false
   allowCancellation : Bool := false
+  isStreaming : Bool := false
   deriving Inhabited, BEq, Repr
 
 inductive AdvancedSendResultsTo where
@@ -116,7 +117,7 @@ inductive AdvancedHandlerReply where
     IO AdvancedHandlerReply := do
   let task ← IO.asTask next
   let deferred : AdvancedHandlerReply := .deferred task
-  if opts.releaseParams || opts.allowCancellation then
+  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
     return .control opts deferred
   else
     return deferred
@@ -133,6 +134,10 @@ inductive AdvancedHandlerReply where
     (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
   .control { allowCancellation := true } next
 
+@[inline] def AdvancedHandlerResult.streaming
+    (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
+  .control { isStreaming := true } next
+
 @[inline] def AdvancedHandlerReply.withControl
     (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
   .control opts next
@@ -145,6 +150,10 @@ inductive AdvancedHandlerReply where
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
   .control { allowCancellation := true } next
 
+@[inline] def AdvancedHandlerReply.streaming
+    (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  .control { isStreaming := true } next
+
 inductive RawAdvancedHandlerResult where
   | returnPayload (response : ByteArray) (responseCaps : ByteArray)
   | asyncCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
@@ -152,7 +161,8 @@ inductive RawAdvancedHandlerResult where
   | tailCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
       (request : ByteArray) (requestCaps : ByteArray)
   | throwRemote (message : String) (detail : ByteArray)
-  | control (releaseParams : Bool) (allowCancellation : Bool) (next : RawAdvancedHandlerResult)
+  | control (releaseParams : Bool) (allowCancellation : Bool) (isStreaming : Bool)
+      (next : RawAdvancedHandlerResult)
   | awaitTask (task : Task (Except IO.Error RawAdvancedHandlerResult))
       (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
   | sendResultsToCaller (next : RawAdvancedHandlerResult)
@@ -227,6 +237,12 @@ namespace Advanced
     (detail : ByteArray := ByteArray.empty) : AdvancedHandlerResult :=
   .throwRemote message detail
 
+@[inline] def streaming (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
+  .control { isStreaming := true } next
+
+@[inline] def streamingDone : AdvancedHandlerResult :=
+  streaming (.respond Capnp.emptyRpcEnvelope)
+
 @[inline] def now (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   .now result
 
@@ -234,6 +250,14 @@ namespace Advanced
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
     IO AdvancedHandlerReply :=
   AdvancedHandlerReply.defer next opts
+
+@[inline] def streamingNow (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.streaming (.now result)
+
+@[inline] def streamingDefer
+    (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
+    IO AdvancedHandlerReply := do
+  return AdvancedHandlerReply.streaming (← defer next opts)
 
 end Advanced
 
@@ -713,7 +737,7 @@ end CapTable
   | .throwRemote message detail =>
       pure (.throwRemote message detail)
   | .control opts next =>
-      pure (.control opts.releaseParams opts.allowCancellation
+      pure (.control opts.releaseParams opts.allowCancellation opts.isStreaming
         (← toRawAdvancedHandlerResult next))
 
 @[inline] private partial def toRawAdvancedHandlerReply
@@ -736,7 +760,7 @@ end CapTable
           throw err
       return .awaitTask rawTask task
   | .control opts next =>
-      return .control opts.releaseParams opts.allowCancellation
+      return .control opts.releaseParams opts.allowCancellation opts.isStreaming
         (← toRawAdvancedHandlerReply next)
 
 @[inline] private def toRawAdvancedHandlerCallAsync
@@ -787,6 +811,17 @@ namespace Runtime
 @[inline] def registerTailCallHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO Client) : IO Client :=
   ffiRuntimeRegisterTailCallHandlerTargetImpl runtime.handle (toRawTailCallHandlerCall handler)
+
+@[inline] def registerStreamingHandlerTarget (runtime : Runtime)
+    (handler : Client -> Method -> Payload -> IO Unit) : IO Client :=
+  runtime.registerAdvancedHandlerTargetAsync (fun target method payload => do
+    handler target method payload
+    pure <| AdvancedHandlerReply.streaming <| .now (.respond Capnp.emptyRpcEnvelope))
+
+@[inline] def registerStreamingHandlerTargetAsync (runtime : Runtime)
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : IO Client :=
+  runtime.registerAdvancedHandlerTargetAsync (fun target method payload => do
+    return AdvancedHandlerReply.streaming (← handler target method payload))
 
 @[inline] def registerTailCallTarget (runtime : Runtime) (target : Client) : IO Client :=
   ffiRuntimeRegisterTailCallTargetImpl runtime.handle target
@@ -1421,6 +1456,14 @@ namespace RuntimeM
 @[inline] def registerTailCallHandlerTarget
     (handler : Client -> Method -> Payload -> IO Client) : RuntimeM Client := do
   Runtime.registerTailCallHandlerTarget (← runtime) handler
+
+@[inline] def registerStreamingHandlerTarget
+    (handler : Client -> Method -> Payload -> IO Unit) : RuntimeM Client := do
+  Runtime.registerStreamingHandlerTarget (← runtime) handler
+
+@[inline] def registerStreamingHandlerTargetAsync
+    (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : RuntimeM Client := do
+  Runtime.registerStreamingHandlerTargetAsync (← runtime) handler
 
 @[inline] def registerTailCallTarget (target : Client) : RuntimeM Client := do
   Runtime.registerTailCallTarget (← runtime) target
