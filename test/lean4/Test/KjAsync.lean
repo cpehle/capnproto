@@ -348,6 +348,17 @@ def testKjAsyncPromiseComposition : IO Unit := do
     let all ← runtime.promiseAllStart #[p1, p2]
     all.await
 
+    let p3 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p4 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let seq ← runtime.promiseThenStart p3 p4
+    seq.await
+
+    let fail ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    fail.cancel
+    let fallback ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let recovered ← runtime.promiseCatchStart fail fallback
+    recovered.await
+
     let p3 ← runtime.sleepMillisStart (UInt32.ofNat 200)
     let p4 ← runtime.sleepMillisStart (UInt32.ofNat 5)
     let race ← runtime.promiseRaceStart #[p3, p4]

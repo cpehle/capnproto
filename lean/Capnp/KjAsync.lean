@@ -263,6 +263,14 @@ opaque ffiRuntimeConnectionShutdownWriteImpl (runtime : UInt64) (connection : UI
 opaque ffiRuntimeConnectionShutdownWriteStartImpl
     (runtime : UInt64) (connection : UInt32) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_promise_then_start"]
+opaque ffiRuntimePromiseThenStartImpl
+    (runtime : UInt64) (firstPromise : UInt32) (secondPromise : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_promise_catch_start"]
+opaque ffiRuntimePromiseCatchStartImpl
+    (runtime : UInt64) (promise : UInt32) (fallbackPromise : UInt32) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_promise_all_start"]
 opaque ffiRuntimePromiseAllStartImpl (runtime : UInt64) (promiseIds : @& ByteArray) : IO UInt32
 
@@ -1059,6 +1067,24 @@ namespace Runtime
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectionShutdownWriteStartImpl runtime.handle connection.handle)
+  }
+
+@[inline] def promiseThenStart (runtime : Runtime) (first second : PromiseRef) :
+    IO PromiseRef := do
+  ensureSameRuntime runtime first.runtime "PromiseRef"
+  ensureSameRuntime runtime second.runtime "PromiseRef"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimePromiseThenStartImpl runtime.handle first.handle second.handle)
+  }
+
+@[inline] def promiseCatchStart (runtime : Runtime) (promise fallback : PromiseRef) :
+    IO PromiseRef := do
+  ensureSameRuntime runtime promise.runtime "PromiseRef"
+  ensureSameRuntime runtime fallback.runtime "PromiseRef"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimePromiseCatchStartImpl runtime.handle promise.handle fallback.handle)
   }
 
 @[inline] def promiseAllStart (runtime : Runtime) (promises : Array PromiseRef) :
@@ -2625,6 +2651,12 @@ namespace RuntimeM
 
 @[inline] def awaitAndRelease (promise : PromiseRef) : RuntimeM Unit := do
   promise.awaitAndRelease
+
+@[inline] def promiseThenStart (first second : PromiseRef) : RuntimeM PromiseRef := do
+  Runtime.promiseThenStart (← runtime) first second
+
+@[inline] def promiseCatchStart (promise fallback : PromiseRef) : RuntimeM PromiseRef := do
+  Runtime.promiseCatchStart (← runtime) promise fallback
 
 @[inline] def promiseAllStart (promises : Array PromiseRef) : RuntimeM PromiseRef := do
   Runtime.promiseAllStart (← runtime) promises
