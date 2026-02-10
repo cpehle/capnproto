@@ -27,6 +27,10 @@ using rpc::kRuntimeDefaultMaxFdsPerMessage;
 using rpc::mkByteArrayCopy;
 using rpc::mkIoOkUnit;
 using rpc::mkIoUserError;
+using rpc::newPromiseCapabilityInline;
+using rpc::promiseCapabilityFulfillInline;
+using rpc::promiseCapabilityRejectInline;
+using rpc::promiseCapabilityReleaseInline;
 using rpc::shutdown;
 using rpc::unregisterRuntime;
 
@@ -847,6 +851,155 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_retain_target(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_retain_target");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_promise_capability(
+    uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    if (rpc::isWorkerThread(*runtime)) {
+      auto ids = newPromiseCapabilityInline(*runtime);
+      lean_object* resultTuple = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(resultTuple, 0, lean_box_uint32(ids.first));
+      lean_ctor_set(resultTuple, 1, lean_box_uint32(ids.second));
+      return lean_io_result_mk_ok(resultTuple);
+    }
+    auto completion = rpc::enqueueNewPromiseCapability(*runtime);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      lean_object* resultTuple = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(resultTuple, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(resultTuple, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(resultTuple);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_new_promise_capability");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_promise_capability_fulfill(
+    uint64_t runtimeId, uint32_t fulfillerId, uint32_t target) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    debugLog("ffi.promise_cap.fulfill.enter",
+             "runtime=" + std::to_string(runtimeId) + " fulfiller=" + std::to_string(fulfillerId) +
+                 " target=" + std::to_string(target));
+    if (rpc::isWorkerThread(*runtime)) {
+      promiseCapabilityFulfillInline(*runtime, fulfillerId, target);
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      debugLog("ffi.promise_cap.fulfill.done", "inline ok");
+      return ok;
+    }
+    auto completion = rpc::enqueuePromiseCapabilityFulfill(*runtime, fulfillerId, target);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      debugLog("ffi.promise_cap.fulfill.done", "queued ok");
+      return ok;
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_promise_capability_fulfill");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_promise_capability_reject(
+    uint64_t runtimeId, uint32_t fulfillerId, uint8_t exceptionTypeTag, b_lean_obj_arg message,
+    b_lean_obj_arg detail) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    std::string messageCopy = lean_string_cstr(message);
+    auto detailBytes = copyByteArray(detail);
+    if (rpc::isWorkerThread(*runtime)) {
+      promiseCapabilityRejectInline(*runtime, fulfillerId, exceptionTypeTag, std::move(messageCopy),
+                                    std::move(detailBytes));
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+    auto completion = rpc::enqueuePromiseCapabilityReject(
+        *runtime, fulfillerId, exceptionTypeTag, std::move(messageCopy), std::move(detailBytes));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_promise_capability_reject");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_promise_capability_release(
+    uint64_t runtimeId, uint32_t fulfillerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    if (rpc::isWorkerThread(*runtime)) {
+      promiseCapabilityReleaseInline(*runtime, fulfillerId);
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+    auto completion = rpc::enqueuePromiseCapabilityRelease(*runtime, fulfillerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_promise_capability_release");
   }
 }
 

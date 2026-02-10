@@ -464,6 +464,20 @@ opaque ffiRuntimeReleaseTargetsImpl (runtime : UInt64) (targets : @& ByteArray) 
 @[extern "capnp_lean_rpc_runtime_retain_target"]
 opaque ffiRuntimeRetainTargetImpl (runtime : UInt64) (target : UInt32) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_new_promise_capability"]
+opaque ffiRuntimeNewPromiseCapabilityImpl (runtime : UInt64) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_rpc_runtime_promise_capability_fulfill"]
+opaque ffiRuntimePromiseCapabilityFulfillImpl (runtime : UInt64) (fulfiller : UInt32)
+    (target : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_promise_capability_reject"]
+opaque ffiRuntimePromiseCapabilityRejectImpl (runtime : UInt64) (fulfiller : UInt32) (typeTag : UInt8)
+    (message : @& String) (detail : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_promise_capability_release"]
+opaque ffiRuntimePromiseCapabilityReleaseImpl (runtime : UInt64) (fulfiller : UInt32) : IO Unit
+
 @[extern "capnp_lean_rpc_runtime_connect"]
 opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
 
@@ -722,6 +736,11 @@ structure RuntimeUnitPromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure RuntimePromiseCapabilityFulfillerRef where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
 @[inline] private def ensureSameRuntimeHandle
     (runtime : Runtime) (ownerHandle : UInt64) (resource : String) : IO Unit := do
   if runtime.handle != ownerHandle then
@@ -918,6 +937,27 @@ namespace Runtime
 
 @[inline] def retainTarget (runtime : Runtime) (target : Client) : IO Client :=
   ffiRuntimeRetainTargetImpl runtime.handle target
+
+@[inline] def newPromiseCapability (runtime : Runtime) :
+    IO (Client × RuntimePromiseCapabilityFulfillerRef) := do
+  let (promiseTarget, fulfiller) ← ffiRuntimeNewPromiseCapabilityImpl runtime.handle
+  return (
+    promiseTarget,
+    { runtime := runtime, handle := fulfiller }
+  )
+
+@[inline] def promiseCapabilityFulfill (fulfiller : RuntimePromiseCapabilityFulfillerRef)
+    (target : Client) : IO Unit := do
+  ffiRuntimePromiseCapabilityFulfillImpl fulfiller.runtime.handle fulfiller.handle target
+
+@[inline] def promiseCapabilityReject (fulfiller : RuntimePromiseCapabilityFulfillerRef)
+    (type : RemoteExceptionType) (message : String)
+    (detail : ByteArray := ByteArray.empty) : IO Unit := do
+  ffiRuntimePromiseCapabilityRejectImpl fulfiller.runtime.handle fulfiller.handle type.toUInt8
+    message detail
+
+@[inline] def promiseCapabilityRelease (fulfiller : RuntimePromiseCapabilityFulfillerRef) : IO Unit := do
+  ffiRuntimePromiseCapabilityReleaseImpl fulfiller.runtime.handle fulfiller.handle
 
 @[inline] def releaseCapTable (runtime : Runtime) (capTable : Capnp.CapTable) : IO Unit := do
   if capTable.caps.isEmpty then
@@ -1539,6 +1579,20 @@ def toIOPromise (promise : RuntimeUnitPromiseRef) :
 
 end RuntimeUnitPromiseRef
 
+namespace RuntimePromiseCapabilityFulfillerRef
+
+@[inline] def fulfill (fulfiller : RuntimePromiseCapabilityFulfillerRef) (target : Client) : IO Unit :=
+  Runtime.promiseCapabilityFulfill fulfiller target
+
+@[inline] def reject (fulfiller : RuntimePromiseCapabilityFulfillerRef) (type : RemoteExceptionType)
+    (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit :=
+  Runtime.promiseCapabilityReject fulfiller type message detail
+
+@[inline] def release (fulfiller : RuntimePromiseCapabilityFulfillerRef) : IO Unit :=
+  Runtime.promiseCapabilityRelease fulfiller
+
+end RuntimePromiseCapabilityFulfillerRef
+
 abbrev RuntimeM := ReaderT Runtime IO
 
 namespace RuntimeM
@@ -1602,6 +1656,21 @@ namespace RuntimeM
 
 @[inline] def retainTarget (target : Client) : RuntimeM Client := do
   Runtime.retainTarget (← runtime) target
+
+@[inline] def newPromiseCapability : RuntimeM (Client × RuntimePromiseCapabilityFulfillerRef) := do
+  Runtime.newPromiseCapability (← runtime)
+
+@[inline] def promiseCapabilityFulfill (fulfiller : RuntimePromiseCapabilityFulfillerRef)
+    (target : Client) : RuntimeM Unit := do
+  Runtime.promiseCapabilityFulfill fulfiller target
+
+@[inline] def promiseCapabilityReject (fulfiller : RuntimePromiseCapabilityFulfillerRef)
+    (type : RemoteExceptionType) (message : String)
+    (detail : ByteArray := ByteArray.empty) : RuntimeM Unit := do
+  Runtime.promiseCapabilityReject fulfiller type message detail
+
+@[inline] def promiseCapabilityRelease (fulfiller : RuntimePromiseCapabilityFulfillerRef) : RuntimeM Unit := do
+  Runtime.promiseCapabilityRelease fulfiller
 
 @[inline] def releaseCapTable (capTable : Capnp.CapTable) : RuntimeM Unit := do
   Runtime.releaseCapTable (← runtime) capTable

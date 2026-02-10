@@ -1587,6 +1587,67 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterPairCompletion> enqueueNewPromiseCapability() {
+    auto completion = std::make_shared<RegisterPairCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterPairFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewPromiseCapability{completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityFulfill(uint32_t fulfillerId,
+                                                                  uint32_t target) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPromiseCapabilityFulfill{fulfillerId, target, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(uint32_t fulfillerId,
+                                                                 uint8_t exceptionTypeTag,
+                                                                 std::string message,
+                                                                 std::vector<uint8_t> detailBytes) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPromiseCapabilityReject{
+          fulfillerId, exceptionTypeTag, std::move(message), std::move(detailBytes), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityRelease(uint32_t fulfillerId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPromiseCapabilityRelease{fulfillerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueConnectTarget(std::string address,
                                                                  uint32_t portHint) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
@@ -2464,6 +2525,24 @@ class RuntimeLoop {
     releaseTargets(targets);
   }
 
+  std::pair<uint32_t, uint32_t> newPromiseCapabilityInline() {
+    return newPromiseCapability();
+  }
+
+  void promiseCapabilityFulfillInline(uint32_t fulfillerId, uint32_t target) {
+    promiseCapabilityFulfill(fulfillerId, target);
+  }
+
+  void promiseCapabilityRejectInline(uint32_t fulfillerId, uint8_t exceptionTypeTag,
+                                     std::string message,
+                                     std::vector<uint8_t> detailBytes) {
+    promiseCapabilityReject(fulfillerId, exceptionTypeTag, message, detailBytes);
+  }
+
+  void promiseCapabilityReleaseInline(uint32_t fulfillerId) {
+    promiseCapabilityRelease(fulfillerId);
+  }
+
   void notifyWorker() {
     // Wake the runtime thread whether it's blocked on the legacy condition variable or on the KJ
     // event port. This keeps KJ async I/O progressing without requiring explicit Runtime.pump calls.
@@ -2640,6 +2719,29 @@ class RuntimeLoop {
   struct QueuedRetainTarget {
     uint32_t target;
     std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedNewPromiseCapability {
+    std::shared_ptr<RegisterPairCompletion> completion;
+  };
+
+  struct QueuedPromiseCapabilityFulfill {
+    uint32_t fulfillerId;
+    uint32_t target;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedPromiseCapabilityReject {
+    uint32_t fulfillerId;
+    uint8_t exceptionTypeTag;
+    std::string message;
+    std::vector<uint8_t> detailBytes;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedPromiseCapabilityRelease {
+    uint32_t fulfillerId;
+    std::shared_ptr<UnitCompletion> completion;
   };
 
   struct QueuedConnectTarget {
@@ -2963,6 +3065,8 @@ class RuntimeLoop {
                    QueuedRegisterTailCallHandlerTarget,
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
                    QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
+                   QueuedNewPromiseCapability, QueuedPromiseCapabilityFulfill,
+                   QueuedPromiseCapabilityReject, QueuedPromiseCapabilityRelease,
                    QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
                    QueuedNewTransportPipe, QueuedNewTransportFromFd,
                    QueuedReleaseTransport, QueuedTransportGetFd,
@@ -3150,6 +3254,20 @@ class RuntimeLoop {
 
     kj::Promise<void> promise;
     kj::Own<kj::Canceler> canceler;
+  };
+
+  struct PendingPromiseCapability {
+    PendingPromiseCapability(
+        kj::Own<kj::PromiseFulfiller<kj::Own<capnp::ClientHook>>>&& fulfiller,
+        uint32_t promiseTarget)
+        : fulfiller(kj::mv(fulfiller)), promiseTarget(promiseTarget) {}
+    PendingPromiseCapability(PendingPromiseCapability&&) = default;
+    PendingPromiseCapability& operator=(PendingPromiseCapability&&) = default;
+    PendingPromiseCapability(const PendingPromiseCapability&) = delete;
+    PendingPromiseCapability& operator=(const PendingPromiseCapability&) = delete;
+
+    kj::Own<kj::PromiseFulfiller<kj::Own<capnp::ClientHook>>> fulfiller;
+    uint32_t promiseTarget = 0;
   };
 
   void retainPeerOwnership(
@@ -3929,6 +4047,15 @@ class RuntimeLoop {
     return promiseId;
   }
 
+  uint32_t addPromiseCapabilityFulfiller(PendingPromiseCapability&& promise) {
+    uint32_t fulfillerId = nextPromiseCapabilityFulfillerId_++;
+    while (promiseCapabilityFulfillers_.find(fulfillerId) != promiseCapabilityFulfillers_.end()) {
+      fulfillerId = nextPromiseCapabilityFulfillerId_++;
+    }
+    promiseCapabilityFulfillers_.emplace(fulfillerId, std::move(promise));
+    return fulfillerId;
+  }
+
   uint32_t addMultiVatPeer(kj::Own<MultiVatPeer>&& peer) {
     uint32_t peerId = nextMultiVatPeerId_++;
     while (multiVatPeers_.find(peerId) != multiVatPeers_.end()) {
@@ -4299,7 +4426,7 @@ class RuntimeLoop {
     return addPendingCall(PendingCall(kj::mv(promise), kj::mv(pipeline), kj::mv(canceler)));
   }
 
-  RawCallResult awaitPendingCall(kj::WaitScope& waitScope, uint32_t pendingCallId) {
+  kj::Promise<RawCallResult> awaitPendingCall(uint32_t pendingCallId) {
     auto pendingIt = pendingCalls_.find(pendingCallId);
     if (pendingIt == pendingCalls_.end()) {
       throw std::runtime_error("unknown pending RPC call id: " + std::to_string(pendingCallId));
@@ -4307,8 +4434,9 @@ class RuntimeLoop {
     auto pending = kj::mv(pendingIt->second);
     pendingCalls_.erase(pendingIt);
     pending.canceler->release();
-    auto response = kj::mv(pending.promise).wait(waitScope);
-    return serializeResponse(response);
+    return kj::mv(pending.promise).then([this](capnp::Response<capnp::AnyPointer>&& response) {
+      return kj::evalNow([this, &response]() { return serializeResponse(response); });
+    });
   }
 
   void releasePendingCall(uint32_t pendingCallId) {
@@ -4483,10 +4611,10 @@ class RuntimeLoop {
     applyTraceEncoderToAllActiveConnections();
   }
 
-  RawCallResult processRawCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
-                               const std::vector<uint8_t>& request,
-                               const std::vector<uint32_t>& requestCaps,
-                               kj::WaitScope& waitScope) {
+  kj::Promise<RawCallResult> processRawCall(uint32_t target, uint64_t interfaceId,
+                                            uint16_t methodId,
+                                            const std::vector<uint8_t>& request,
+                                            const std::vector<uint32_t>& requestCaps) {
     auto targetIt = targets_.find(target);
     if (targetIt == targets_.end()) {
       throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
@@ -4499,9 +4627,10 @@ class RuntimeLoop {
 
     auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
     setRequestPayload(requestBuilder, request, requestCaps);
-    auto response = requestBuilder.send().wait(waitScope);
-    debugLog("rawcall.done", "target=" + std::to_string(target));
-    return serializeResponse(response);
+    return requestBuilder.send().then([this, target](capnp::Response<capnp::AnyPointer>&& response) {
+      debugLog("rawcall.done", "target=" + std::to_string(target));
+      return kj::evalNow([this, &response]() { return serializeResponse(response); });
+    });
   }
 
   RawCallResult processCppCallWithAccept(
@@ -4658,6 +4787,83 @@ class RuntimeLoop {
         throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
       }
     }
+  }
+
+  std::pair<uint32_t, uint32_t> newPromiseCapability() {
+    auto paf = kj::newPromiseAndFulfiller<kj::Own<capnp::ClientHook>>();
+    auto promiseHook = capnp::newLocalPromiseClient(kj::mv(paf.promise));
+    auto promiseTarget = capnp::Capability::Client(kj::mv(promiseHook));
+    auto targetId = addTarget(kj::mv(promiseTarget));
+    auto fulfillerId = addPromiseCapabilityFulfiller(
+        PendingPromiseCapability(kj::mv(paf.fulfiller), targetId));
+    return {targetId, fulfillerId};
+  }
+
+  static kj::Exception::Type decodeRemoteExceptionType(uint8_t typeTag) {
+    switch (typeTag) {
+      case 0:
+        return kj::Exception::Type::FAILED;
+      case 1:
+        return kj::Exception::Type::OVERLOADED;
+      case 2:
+        return kj::Exception::Type::DISCONNECTED;
+      case 3:
+        return kj::Exception::Type::UNIMPLEMENTED;
+      default:
+        return kj::Exception::Type::FAILED;
+    }
+  }
+
+  void promiseCapabilityFulfill(uint32_t fulfillerId, uint32_t target) {
+    auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
+    if (promiseIt == promiseCapabilityFulfillers_.end()) {
+      throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
+                               std::to_string(fulfillerId));
+    }
+    if (target == 0) {
+      throw std::runtime_error("cannot fulfill promise capability with null target");
+    }
+    if (target == promiseIt->second.promiseTarget) {
+      throw std::runtime_error("cannot fulfill promise capability with itself");
+    }
+
+    auto targetIt = targets_.find(target);
+    if (targetIt == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+    }
+    capnp::Capability::Client cap = targetIt->second;
+    promiseIt->second.fulfiller->fulfill(capnp::ClientHook::from(kj::mv(cap)));
+    promiseCapabilityFulfillers_.erase(promiseIt);
+  }
+
+  void promiseCapabilityReject(uint32_t fulfillerId, uint8_t exceptionTypeTag,
+                               const std::string& message,
+                               const std::vector<uint8_t>& detailBytes) {
+    auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
+    if (promiseIt == promiseCapabilityFulfillers_.end()) {
+      throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
+                               std::to_string(fulfillerId));
+    }
+    auto type = decodeRemoteExceptionType(exceptionTypeTag);
+    auto ex = kj::Exception(type, __FILE__, __LINE__, kj::str(message.c_str()));
+    if (!detailBytes.empty()) {
+      auto copy = kj::heapArray<kj::byte>(detailBytes.size());
+      std::memcpy(copy.begin(), detailBytes.data(), detailBytes.size());
+      ex.setDetail(1, kj::mv(copy));
+    }
+    promiseIt->second.fulfiller->reject(kj::mv(ex));
+    promiseCapabilityFulfillers_.erase(promiseIt);
+  }
+
+  void promiseCapabilityRelease(uint32_t fulfillerId) {
+    auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
+    if (promiseIt == promiseCapabilityFulfillers_.end()) {
+      return;
+    }
+    auto ex = kj::Exception(kj::Exception::Type::DISCONNECTED, __FILE__, __LINE__,
+                            kj::str("promise capability fulfiller released"));
+    promiseIt->second.fulfiller->reject(kj::mv(ex));
+    promiseCapabilityFulfillers_.erase(promiseIt);
   }
 
   uint32_t addListener(kj::Own<kj::ConnectionReceiver>&& listener) {
@@ -5258,6 +5464,16 @@ class RuntimeLoop {
       }
       startupCv_.notify_all();
 
+      class RuntimeTaskErrorHandler final : public kj::TaskSet::ErrorHandler {
+       public:
+        void taskFailed(kj::Exception&& exception) override {
+          debugLog("runtime.task_failed", describeKjException(exception));
+        }
+      };
+
+      RuntimeTaskErrorHandler taskErrorHandler;
+      kj::TaskSet tasks(taskErrorHandler);
+
       while (true) {
         QueuedOperation op;
         bool haveOp = false;
@@ -5268,7 +5484,9 @@ class RuntimeLoop {
             queue_.pop_front();
             haveOp = true;
           } else if (stopping_) {
-            break;
+            if (tasks.isEmpty()) {
+              break;
+            }
           }
         }
 
@@ -5290,11 +5508,17 @@ class RuntimeLoop {
         if (std::holds_alternative<QueuedRawCall>(op)) {
           auto call = std::get<QueuedRawCall>(std::move(op));
           try {
-            auto promise = kj::evalNow([&]() {
-              return processRawCall(call.target, call.interfaceId, call.methodId, call.request,
-                                    call.requestCaps, io.waitScope);
-            });
-            completeSuccess(call.completion, promise.wait(io.waitScope));
+            auto promise =
+                processRawCall(call.target, call.interfaceId, call.methodId, call.request,
+                               call.requestCaps);
+            tasks.add(
+                kj::mv(promise).then(
+                    [completion = call.completion](RawCallResult&& result) mutable {
+                      completeSuccess(completion, kj::mv(result));
+                    },
+                    [completion = call.completion](kj::Exception&& e) mutable {
+                      completeFailureKj(completion, e);
+                    }));
           } catch (const kj::Exception& e) {
             completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
@@ -5321,10 +5545,15 @@ class RuntimeLoop {
         } else if (std::holds_alternative<QueuedAwaitPendingCall>(op)) {
           auto call = std::get<QueuedAwaitPendingCall>(std::move(op));
           try {
-            auto promise = kj::evalNow([&]() {
-              return awaitPendingCall(io.waitScope, call.pendingCallId);
-            });
-            completeSuccess(call.completion, promise.wait(io.waitScope));
+            auto promise = awaitPendingCall(call.pendingCallId);
+            tasks.add(
+                kj::mv(promise).then(
+                    [completion = call.completion](RawCallResult&& result) mutable {
+                      completeSuccess(completion, kj::mv(result));
+                    },
+                    [completion = call.completion](kj::Exception&& e) mutable {
+                      completeFailureKj(completion, e);
+                    }));
           } catch (const kj::Exception& e) {
             completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
@@ -5634,6 +5863,63 @@ class RuntimeLoop {
           } catch (...) {
             completeRegisterFailure(retain.completion,
                                     "unknown exception in capnp_lean_rpc_runtime_retain_target");
+          }
+        } else if (std::holds_alternative<QueuedNewPromiseCapability>(op)) {
+          auto request = std::get<QueuedNewPromiseCapability>(std::move(op));
+          try {
+            auto ids = newPromiseCapability();
+            completeRegisterPairSuccess(request.completion, ids.first, ids.second);
+          } catch (const kj::Exception& e) {
+            completeRegisterPairFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterPairFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterPairFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_new_promise_capability");
+          }
+        } else if (std::holds_alternative<QueuedPromiseCapabilityFulfill>(op)) {
+          auto request = std::get<QueuedPromiseCapabilityFulfill>(std::move(op));
+          try {
+            promiseCapabilityFulfill(request.fulfillerId, request.target);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_promise_capability_fulfill");
+          }
+        } else if (std::holds_alternative<QueuedPromiseCapabilityReject>(op)) {
+          auto request = std::get<QueuedPromiseCapabilityReject>(std::move(op));
+          try {
+            promiseCapabilityReject(request.fulfillerId, request.exceptionTypeTag,
+                                   request.message, request.detailBytes);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_promise_capability_reject");
+          }
+        } else if (std::holds_alternative<QueuedPromiseCapabilityRelease>(op)) {
+          auto request = std::get<QueuedPromiseCapabilityRelease>(std::move(op));
+          try {
+            promiseCapabilityRelease(request.fulfillerId);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_promise_capability_release");
           }
         } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
           auto connect = std::get<QueuedConnectTarget>(std::move(op));
@@ -6442,6 +6728,9 @@ class RuntimeLoop {
                 "unknown exception in capnp_lean_rpc_runtime_pump");
           }
         }
+
+        // Keep KJ progressing even if the runtime queue stays busy.
+        io.waitScope.poll(1);
       }
 
       // Tear down RPC clients/servers on the runtime thread while async I/O is still valid.
@@ -6460,6 +6749,7 @@ class RuntimeLoop {
       pendingDeferredCancelRequests_ = 0;
       registerPromises_.clear();
       unitPromises_.clear();
+      promiseCapabilityFulfillers_.clear();
       clients_.clear();
       servers_.clear();
       sturdyRefs_.clear();
@@ -6558,6 +6848,14 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedReleaseTargets>(op).completion, message);
       } else if (std::holds_alternative<QueuedRetainTarget>(op)) {
         completeRegisterFailure(std::get<QueuedRetainTarget>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewPromiseCapability>(op)) {
+        completeRegisterPairFailure(std::get<QueuedNewPromiseCapability>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPromiseCapabilityFulfill>(op)) {
+        completeUnitFailure(std::get<QueuedPromiseCapabilityFulfill>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPromiseCapabilityReject>(op)) {
+        completeUnitFailure(std::get<QueuedPromiseCapabilityReject>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPromiseCapabilityRelease>(op)) {
+        completeUnitFailure(std::get<QueuedPromiseCapabilityRelease>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTargetStart>(op)) {
@@ -6715,6 +7013,7 @@ class RuntimeLoop {
   uint64_t pendingDeferredCancelRequests_ = 0;
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
+  std::unordered_map<uint32_t, PendingPromiseCapability> promiseCapabilityFulfillers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
   GenericVatNetwork genericVatNetwork_;
@@ -6734,6 +7033,7 @@ class RuntimeLoop {
   uint32_t nextPendingCallId_ = 1;
   uint32_t nextRegisterPromiseId_ = 1;
   uint32_t nextUnitPromiseId_ = 1;
+  uint32_t nextPromiseCapabilityFulfillerId_ = 1;
 };
 
 std::mutex gRuntimeRegistryMutex;
@@ -6799,6 +7099,25 @@ void releaseTargetInline(RuntimeLoop& runtime, uint32_t target) { runtime.releas
 
 void releaseTargetsInline(RuntimeLoop& runtime, const std::vector<uint32_t>& targets) {
   runtime.releaseTargetsInline(targets);
+}
+
+std::pair<uint32_t, uint32_t> newPromiseCapabilityInline(RuntimeLoop& runtime) {
+  return runtime.newPromiseCapabilityInline();
+}
+
+void promiseCapabilityFulfillInline(RuntimeLoop& runtime, uint32_t fulfillerId, uint32_t target) {
+  runtime.promiseCapabilityFulfillInline(fulfillerId, target);
+}
+
+void promiseCapabilityRejectInline(RuntimeLoop& runtime, uint32_t fulfillerId,
+                                   uint8_t exceptionTypeTag, std::string message,
+                                   std::vector<uint8_t> detailBytes) {
+  runtime.promiseCapabilityRejectInline(fulfillerId, exceptionTypeTag, std::move(message),
+                                        std::move(detailBytes));
+}
+
+void promiseCapabilityReleaseInline(RuntimeLoop& runtime, uint32_t fulfillerId) {
+  runtime.promiseCapabilityReleaseInline(fulfillerId);
 }
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
@@ -6875,6 +7194,30 @@ std::shared_ptr<UnitCompletion> enqueueReleaseTargets(RuntimeLoop& runtime,
 std::shared_ptr<RegisterTargetCompletion> enqueueRetainTarget(RuntimeLoop& runtime,
                                                               uint32_t target) {
   return runtime.enqueueRetainTarget(target);
+}
+
+std::shared_ptr<RegisterPairCompletion> enqueueNewPromiseCapability(RuntimeLoop& runtime) {
+  return runtime.enqueueNewPromiseCapability();
+}
+
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityFulfill(RuntimeLoop& runtime,
+                                                                uint32_t fulfillerId,
+                                                                uint32_t target) {
+  return runtime.enqueuePromiseCapabilityFulfill(fulfillerId, target);
+}
+
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(RuntimeLoop& runtime,
+                                                               uint32_t fulfillerId,
+                                                               uint8_t exceptionTypeTag,
+                                                               std::string message,
+                                                               std::vector<uint8_t> detailBytes) {
+  return runtime.enqueuePromiseCapabilityReject(fulfillerId, exceptionTypeTag, std::move(message),
+                                                std::move(detailBytes));
+}
+
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityRelease(RuntimeLoop& runtime,
+                                                                uint32_t fulfillerId) {
+  return runtime.enqueuePromiseCapabilityRelease(fulfillerId);
 }
 
 std::shared_ptr<RegisterTargetCompletion> enqueueConnectTarget(RuntimeLoop& runtime,

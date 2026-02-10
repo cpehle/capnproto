@@ -363,6 +363,68 @@ def testGeneratedAsyncHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimePromiseCapabilityPipelining : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let (promiseCap, fulfiller) ← runtime.newPromiseCapability
+
+    let handler : Echo.AdvancedTypedServer := {
+      foo := fun _ req reqCaps => do
+        let _ := req
+        let _ := reqCaps
+        let pipeline := mkCapabilityPayload promiseCap
+        let deferred ← Capnp.Rpc.Advanced.defer (next := do
+          IO.sleep (UInt32.ofNat 50)
+          fulfiller.fulfill sink
+          pure (Capnp.Rpc.Advanced.respond pipeline))
+        pure (Capnp.Rpc.Advanced.setPipeline pipeline deferred)
+      bar := fun _ _ _ =>
+        pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))
+    }
+
+    let bootstrap ← Echo.registerAdvancedTypedTarget runtime handler
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let pending ← Echo.startFoo runtime remoteTarget payload
+    let pipelinedCap ← Echo.getFooPipelinedCap pending
+
+    let pipelinedResponse ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM pipelinedCap payload
+    assertEqual pipelinedResponse.capTable.caps.size 0
+    assertEqual (Capnp.isNullPointer (Capnp.getRoot pipelinedResponse.msg)) true
+
+    let response ← Echo.awaitFoo pending
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+    runtime.releaseTarget pipelinedCap
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget promiseCap
+    fulfiller.release
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testBackendOfRawCall : IO Unit := do
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
   let payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope

@@ -12,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace capnp_lean_rpc {
@@ -123,6 +124,13 @@ uint32_t retainTargetInline(RuntimeLoop& runtime, uint32_t target);
 void releaseTargetInline(RuntimeLoop& runtime, uint32_t target);
 void releaseTargetsInline(RuntimeLoop& runtime, const std::vector<uint32_t>& targets);
 
+std::pair<uint32_t, uint32_t> newPromiseCapabilityInline(RuntimeLoop& runtime);
+void promiseCapabilityFulfillInline(RuntimeLoop& runtime, uint32_t fulfillerId, uint32_t target);
+void promiseCapabilityRejectInline(RuntimeLoop& runtime, uint32_t fulfillerId,
+                                   uint8_t exceptionTypeTag, std::string message,
+                                   std::vector<uint8_t> detailBytes);
+void promiseCapabilityReleaseInline(RuntimeLoop& runtime, uint32_t fulfillerId);
+
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     std::vector<uint8_t> request, std::vector<uint32_t> requestCaps);
@@ -150,6 +158,18 @@ std::shared_ptr<UnitCompletion> enqueueReleaseTarget(RuntimeLoop& runtime, uint3
 std::shared_ptr<UnitCompletion> enqueueReleaseTargets(RuntimeLoop& runtime,
                                                       std::vector<uint32_t> targets);
 std::shared_ptr<RegisterTargetCompletion> enqueueRetainTarget(RuntimeLoop& runtime, uint32_t target);
+
+std::shared_ptr<RegisterPairCompletion> enqueueNewPromiseCapability(RuntimeLoop& runtime);
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityFulfill(RuntimeLoop& runtime,
+                                                                uint32_t fulfillerId,
+                                                                uint32_t target);
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(RuntimeLoop& runtime,
+                                                               uint32_t fulfillerId,
+                                                               uint8_t exceptionTypeTag,
+                                                               std::string message,
+                                                               std::vector<uint8_t> detailBytes);
+std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityRelease(RuntimeLoop& runtime,
+                                                                uint32_t fulfillerId);
 
 std::shared_ptr<RegisterTargetCompletion> enqueueConnectTarget(RuntimeLoop& runtime,
                                                                std::string address,
