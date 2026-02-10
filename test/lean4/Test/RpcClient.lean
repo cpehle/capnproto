@@ -235,6 +235,106 @@ def testGeneratedRegisterTypedTargetNetwork : IO Unit := do
       pure ()
 
 @[test]
+def testGeneratedRegisterAdvancedTypedTargetNetwork : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let handler : Echo.AdvancedTypedServer := {
+      foo := fun _ req reqCaps => do
+        seenFoo.set true
+        assertEqual reqCaps.caps.size 0
+        assertEqual req.hasPayload false
+        pure (Capnp.Rpc.Advanced.now
+          (Capnp.Rpc.Advanced.forwardToCaller sink Echo.fooMethod payload
+            Capnp.Rpc.AdvancedCallHints.withNoPromisePipelining))
+      bar := fun _ _ _ =>
+        pure (Capnp.Rpc.Advanced.now
+          (Capnp.Rpc.Advanced.throwRemote "unexpected advanced typed bar handler invocation"))
+    }
+    let bootstrap ← Echo.registerAdvancedTypedTarget runtime handler
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let (response, responseCaps) ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooTypedM remoteTarget payload
+    assertEqual responseCaps.caps.size 0
+    assertEqual response.hasPayload false
+    assertEqual (← seenFoo.get) true
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testGeneratedRegisterStreamingTypedTargetNetwork : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenFoo ← IO.mkRef false
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let handler : Echo.StreamingTypedServer := {
+      foo := fun _ req reqCaps => do
+        seenFoo.set true
+        assertEqual reqCaps.caps.size 0
+        assertEqual req.hasPayload false
+        pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))
+      bar := fun _ _ _ =>
+        pure (Capnp.Rpc.Advanced.now
+          (Capnp.Rpc.Advanced.throwRemote "unexpected streaming typed bar handler invocation"))
+    }
+    let bootstrap ← Echo.registerStreamingTypedTarget runtime handler
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    runtime.streamingCall remoteTarget Echo.fooMethod payload
+    let mut seen := (← seenFoo.get)
+    let mut attempts := 0
+    while !seen && attempts < 20 do
+      runtime.pump
+      IO.sleep (UInt32.ofNat 5)
+      seen := (← seenFoo.get)
+      attempts := attempts + 1
+    assertEqual seen true
+
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testGeneratedAsyncHelpers : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -1700,6 +1800,20 @@ def testRuntimeStreamingCall : IO Unit := do
       if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
         seen.set true
       pure req)
+    runtime.streamingCall target Echo.fooMethod mkNullPayload
+    assertEqual (← seen.get) true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeRegisterStreamingHandlerTarget : IO Unit := do
+  let seen ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerStreamingHandlerTarget (fun _ method _ => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        seen.set true)
     runtime.streamingCall target Echo.fooMethod mkNullPayload
     assertEqual (← seen.get) true
     runtime.releaseTarget target
