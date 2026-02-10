@@ -3779,6 +3779,8 @@ def startCallM (target : TestGenerics.Inner2.DeepNest.DeepNestInterface) (payloa
 def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.DeepNest.DeepNestInterface.call_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -3867,6 +3869,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  call : callAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  call : callStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestGenerics.Inner2.DeepNest.DeepNestInterface := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestGenerics.Inner2.DeepNest.DeepNestInterface
 abbrev TestGenerics.Interface := Capnp.Rpc.Client
 
@@ -3887,6 +3929,8 @@ def startCallM (target : TestGenerics.Interface) (payload : Capnp.Rpc.Payload :=
 def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestGenerics.Inner2.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -3975,6 +4019,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  call : callAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestGenerics.Interface := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  call : callStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestGenerics.Interface := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestGenerics.Interface := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestGenerics.Interface
 opaque ann : Capnp.AnyPointer
 abbrev TestImplicitMethodParams := Capnp.Rpc.Client
@@ -3996,6 +4080,8 @@ def startCallM (target : TestImplicitMethodParams) (payload : Capnp.Rpc.Payload 
 def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParams.call_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4084,6 +4170,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  call : callAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestImplicitMethodParams := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  call : callStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestImplicitMethodParams := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestImplicitMethodParams := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestImplicitMethodParams
 abbrev TestImplicitMethodParamsInGeneric := Capnp.Rpc.Client
 
@@ -4104,6 +4230,8 @@ def startCallM (target : TestImplicitMethodParamsInGeneric) (payload : Capnp.Rpc
 def awaitCall (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestImplicitMethodParamsInGeneric.call_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4192,6 +4320,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  call : callAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  call : callStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callMethod then do
+      let (request, requestCaps) ← callRequestOfPayload payload
+      server.call target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestImplicitMethodParamsInGeneric := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestImplicitMethodParamsInGeneric
 abbrev TestInterface := Capnp.Rpc.Client
 
@@ -4212,6 +4380,8 @@ def startFooM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emp
 def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev fooAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev fooStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.foo_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4258,6 +4428,8 @@ def startBarM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emp
 def awaitBar (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev barAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev barStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.bar_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4304,6 +4476,8 @@ def startBazM (target : TestInterface) (payload : Capnp.Rpc.Payload := Capnp.emp
 def awaitBaz (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev bazTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev bazAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev bazStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def bazRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.baz_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4350,6 +4524,8 @@ def startGetTestPipelineM (target : TestInterface) (payload : Capnp.Rpc.Payload 
 def awaitGetTestPipeline (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getTestPipelineTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getTestPipelineAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getTestPipelineStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getTestPipelineRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestPipeline_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4396,6 +4572,8 @@ def startGetTestTailCalleeM (target : TestInterface) (payload : Capnp.Rpc.Payloa
 def awaitGetTestTailCallee (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getTestTailCalleeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getTestTailCalleeAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getTestTailCalleeStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getTestTailCalleeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCallee_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4442,6 +4620,8 @@ def startGetTestTailCallerM (target : TestInterface) (payload : Capnp.Rpc.Payloa
 def awaitGetTestTailCaller (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getTestTailCallerTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getTestTailCallerAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getTestTailCallerStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getTestTailCallerRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestTailCaller_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4488,6 +4668,8 @@ def startGetTestMoreStuffM (target : TestInterface) (payload : Capnp.Rpc.Payload
 def awaitGetTestMoreStuff (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getTestMoreStuffTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getTestMoreStuffAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getTestMoreStuffStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getTestMoreStuffRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestInterface.getTestMoreStuff_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4654,6 +4836,94 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestInterface := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  foo : fooAdvancedTypedHandler
+  bar : barAdvancedTypedHandler
+  baz : bazAdvancedTypedHandler
+  getTestPipeline : getTestPipelineAdvancedTypedHandler
+  getTestTailCallee : getTestTailCalleeAdvancedTypedHandler
+  getTestTailCaller : getTestTailCallerAdvancedTypedHandler
+  getTestMoreStuff : getTestMoreStuffAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else if method == barMethod then do
+      let (request, requestCaps) ← barRequestOfPayload payload
+      server.bar target request requestCaps
+    else if method == bazMethod then do
+      let (request, requestCaps) ← bazRequestOfPayload payload
+      server.baz target request requestCaps
+    else if method == getTestPipelineMethod then do
+      let (request, requestCaps) ← getTestPipelineRequestOfPayload payload
+      server.getTestPipeline target request requestCaps
+    else if method == getTestTailCalleeMethod then do
+      let (request, requestCaps) ← getTestTailCalleeRequestOfPayload payload
+      server.getTestTailCallee target request requestCaps
+    else if method == getTestTailCallerMethod then do
+      let (request, requestCaps) ← getTestTailCallerRequestOfPayload payload
+      server.getTestTailCaller target request requestCaps
+    else if method == getTestMoreStuffMethod then do
+      let (request, requestCaps) ← getTestMoreStuffRequestOfPayload payload
+      server.getTestMoreStuff target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestInterface := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestInterface := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  foo : fooStreamingTypedHandler
+  bar : barStreamingTypedHandler
+  baz : bazStreamingTypedHandler
+  getTestPipeline : getTestPipelineStreamingTypedHandler
+  getTestTailCallee : getTestTailCalleeStreamingTypedHandler
+  getTestTailCaller : getTestTailCallerStreamingTypedHandler
+  getTestMoreStuff : getTestMoreStuffStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else if method == barMethod then do
+      let (request, requestCaps) ← barRequestOfPayload payload
+      server.bar target request requestCaps
+    else if method == bazMethod then do
+      let (request, requestCaps) ← bazRequestOfPayload payload
+      server.baz target request requestCaps
+    else if method == getTestPipelineMethod then do
+      let (request, requestCaps) ← getTestPipelineRequestOfPayload payload
+      server.getTestPipeline target request requestCaps
+    else if method == getTestTailCalleeMethod then do
+      let (request, requestCaps) ← getTestTailCalleeRequestOfPayload payload
+      server.getTestTailCallee target request requestCaps
+    else if method == getTestTailCallerMethod then do
+      let (request, requestCaps) ← getTestTailCallerRequestOfPayload payload
+      server.getTestTailCaller target request requestCaps
+    else if method == getTestMoreStuffMethod then do
+      let (request, requestCaps) ← getTestMoreStuffRequestOfPayload payload
+      server.getTestMoreStuff target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestInterface := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestInterface := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestInterface
 abbrev TestExtends := Capnp.Rpc.Client
 
@@ -4674,6 +4944,8 @@ def startQuxM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.empty
 def awaitQux (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev quxTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev quxAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev quxStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def quxRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.qux_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4720,6 +4992,8 @@ def startCorgeM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.emp
 def awaitCorge (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev corgeTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev corgeAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev corgeStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def corgeRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAllTypes.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestAllTypes.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4766,6 +5040,8 @@ def startGraultM (target : TestExtends) (payload : Capnp.Rpc.Payload := Capnp.em
 def awaitGrault (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev graultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev graultAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev graultStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def graultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestExtends.grault_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4880,6 +5156,62 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  qux : quxAdvancedTypedHandler
+  corge : corgeAdvancedTypedHandler
+  grault : graultAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == quxMethod then do
+      let (request, requestCaps) ← quxRequestOfPayload payload
+      server.qux target request requestCaps
+    else if method == corgeMethod then do
+      let (request, requestCaps) ← corgeRequestOfPayload payload
+      server.corge target request requestCaps
+    else if method == graultMethod then do
+      let (request, requestCaps) ← graultRequestOfPayload payload
+      server.grault target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestExtends := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestExtends := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  qux : quxStreamingTypedHandler
+  corge : corgeStreamingTypedHandler
+  grault : graultStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == quxMethod then do
+      let (request, requestCaps) ← quxRequestOfPayload payload
+      server.qux target request requestCaps
+    else if method == corgeMethod then do
+      let (request, requestCaps) ← corgeRequestOfPayload payload
+      server.corge target request requestCaps
+    else if method == graultMethod then do
+      let (request, requestCaps) ← graultRequestOfPayload payload
+      server.grault target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestExtends := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestExtends := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestExtends
 abbrev TestExtends2 := Capnp.Rpc.Client
 
@@ -4933,6 +5265,40 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestExtends2 := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  unit : Unit := ()
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestExtends2 := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestExtends2 := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  unit : Unit := ()
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestExtends2 := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestExtends2 := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestExtends2
 abbrev TestPipeline := Capnp.Rpc.Client
 
@@ -4953,6 +5319,8 @@ def startGetCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capnp.e
 def awaitGetCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getCapAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getCapStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCap_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -4999,6 +5367,8 @@ def startTestPointersM (target : TestPipeline) (payload : Capnp.Rpc.Payload := C
 def awaitTestPointers (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev testPointersTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev testPointersAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev testPointersStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def testPointersRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.testPointers_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5045,6 +5415,8 @@ def startGetAnyCapM (target : TestPipeline) (payload : Capnp.Rpc.Payload := Capn
 def awaitGetAnyCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getAnyCapTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getAnyCapAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getAnyCapStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getAnyCapRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getAnyCap_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5091,6 +5463,8 @@ def startGetCapPipelineOnlyM (target : TestPipeline) (payload : Capnp.Rpc.Payloa
 def awaitGetCapPipelineOnly (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getCapPipelineOnlyTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getCapPipelineOnlyAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getCapPipelineOnlyStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getCapPipelineOnlyRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestPipeline.getCapPipelineOnly_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5218,6 +5592,70 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestPipeline := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  getCap : getCapAdvancedTypedHandler
+  testPointers : testPointersAdvancedTypedHandler
+  getAnyCap : getAnyCapAdvancedTypedHandler
+  getCapPipelineOnly : getCapPipelineOnlyAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCapMethod then do
+      let (request, requestCaps) ← getCapRequestOfPayload payload
+      server.getCap target request requestCaps
+    else if method == testPointersMethod then do
+      let (request, requestCaps) ← testPointersRequestOfPayload payload
+      server.testPointers target request requestCaps
+    else if method == getAnyCapMethod then do
+      let (request, requestCaps) ← getAnyCapRequestOfPayload payload
+      server.getAnyCap target request requestCaps
+    else if method == getCapPipelineOnlyMethod then do
+      let (request, requestCaps) ← getCapPipelineOnlyRequestOfPayload payload
+      server.getCapPipelineOnly target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestPipeline := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestPipeline := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  getCap : getCapStreamingTypedHandler
+  testPointers : testPointersStreamingTypedHandler
+  getAnyCap : getAnyCapStreamingTypedHandler
+  getCapPipelineOnly : getCapPipelineOnlyStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCapMethod then do
+      let (request, requestCaps) ← getCapRequestOfPayload payload
+      server.getCap target request requestCaps
+    else if method == testPointersMethod then do
+      let (request, requestCaps) ← testPointersRequestOfPayload payload
+      server.testPointers target request requestCaps
+    else if method == getAnyCapMethod then do
+      let (request, requestCaps) ← getAnyCapRequestOfPayload payload
+      server.getAnyCap target request requestCaps
+    else if method == getCapPipelineOnlyMethod then do
+      let (request, requestCaps) ← getCapPipelineOnlyRequestOfPayload payload
+      server.getCapPipelineOnly target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestPipeline := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestPipeline := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestPipeline
 abbrev TestCallOrder := Capnp.Rpc.Client
 
@@ -5238,6 +5676,8 @@ def startGetCallSequenceM (target : TestCallOrder) (payload : Capnp.Rpc.Payload 
 def awaitGetCallSequence (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getCallSequenceTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getCallSequenceAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getCallSequenceStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getCallSequenceRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestCallOrder.getCallSequence_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5326,6 +5766,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestCallOrder := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  getCallSequence : getCallSequenceAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCallSequenceMethod then do
+      let (request, requestCaps) ← getCallSequenceRequestOfPayload payload
+      server.getCallSequence target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestCallOrder := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestCallOrder := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  getCallSequence : getCallSequenceStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCallSequenceMethod then do
+      let (request, requestCaps) ← getCallSequenceRequestOfPayload payload
+      server.getCallSequence target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestCallOrder := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestCallOrder := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestCallOrder
 abbrev TestTailCallee := Capnp.Rpc.Client
 
@@ -5349,6 +5829,8 @@ def startFooM (target : TestTailCallee) (payload : Capnp.Rpc.Payload := Capnp.em
 def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev fooAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev fooStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCallee.foo_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5437,6 +5919,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCallee := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  foo : fooAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestTailCallee := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestTailCallee := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  foo : fooStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestTailCallee := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestTailCallee := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestTailCallee
 abbrev TestTailCaller := Capnp.Rpc.Client
 
@@ -5457,6 +5979,8 @@ def startFooM (target : TestTailCaller) (payload : Capnp.Rpc.Payload := Capnp.em
 def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev fooAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev fooStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestTailCaller.foo_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5545,6 +6069,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestTailCaller := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  foo : fooAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestTailCaller := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestTailCaller := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  foo : fooStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == fooMethod then do
+      let (request, requestCaps) ← fooRequestOfPayload payload
+      server.foo target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestTailCaller := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestTailCaller := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestTailCaller
 abbrev TestStreaming := Capnp.Rpc.Client
 
@@ -5568,6 +6132,8 @@ def startDoStreamIM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Cap
 def awaitDoStreamI (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev doStreamITypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev doStreamIAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev doStreamIStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def doStreamIRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamI_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5614,6 +6180,8 @@ def startDoStreamJM (target : TestStreaming) (payload : Capnp.Rpc.Payload := Cap
 def awaitDoStreamJ (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev doStreamJTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev doStreamJAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev doStreamJStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def doStreamJRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.doStreamJ_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5660,6 +6228,8 @@ def startFinishStreamM (target : TestStreaming) (payload : Capnp.Rpc.Payload := 
 def awaitFinishStream (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev finishStreamTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev finishStreamAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev finishStreamStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def finishStreamRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestStreaming.finishStream_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5774,6 +6344,62 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestStreaming := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  doStreamI : doStreamIAdvancedTypedHandler
+  doStreamJ : doStreamJAdvancedTypedHandler
+  finishStream : finishStreamAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == doStreamIMethod then do
+      let (request, requestCaps) ← doStreamIRequestOfPayload payload
+      server.doStreamI target request requestCaps
+    else if method == doStreamJMethod then do
+      let (request, requestCaps) ← doStreamJRequestOfPayload payload
+      server.doStreamJ target request requestCaps
+    else if method == finishStreamMethod then do
+      let (request, requestCaps) ← finishStreamRequestOfPayload payload
+      server.finishStream target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestStreaming := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestStreaming := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  doStreamI : doStreamIStreamingTypedHandler
+  doStreamJ : doStreamJStreamingTypedHandler
+  finishStream : finishStreamStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == doStreamIMethod then do
+      let (request, requestCaps) ← doStreamIRequestOfPayload payload
+      server.doStreamI target request requestCaps
+    else if method == doStreamJMethod then do
+      let (request, requestCaps) ← doStreamJRequestOfPayload payload
+      server.doStreamJ target request requestCaps
+    else if method == finishStreamMethod then do
+      let (request, requestCaps) ← finishStreamRequestOfPayload payload
+      server.finishStream target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestStreaming := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestStreaming := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestStreaming
 abbrev TestHandle := Capnp.Rpc.Client
 
@@ -5827,6 +6453,40 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestHandle := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  unit : Unit := ()
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestHandle := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestHandle := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  unit : Unit := ()
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestHandle := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestHandle := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestHandle
 abbrev TestMoreStuff := Capnp.Rpc.Client
 
@@ -5847,6 +6507,8 @@ def startCallFooM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp
 def awaitCallFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callFooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callFooAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callFooStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callFooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFoo_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5893,6 +6555,8 @@ def startCallFooWhenResolvedM (target : TestMoreStuff) (payload : Capnp.Rpc.Payl
 def awaitCallFooWhenResolved (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callFooWhenResolvedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callFooWhenResolvedAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callFooWhenResolvedStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callFooWhenResolvedRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callFooWhenResolved_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5939,6 +6603,8 @@ def startNeverReturnM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := C
 def awaitNeverReturn (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev neverReturnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev neverReturnAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev neverReturnStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def neverReturnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.neverReturn_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -5987,6 +6653,8 @@ def startHoldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.em
 def awaitHold (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev holdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev holdAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev holdStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def holdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.hold_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6033,6 +6701,8 @@ def startCallHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capn
 def awaitCallHeld (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callHeldAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callHeldStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.callHeld_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6079,6 +6749,8 @@ def startGetHeldM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp
 def awaitGetHeld (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getHeldTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getHeldAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getHeldStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getHeldRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHeld_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6125,6 +6797,8 @@ def startEchoM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp.em
 def awaitEcho (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev echoTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev echoAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev echoStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def echoRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.echo_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6171,6 +6845,8 @@ def startExpectCancelM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := 
 def awaitExpectCancel (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev expectCancelTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev expectCancelAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev expectCancelStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def expectCancelRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.expectCancel_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6219,6 +6895,8 @@ def startMethodWithDefaultsM (target : TestMoreStuff) (payload : Capnp.Rpc.Paylo
 def awaitMethodWithDefaults (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev methodWithDefaultsTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev methodWithDefaultsAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev methodWithDefaultsStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def methodWithDefaultsRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithDefaults_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6265,6 +6943,8 @@ def startGetHandleM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Cap
 def awaitGetHandle (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getHandleTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getHandleAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getHandleStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getHandleRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getHandle_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6311,6 +6991,8 @@ def startGetNullM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Capnp
 def awaitGetNull (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getNullTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getNullAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getNullStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getNullRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getNull_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6357,6 +7039,8 @@ def startGetEnormousStringM (target : TestMoreStuff) (payload : Capnp.Rpc.Payloa
 def awaitGetEnormousString (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getEnormousStringTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getEnormousStringAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getEnormousStringStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getEnormousStringRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.getEnormousString_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6403,6 +7087,8 @@ def startMethodWithNullDefaultM (target : TestMoreStuff) (payload : Capnp.Rpc.Pa
 def awaitMethodWithNullDefault (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev methodWithNullDefaultTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev methodWithNullDefaultAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev methodWithNullDefaultStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def methodWithNullDefaultRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.methodWithNullDefault_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6449,6 +7135,8 @@ def startWriteToFdM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload := Cap
 def awaitWriteToFd (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev writeToFdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev writeToFdAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev writeToFdStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def writeToFdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.writeToFd_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6495,6 +7183,8 @@ def startThrowExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Payload :
 def awaitThrowException (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev throwExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev throwExceptionAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev throwExceptionStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def throwExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwException_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6541,6 +7231,8 @@ def startThrowRemoteExceptionM (target : TestMoreStuff) (payload : Capnp.Rpc.Pay
 def awaitThrowRemoteException (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev throwRemoteExceptionTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev throwRemoteExceptionAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev throwRemoteExceptionStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def throwRemoteExceptionRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwRemoteException_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6587,6 +7279,8 @@ def startThrowExceptionWithDetailM (target : TestMoreStuff) (payload : Capnp.Rpc
 def awaitThrowExceptionWithDetail (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev throwExceptionWithDetailTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev throwExceptionWithDetailAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev throwExceptionWithDetailStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def throwExceptionWithDetailRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMoreStuff.throwExceptionWithDetail_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6883,6 +7577,174 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMoreStuff := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  callFoo : callFooAdvancedTypedHandler
+  callFooWhenResolved : callFooWhenResolvedAdvancedTypedHandler
+  neverReturn : neverReturnAdvancedTypedHandler
+  hold : holdAdvancedTypedHandler
+  callHeld : callHeldAdvancedTypedHandler
+  getHeld : getHeldAdvancedTypedHandler
+  echo : echoAdvancedTypedHandler
+  expectCancel : expectCancelAdvancedTypedHandler
+  methodWithDefaults : methodWithDefaultsAdvancedTypedHandler
+  getHandle : getHandleAdvancedTypedHandler
+  getNull : getNullAdvancedTypedHandler
+  getEnormousString : getEnormousStringAdvancedTypedHandler
+  methodWithNullDefault : methodWithNullDefaultAdvancedTypedHandler
+  writeToFd : writeToFdAdvancedTypedHandler
+  throwException : throwExceptionAdvancedTypedHandler
+  throwRemoteException : throwRemoteExceptionAdvancedTypedHandler
+  throwExceptionWithDetail : throwExceptionWithDetailAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callFooMethod then do
+      let (request, requestCaps) ← callFooRequestOfPayload payload
+      server.callFoo target request requestCaps
+    else if method == callFooWhenResolvedMethod then do
+      let (request, requestCaps) ← callFooWhenResolvedRequestOfPayload payload
+      server.callFooWhenResolved target request requestCaps
+    else if method == neverReturnMethod then do
+      let (request, requestCaps) ← neverReturnRequestOfPayload payload
+      server.neverReturn target request requestCaps
+    else if method == holdMethod then do
+      let (request, requestCaps) ← holdRequestOfPayload payload
+      server.hold target request requestCaps
+    else if method == callHeldMethod then do
+      let (request, requestCaps) ← callHeldRequestOfPayload payload
+      server.callHeld target request requestCaps
+    else if method == getHeldMethod then do
+      let (request, requestCaps) ← getHeldRequestOfPayload payload
+      server.getHeld target request requestCaps
+    else if method == echoMethod then do
+      let (request, requestCaps) ← echoRequestOfPayload payload
+      server.echo target request requestCaps
+    else if method == expectCancelMethod then do
+      let (request, requestCaps) ← expectCancelRequestOfPayload payload
+      server.expectCancel target request requestCaps
+    else if method == methodWithDefaultsMethod then do
+      let (request, requestCaps) ← methodWithDefaultsRequestOfPayload payload
+      server.methodWithDefaults target request requestCaps
+    else if method == getHandleMethod then do
+      let (request, requestCaps) ← getHandleRequestOfPayload payload
+      server.getHandle target request requestCaps
+    else if method == getNullMethod then do
+      let (request, requestCaps) ← getNullRequestOfPayload payload
+      server.getNull target request requestCaps
+    else if method == getEnormousStringMethod then do
+      let (request, requestCaps) ← getEnormousStringRequestOfPayload payload
+      server.getEnormousString target request requestCaps
+    else if method == methodWithNullDefaultMethod then do
+      let (request, requestCaps) ← methodWithNullDefaultRequestOfPayload payload
+      server.methodWithNullDefault target request requestCaps
+    else if method == writeToFdMethod then do
+      let (request, requestCaps) ← writeToFdRequestOfPayload payload
+      server.writeToFd target request requestCaps
+    else if method == throwExceptionMethod then do
+      let (request, requestCaps) ← throwExceptionRequestOfPayload payload
+      server.throwException target request requestCaps
+    else if method == throwRemoteExceptionMethod then do
+      let (request, requestCaps) ← throwRemoteExceptionRequestOfPayload payload
+      server.throwRemoteException target request requestCaps
+    else if method == throwExceptionWithDetailMethod then do
+      let (request, requestCaps) ← throwExceptionWithDetailRequestOfPayload payload
+      server.throwExceptionWithDetail target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMoreStuff := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMoreStuff := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  callFoo : callFooStreamingTypedHandler
+  callFooWhenResolved : callFooWhenResolvedStreamingTypedHandler
+  neverReturn : neverReturnStreamingTypedHandler
+  hold : holdStreamingTypedHandler
+  callHeld : callHeldStreamingTypedHandler
+  getHeld : getHeldStreamingTypedHandler
+  echo : echoStreamingTypedHandler
+  expectCancel : expectCancelStreamingTypedHandler
+  methodWithDefaults : methodWithDefaultsStreamingTypedHandler
+  getHandle : getHandleStreamingTypedHandler
+  getNull : getNullStreamingTypedHandler
+  getEnormousString : getEnormousStringStreamingTypedHandler
+  methodWithNullDefault : methodWithNullDefaultStreamingTypedHandler
+  writeToFd : writeToFdStreamingTypedHandler
+  throwException : throwExceptionStreamingTypedHandler
+  throwRemoteException : throwRemoteExceptionStreamingTypedHandler
+  throwExceptionWithDetail : throwExceptionWithDetailStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == callFooMethod then do
+      let (request, requestCaps) ← callFooRequestOfPayload payload
+      server.callFoo target request requestCaps
+    else if method == callFooWhenResolvedMethod then do
+      let (request, requestCaps) ← callFooWhenResolvedRequestOfPayload payload
+      server.callFooWhenResolved target request requestCaps
+    else if method == neverReturnMethod then do
+      let (request, requestCaps) ← neverReturnRequestOfPayload payload
+      server.neverReturn target request requestCaps
+    else if method == holdMethod then do
+      let (request, requestCaps) ← holdRequestOfPayload payload
+      server.hold target request requestCaps
+    else if method == callHeldMethod then do
+      let (request, requestCaps) ← callHeldRequestOfPayload payload
+      server.callHeld target request requestCaps
+    else if method == getHeldMethod then do
+      let (request, requestCaps) ← getHeldRequestOfPayload payload
+      server.getHeld target request requestCaps
+    else if method == echoMethod then do
+      let (request, requestCaps) ← echoRequestOfPayload payload
+      server.echo target request requestCaps
+    else if method == expectCancelMethod then do
+      let (request, requestCaps) ← expectCancelRequestOfPayload payload
+      server.expectCancel target request requestCaps
+    else if method == methodWithDefaultsMethod then do
+      let (request, requestCaps) ← methodWithDefaultsRequestOfPayload payload
+      server.methodWithDefaults target request requestCaps
+    else if method == getHandleMethod then do
+      let (request, requestCaps) ← getHandleRequestOfPayload payload
+      server.getHandle target request requestCaps
+    else if method == getNullMethod then do
+      let (request, requestCaps) ← getNullRequestOfPayload payload
+      server.getNull target request requestCaps
+    else if method == getEnormousStringMethod then do
+      let (request, requestCaps) ← getEnormousStringRequestOfPayload payload
+      server.getEnormousString target request requestCaps
+    else if method == methodWithNullDefaultMethod then do
+      let (request, requestCaps) ← methodWithNullDefaultRequestOfPayload payload
+      server.methodWithNullDefault target request requestCaps
+    else if method == writeToFdMethod then do
+      let (request, requestCaps) ← writeToFdRequestOfPayload payload
+      server.writeToFd target request requestCaps
+    else if method == throwExceptionMethod then do
+      let (request, requestCaps) ← throwExceptionRequestOfPayload payload
+      server.throwException target request requestCaps
+    else if method == throwRemoteExceptionMethod then do
+      let (request, requestCaps) ← throwRemoteExceptionRequestOfPayload payload
+      server.throwRemoteException target request requestCaps
+    else if method == throwExceptionWithDetailMethod then do
+      let (request, requestCaps) ← throwExceptionWithDetailRequestOfPayload payload
+      server.throwExceptionWithDetail target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMoreStuff := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMoreStuff := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestMoreStuff
 abbrev TestMembrane := Capnp.Rpc.Client
 
@@ -6903,6 +7765,8 @@ def startMakeThingM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capn
 def awaitMakeThing (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev makeThingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev makeThingAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev makeThingStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def makeThingRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.makeThing_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6949,6 +7813,8 @@ def startCallPassThroughM (target : TestMembrane) (payload : Capnp.Rpc.Payload :
 def awaitCallPassThrough (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callPassThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callPassThroughAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callPassThroughStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callPassThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callPassThrough_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -6995,6 +7861,8 @@ def startCallInterceptM (target : TestMembrane) (payload : Capnp.Rpc.Payload := 
 def awaitCallIntercept (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev callInterceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev callInterceptAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev callInterceptStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def callInterceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.callIntercept_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7041,6 +7909,8 @@ def startLoopbackM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Capnp
 def awaitLoopback (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev loopbackTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev loopbackAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev loopbackStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def loopbackRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.loopback_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7087,6 +7957,8 @@ def startWaitForeverM (target : TestMembrane) (payload : Capnp.Rpc.Payload := Ca
 def awaitWaitForever (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev waitForeverTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev waitForeverAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev waitForeverStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def waitForeverRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.waitForever_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7229,6 +8101,78 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  makeThing : makeThingAdvancedTypedHandler
+  callPassThrough : callPassThroughAdvancedTypedHandler
+  callIntercept : callInterceptAdvancedTypedHandler
+  loopback : loopbackAdvancedTypedHandler
+  waitForever : waitForeverAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == makeThingMethod then do
+      let (request, requestCaps) ← makeThingRequestOfPayload payload
+      server.makeThing target request requestCaps
+    else if method == callPassThroughMethod then do
+      let (request, requestCaps) ← callPassThroughRequestOfPayload payload
+      server.callPassThrough target request requestCaps
+    else if method == callInterceptMethod then do
+      let (request, requestCaps) ← callInterceptRequestOfPayload payload
+      server.callIntercept target request requestCaps
+    else if method == loopbackMethod then do
+      let (request, requestCaps) ← loopbackRequestOfPayload payload
+      server.loopback target request requestCaps
+    else if method == waitForeverMethod then do
+      let (request, requestCaps) ← waitForeverRequestOfPayload payload
+      server.waitForever target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMembrane := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMembrane := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  makeThing : makeThingStreamingTypedHandler
+  callPassThrough : callPassThroughStreamingTypedHandler
+  callIntercept : callInterceptStreamingTypedHandler
+  loopback : loopbackStreamingTypedHandler
+  waitForever : waitForeverStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == makeThingMethod then do
+      let (request, requestCaps) ← makeThingRequestOfPayload payload
+      server.makeThing target request requestCaps
+    else if method == callPassThroughMethod then do
+      let (request, requestCaps) ← callPassThroughRequestOfPayload payload
+      server.callPassThrough target request requestCaps
+    else if method == callInterceptMethod then do
+      let (request, requestCaps) ← callInterceptRequestOfPayload payload
+      server.callIntercept target request requestCaps
+    else if method == loopbackMethod then do
+      let (request, requestCaps) ← loopbackRequestOfPayload payload
+      server.loopback target request requestCaps
+    else if method == waitForeverMethod then do
+      let (request, requestCaps) ← waitForeverRequestOfPayload payload
+      server.waitForever target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMembrane := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMembrane := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestMembrane
 abbrev TestMembrane.Thing := Capnp.Rpc.Client
 
@@ -7249,6 +8193,8 @@ def startPassThroughM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload
 def awaitPassThrough (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev passThroughTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev passThroughAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev passThroughStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def passThroughRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.passThrough_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7295,6 +8241,8 @@ def startInterceptM (target : TestMembrane.Thing) (payload : Capnp.Rpc.Payload :
 def awaitIntercept (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev interceptTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev interceptAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev interceptStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def interceptRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestMembrane.Thing.intercept_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7396,6 +8344,54 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  passThrough : passThroughAdvancedTypedHandler
+  intercept : interceptAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == passThroughMethod then do
+      let (request, requestCaps) ← passThroughRequestOfPayload payload
+      server.passThrough target request requestCaps
+    else if method == interceptMethod then do
+      let (request, requestCaps) ← interceptRequestOfPayload payload
+      server.intercept target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMembrane.Thing := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  passThrough : passThroughStreamingTypedHandler
+  intercept : interceptStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == passThroughMethod then do
+      let (request, requestCaps) ← passThroughRequestOfPayload payload
+      server.passThrough target request requestCaps
+    else if method == interceptMethod then do
+      let (request, requestCaps) ← interceptRequestOfPayload payload
+      server.intercept target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestMembrane.Thing := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestMembrane.Thing := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestMembrane.Thing
 abbrev TestKeywordMethods := Capnp.Rpc.Client
 
@@ -7416,6 +8412,8 @@ def startDeleteM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := C
 def awaitDelete (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev deleteTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev deleteAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev deleteStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def deleteRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.delete_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7462,6 +8460,8 @@ def start_classM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := C
 def await_class (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev _classTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev _classAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev _classStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def _classRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.class_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7508,6 +8508,8 @@ def startVoidM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := Cap
 def awaitVoid (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev voidTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev voidAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev voidStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def voidRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.void_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7554,6 +8556,8 @@ def start_returnM (target : TestKeywordMethods) (payload : Capnp.Rpc.Payload := 
 def await_return (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev _returnTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev _returnAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev _returnStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def _returnRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestKeywordMethods.return_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7681,6 +8685,70 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  delete : deleteAdvancedTypedHandler
+  _class : _classAdvancedTypedHandler
+  void : voidAdvancedTypedHandler
+  _return : _returnAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == deleteMethod then do
+      let (request, requestCaps) ← deleteRequestOfPayload payload
+      server.delete target request requestCaps
+    else if method == _classMethod then do
+      let (request, requestCaps) ← _classRequestOfPayload payload
+      server._class target request requestCaps
+    else if method == voidMethod then do
+      let (request, requestCaps) ← voidRequestOfPayload payload
+      server.void target request requestCaps
+    else if method == _returnMethod then do
+      let (request, requestCaps) ← _returnRequestOfPayload payload
+      server._return target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestKeywordMethods := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  delete : deleteStreamingTypedHandler
+  _class : _classStreamingTypedHandler
+  void : voidStreamingTypedHandler
+  _return : _returnStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == deleteMethod then do
+      let (request, requestCaps) ← deleteRequestOfPayload payload
+      server.delete target request requestCaps
+    else if method == _classMethod then do
+      let (request, requestCaps) ← _classRequestOfPayload payload
+      server._class target request requestCaps
+    else if method == voidMethod then do
+      let (request, requestCaps) ← voidRequestOfPayload payload
+      server.void target request requestCaps
+    else if method == _returnMethod then do
+      let (request, requestCaps) ← _returnRequestOfPayload payload
+      server._return target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestKeywordMethods := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestKeywordMethods := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestKeywordMethods
 abbrev TestAuthenticatedBootstrap := Capnp.Rpc.Client
 
@@ -7701,6 +8769,8 @@ def startGetCallerIdM (target : TestAuthenticatedBootstrap) (payload : Capnp.Rpc
 def awaitGetCallerId (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev getCallerIdTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev getCallerIdAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev getCallerIdStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def getCallerIdRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestAuthenticatedBootstrap.getCallerId_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7789,6 +8859,46 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  getCallerId : getCallerIdAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCallerIdMethod then do
+      let (request, requestCaps) ← getCallerIdRequestOfPayload payload
+      server.getCallerId target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestAuthenticatedBootstrap := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  getCallerId : getCallerIdStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == getCallerIdMethod then do
+      let (request, requestCaps) ← getCallerIdRequestOfPayload payload
+      server.getCallerId target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestAuthenticatedBootstrap := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestAuthenticatedBootstrap := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end TestAuthenticatedBootstrap
 inductive TestNameAnnotation.BadlyNamedEnum where
   | foo
@@ -7860,6 +8970,8 @@ def startBadlyNamedMethodM (target : TestNameAnnotationInterface) (payload : Cap
 def awaitBadlyNamedMethod (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
 abbrev badlyNamedMethodTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
+abbrev badlyNamedMethodAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
+abbrev badlyNamedMethodStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 def badlyNamedMethodRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.Reader × Capnp.CapTable) := do
   let reader ← match Capnp.Gen.c__.src.capnp.test.TestNameAnnotationInterface.badlyNamedMethod_Params.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
@@ -7949,6 +9061,46 @@ def registerTypedTarget (runtime : Capnp.Rpc.Runtime) (server : TypedServer)
 def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
+
+structure AdvancedTypedServer where
+  badlyNamedMethod : badlyNamedMethodAdvancedTypedHandler
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == badlyNamedMethodMethod then do
+      let (request, requestCaps) ← badlyNamedMethodRequestOfPayload payload
+      server.badlyNamedMethod target request requestCaps
+    else
+      onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestNameAnnotationInterface := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  badlyNamedMethod : badlyNamedMethodStreamingTypedHandler
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    if method == badlyNamedMethodMethod then do
+      let (request, requestCaps) ← badlyNamedMethodRequestOfPayload payload
+      server.badlyNamedMethod target request requestCaps
+    else
+      onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO TestNameAnnotationInterface := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM TestNameAnnotationInterface := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
 
 end TestNameAnnotationInterface
 inductive TestUnion.Union0Group.Which where

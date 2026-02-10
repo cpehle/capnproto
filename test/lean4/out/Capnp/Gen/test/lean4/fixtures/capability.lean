@@ -118,6 +118,40 @@ def registerTypedTargetM (server : TypedServer)
     (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.Payload := fun _ _ _ => pure Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Dummy := do
   Capnp.Rpc.RuntimeM.registerBackendTarget (typedBackend server (onMissing := onMissing))
 
+structure AdvancedTypedServer where
+  unit : Unit := ()
+
+def advancedTypedTargetHandler (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerAdvancedTypedTarget (runtime : Capnp.Rpc.Runtime) (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO Dummy := do
+  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (advancedTypedTargetHandler server (onMissing := onMissing))
+
+def registerAdvancedTypedTargetM (server : AdvancedTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM Dummy := do
+  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (advancedTypedTargetHandler server (onMissing := onMissing))
+
+structure StreamingTypedServer where
+  unit : Unit := ()
+
+def streamingTypedTargetHandler (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=
+  fun target method payload => do
+    let _ := server
+    onMissing target method payload
+
+def registerStreamingTypedTarget (runtime : Capnp.Rpc.Runtime) (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO Dummy := do
+  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (streamingTypedTargetHandler server (onMissing := onMissing))
+
+def registerStreamingTypedTargetM (server : StreamingTypedServer)
+    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM Dummy := do
+  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (streamingTypedTargetHandler server (onMissing := onMissing))
+
 end Dummy
 
 mutual

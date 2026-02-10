@@ -3641,6 +3641,8 @@ private:
       std::string fieldName;
       std::string handlerName;
       std::string typedHandlerName;
+      std::string advancedTypedHandlerName;
+      std::string streamingTypedHandlerName;
       std::string methodIdName;
       std::string methodName;
       std::string callName;
@@ -3674,6 +3676,8 @@ private:
       auto fieldName = uniqueName(methodBase, usedNames);
       auto handlerName = uniqueName(methodBase + "Handler", usedNames);
       auto typedHandlerName = uniqueName(methodBase + "TypedHandler", usedNames);
+      auto advancedTypedHandlerName = uniqueName(methodBase + "AdvancedTypedHandler", usedNames);
+      auto streamingTypedHandlerName = uniqueName(methodBase + "StreamingTypedHandler", usedNames);
       auto methodIdName = uniqueName(methodBase + "MethodId", usedNames);
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
@@ -3693,13 +3697,13 @@ private:
       auto decodeResponseName = uniqueName(methodBase + "ResponseOfPayload", usedNames);
       auto paramTypeName = absoluteTypeName(method.getParamType().getProto().getId());
       auto resultTypeName = absoluteTypeName(method.getResultType().getProto().getId());
-      rpcMethods.push_back({
-        fieldName, handlerName, typedHandlerName, methodIdName, methodName, callName, callMName,
-        startCallName, startCallMName, awaitCallName, awaitTypedCallName, pipelinedCapName,
-        pipelinedCallMName, pipelinedTypedCallMName, typedCallName, typedCallMName,
-        encodeRequestName, decodeRequestName, encodeResponseName, decodeResponseName,
-        paramTypeName, resultTypeName
-      });
+      rpcMethods.push_back({fieldName, handlerName, typedHandlerName, advancedTypedHandlerName,
+                            streamingTypedHandlerName, methodIdName, methodName, callName,
+                            callMName, startCallName, startCallMName, awaitCallName,
+                            awaitTypedCallName, pipelinedCapName, pipelinedCallMName,
+                            pipelinedTypedCallMName, typedCallName, typedCallMName,
+                            encodeRequestName, decodeRequestName, encodeResponseName,
+                            decodeResponseName, paramTypeName, resultTypeName});
 
       out += "\n";
       out += "def ";
@@ -3763,6 +3767,18 @@ private:
       out += " := Capnp.Rpc.Client -> ";
       out += paramReaderTypeName;
       out += " -> Capnp.CapTable -> IO Capnp.Rpc.Payload\n";
+
+      out += "abbrev ";
+      out += advancedTypedHandlerName;
+      out += " := Capnp.Rpc.Client -> ";
+      out += paramReaderTypeName;
+      out += " -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply\n";
+
+      out += "abbrev ";
+      out += streamingTypedHandlerName;
+      out += " := Capnp.Rpc.Client -> ";
+      out += paramReaderTypeName;
+      out += " -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply\n";
 
       out += "def ";
       out += decodeRequestName;
@@ -3885,6 +3901,14 @@ private:
     auto typedBackendName = uniqueName("typedBackend", usedNames);
     auto registerTypedTargetName = uniqueName("registerTypedTarget", usedNames);
     auto registerTypedTargetMName = uniqueName("registerTypedTargetM", usedNames);
+    auto advancedTypedServerTypeName = uniqueName("AdvancedTypedServer", usedNames);
+    auto advancedTypedTargetHandlerName = uniqueName("advancedTypedTargetHandler", usedNames);
+    auto registerAdvancedTypedTargetName = uniqueName("registerAdvancedTypedTarget", usedNames);
+    auto registerAdvancedTypedTargetMName = uniqueName("registerAdvancedTypedTargetM", usedNames);
+    auto streamingTypedServerTypeName = uniqueName("StreamingTypedServer", usedNames);
+    auto streamingTypedTargetHandlerName = uniqueName("streamingTypedTargetHandler", usedNames);
+    auto registerStreamingTypedTargetName = uniqueName("registerStreamingTypedTarget", usedNames);
+    auto registerStreamingTypedTargetMName = uniqueName("registerStreamingTypedTargetM", usedNames);
 
     out += "\n";
     out += "abbrev ";
@@ -4079,6 +4103,148 @@ private:
     out += " := do\n";
     out += "  Capnp.Rpc.RuntimeM.registerBackendTarget (";
     out += typedBackendName;
+    out += " server (onMissing := onMissing))\n";
+
+    out += "\n";
+    out += "structure ";
+    out += advancedTypedServerTypeName;
+    out += " where\n";
+    if (rpcMethods.empty()) {
+      out += "  unit : Unit := ()\n";
+    } else {
+      for (auto& methodOut: rpcMethods) {
+        out += "  ";
+        out += methodOut.fieldName;
+        out += " : ";
+        out += methodOut.advancedTypedHandlerName;
+        out += "\n";
+      }
+    }
+
+    out += "\n";
+    out += "def ";
+    out += advancedTypedTargetHandlerName;
+    out += " (server : ";
+    out += advancedTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=\n";
+    out += "  fun target method payload => do\n";
+    if (rpcMethods.empty()) {
+      out += "    let _ := server\n";
+      out += "    onMissing target method payload\n";
+    } else {
+      bool first = true;
+      for (auto& methodOut: rpcMethods) {
+        out += first ? "    if method == " : "    else if method == ";
+        out += methodOut.methodName;
+        out += " then do\n";
+        out += "      let (request, requestCaps) ← ";
+        out += methodOut.decodeRequestName;
+        out += " payload\n";
+        out += "      server.";
+        out += methodOut.fieldName;
+        out += " target request requestCaps\n";
+        first = false;
+      }
+      out += "    else\n";
+      out += "      onMissing target method payload\n";
+    }
+
+    out += "\n";
+    out += "def ";
+    out += registerAdvancedTypedTargetName;
+    out += " (runtime : Capnp.Rpc.Runtime) (server : ";
+    out += advancedTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.Runtime.registerAdvancedHandlerTargetAsync runtime (";
+    out += advancedTypedTargetHandlerName;
+    out += " server (onMissing := onMissing))\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerAdvancedTypedTargetMName;
+    out += " (server : ";
+    out += advancedTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.RuntimeM.registerAdvancedHandlerTargetAsync (";
+    out += advancedTypedTargetHandlerName;
+    out += " server (onMissing := onMissing))\n";
+
+    out += "\n";
+    out += "structure ";
+    out += streamingTypedServerTypeName;
+    out += " where\n";
+    if (rpcMethods.empty()) {
+      out += "  unit : Unit := ()\n";
+    } else {
+      for (auto& methodOut: rpcMethods) {
+        out += "  ";
+        out += methodOut.fieldName;
+        out += " : ";
+        out += methodOut.streamingTypedHandlerName;
+        out += "\n";
+      }
+    }
+
+    out += "\n";
+    out += "def ";
+    out += streamingTypedTargetHandlerName;
+    out += " (server : ";
+    out += streamingTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply :=\n";
+    out += "  fun target method payload => do\n";
+    if (rpcMethods.empty()) {
+      out += "    let _ := server\n";
+      out += "    onMissing target method payload\n";
+    } else {
+      bool first = true;
+      for (auto& methodOut: rpcMethods) {
+        out += first ? "    if method == " : "    else if method == ";
+        out += methodOut.methodName;
+        out += " then do\n";
+        out += "      let (request, requestCaps) ← ";
+        out += methodOut.decodeRequestName;
+        out += " payload\n";
+        out += "      server.";
+        out += methodOut.fieldName;
+        out += " target request requestCaps\n";
+        first = false;
+      }
+      out += "    else\n";
+      out += "      onMissing target method payload\n";
+    }
+
+    out += "\n";
+    out += "def ";
+    out += registerStreamingTypedTargetName;
+    out += " (runtime : Capnp.Rpc.Runtime) (server : ";
+    out += streamingTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.Runtime.registerStreamingHandlerTargetAsync runtime (";
+    out += streamingTypedTargetHandlerName;
+    out += " server (onMissing := onMissing))\n";
+
+    out += "\n";
+    out += "def ";
+    out += registerStreamingTypedTargetMName;
+    out += " (server : ";
+    out += streamingTypedServerTypeName;
+    out += ")\n";
+    out += "    (onMissing : Capnp.Rpc.Client -> Capnp.Rpc.Method -> Capnp.Rpc.Payload -> IO Capnp.Rpc.AdvancedHandlerReply := fun _ _ _ => pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))) : Capnp.Rpc.RuntimeM ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.RuntimeM.registerStreamingHandlerTargetAsync (";
+    out += streamingTypedTargetHandlerName;
     out += " server (onMissing := onMissing))\n";
 
     out += "\nend ";
