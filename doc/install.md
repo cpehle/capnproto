@@ -64,7 +64,8 @@ cd capnproto-c++-0.0.0
 make -j6 check
 sudo make install</code></pre>
 
-This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp`,
+This will install `capnp`, the Cap'n Proto command-line tool, and plugins including
+`capnpc-c++`, `capnpc-capnp`, and `capnpc-lean4`. It will also install `libcapnp`,
 `libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
 `/usr/local/include/kj`.
 
@@ -100,8 +101,8 @@ If you download directly from Git, you will need to have the GNU autotools --
 
    <pre><a href="https://capnproto.org/capnproto-c++-win32-0.0.0.zip">https://capnproto.org/capnproto-c++-win32-0.0.0.zip</a></pre>
 
-2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.0.0` in
-   the zip and copy them somewhere.
+2. Find `capnp.exe`, `capnpc-c++.exe`, `capnpc-capnp.exe`, and `capnpc-lean4.exe` under
+   `capnproto-tools-win32-0.0.0` in the zip and copy them somewhere.
 
 3. If your `.capnp` files will import any of the `.capnp` files provided by the core project, or
    if you use the `stream` keyword (which implicitly imports `capnp/stream.capnp`), then you need
@@ -146,4 +147,3 @@ Cap'n Proto can also be built with MinGW or Cygwin, using the Unix/autotools bui
 
 The C++ sources are located under `c++` directory in the git repository. The build instructions are
 otherwise the same as for the release zip.
-

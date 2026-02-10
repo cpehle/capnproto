@@ -62,3 +62,10 @@ Observed output includes:
 3. Determine whether the panic should fail the build (or be converted to warning) for consistency.
 4. Profile symbol-frequency and sine-qua-non export on large generated modules.
 
+## Current Workaround in `test/lean4`
+
+- `lake test` now uses a fast test driver (`TestDriverRpc`) that excludes conformance tests and
+  avoids the large generated module in normal RPC/backend iteration.
+- The full driver remains available as `lake build test_full` (or running the `test_full` binary),
+  and still reproduces this tooling issue when it must compile
+  `Capnp.Gen.c__.src.capnp.test`.
