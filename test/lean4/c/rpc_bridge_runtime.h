@@ -181,6 +181,7 @@ std::shared_ptr<RegisterTargetCompletion> enqueueConnectTargetFd(RuntimeLoop& ru
 
 std::shared_ptr<RegisterPairCompletion> enqueueNewTransportPipe(RuntimeLoop& runtime);
 std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFd(RuntimeLoop& runtime, uint32_t fd);
+std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFdTake(RuntimeLoop& runtime, uint32_t fd);
 std::shared_ptr<UnitCompletion> enqueueReleaseTransport(RuntimeLoop& runtime, uint32_t transportId);
 std::shared_ptr<Int64Completion> enqueueTransportGetFd(RuntimeLoop& runtime, uint32_t transportId);
 std::shared_ptr<RegisterTargetCompletion> enqueueConnectTargetTransport(RuntimeLoop& runtime,

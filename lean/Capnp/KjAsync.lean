@@ -305,8 +305,14 @@ opaque ffiRuntimeConnectionAbortReadImpl (runtime : UInt64) (connection : UInt32
 opaque ffiRuntimeConnectionAbortWriteImpl
     (runtime : UInt64) (connection : UInt32) (reason : @& String) : IO Unit
 
+@[extern "capnp_lean_kj_async_runtime_connection_dup_fd"]
+opaque ffiRuntimeConnectionDupFdImpl (runtime : UInt64) (connection : UInt32) : IO (Bool × UInt32)
+
 @[extern "capnp_lean_kj_async_runtime_new_two_way_pipe"]
 opaque ffiRuntimeNewTwoWayPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_new_capability_pipe"]
+opaque ffiRuntimeNewCapabilityPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 
 @[extern "capnp_lean_kj_async_runtime_datagram_bind"]
 opaque ffiRuntimeDatagramBindImpl
@@ -1128,8 +1134,24 @@ namespace Runtime
     (reason : String := "Capnp.KjAsync connection abortWrite") : IO Unit :=
   ffiRuntimeConnectionAbortWriteImpl runtime.handle connection.handle reason
 
+@[inline] def connectionDupFd? (runtime : Runtime) (connection : Connection) :
+    IO (Option UInt32) := do
+  ensureSameRuntime runtime connection.runtime "Connection"
+  let (hasFd, fd) ← ffiRuntimeConnectionDupFdImpl runtime.handle connection.handle
+  if hasFd then
+    return some fd
+  else
+    return none
+
 @[inline] def newTwoWayPipe (runtime : Runtime) : IO (Connection × Connection) := do
   let (first, second) ← ffiRuntimeNewTwoWayPipeImpl runtime.handle
+  return (
+    { runtime := runtime, handle := first },
+    { runtime := runtime, handle := second }
+  )
+
+@[inline] def newCapabilityPipe (runtime : Runtime) : IO (Connection × Connection) := do
+  let (first, second) ← ffiRuntimeNewCapabilityPipeImpl runtime.handle
   return (
     { runtime := runtime, handle := first },
     { runtime := runtime, handle := second }
@@ -2054,6 +2076,13 @@ namespace Connection
     (reason : String := "Capnp.KjAsync connection abortWrite") : IO Unit :=
   ffiRuntimeConnectionAbortWriteImpl connection.runtime.handle connection.handle reason
 
+@[inline] def dupFd? (connection : Connection) : IO (Option UInt32) := do
+  let (hasFd, fd) ← ffiRuntimeConnectionDupFdImpl connection.runtime.handle connection.handle
+  if hasFd then
+    return some fd
+  else
+    return none
+
 end Connection
 
 namespace ConnectionPromiseRef
@@ -2645,8 +2674,14 @@ namespace RuntimeM
     (reason : String := "Capnp.KjAsync connection abortWrite") : RuntimeM Unit := do
   connection.abortWrite reason
 
+@[inline] def connectionDupFd? (connection : Connection) : RuntimeM (Option UInt32) := do
+  connection.dupFd?
+
 @[inline] def newTwoWayPipe : RuntimeM (Connection × Connection) := do
   Runtime.newTwoWayPipe (← runtime)
+
+@[inline] def newCapabilityPipe : RuntimeM (Connection × Connection) := do
+  Runtime.newCapabilityPipe (← runtime)
 
 @[inline] def datagramBind (address : String) (portHint : UInt32 := 0) : RuntimeM DatagramPort := do
   Runtime.datagramBind (← runtime) address portHint

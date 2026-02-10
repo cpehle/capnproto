@@ -24,6 +24,10 @@
 #include <variant>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
 namespace {
 
 lean_obj_res mkIoUserError(const std::string& message) {
@@ -294,6 +298,16 @@ struct UInt32Completion {
   std::string error;
 };
 
+struct OptionalUInt32Completion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  bool hasValue = false;
+  uint32_t value = 0;
+  std::string error;
+};
+
 struct OptionalStringCompletion {
   std::mutex mutex;
   std::condition_variable cv;
@@ -487,6 +501,34 @@ void completeUInt32Success(const std::shared_ptr<UInt32Completion>& completion, 
 
 void completeUInt32Failure(const std::shared_ptr<UInt32Completion>& completion,
                            std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalUInt32Success(const std::shared_ptr<OptionalUInt32Completion>& completion,
+                                   kj::Maybe<uint32_t> value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    KJ_IF_SOME(v, value) {
+      completion->hasValue = true;
+      completion->value = v;
+    } else {
+      completion->hasValue = false;
+      completion->value = 0;
+    }
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalUInt32Failure(const std::shared_ptr<OptionalUInt32Completion>& completion,
+                                   std::string message) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;
@@ -1174,6 +1216,20 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<OptionalUInt32Completion> enqueueConnectionDupFd(uint32_t connectionId) {
+    auto completion = std::make_shared<OptionalUInt32Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeOptionalUInt32Failure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectionDupFd{connectionId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<HandlePairCompletion> enqueueNewTwoWayPipe() {
     auto completion = std::make_shared<HandlePairCompletion>();
     {
@@ -1183,6 +1239,20 @@ class KjAsyncRuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedNewTwoWayPipe{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandlePairCompletion> enqueueNewCapabilityPipe() {
+    auto completion = std::make_shared<HandlePairCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandlePairFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewCapabilityPipe{completion});
     }
     queueCv_.notify_one();
     return completion;
@@ -2682,7 +2752,16 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedConnectionDupFd {
+    uint32_t connectionId;
+    std::shared_ptr<OptionalUInt32Completion> completion;
+  };
+
   struct QueuedNewTwoWayPipe {
+    std::shared_ptr<HandlePairCompletion> completion;
+  };
+
+  struct QueuedNewCapabilityPipe {
     std::shared_ptr<HandlePairCompletion> completion;
   };
 
@@ -3108,7 +3187,8 @@ class KjAsyncRuntimeLoop {
                    QueuedTaskSetRelease, QueuedTaskSetAddPromise, QueuedTaskSetClear,
                    QueuedTaskSetIsEmpty, QueuedTaskSetOnEmptyStart, QueuedTaskSetErrorCount,
                    QueuedTaskSetTakeLastError, QueuedConnectionWhenWriteDisconnectedStart,
-                   QueuedConnectionAbortRead, QueuedConnectionAbortWrite, QueuedNewTwoWayPipe,
+                   QueuedConnectionAbortRead, QueuedConnectionAbortWrite, QueuedConnectionDupFd,
+                   QueuedNewTwoWayPipe, QueuedNewCapabilityPipe,
                    QueuedDatagramBind, QueuedDatagramReleasePort, QueuedDatagramGetPort,
                    QueuedDatagramSend, QueuedDatagramSendStart, QueuedUInt32PromiseAwait,
                    QueuedUInt32PromiseCancel, QueuedUInt32PromiseRelease, QueuedDatagramReceive,
@@ -3896,8 +3976,41 @@ class KjAsyncRuntimeLoop {
         kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str(reason.c_str())));
   }
 
+  kj::Maybe<uint32_t> connectionDupFd(uint32_t connectionId) {
+#if defined(_WIN32)
+    (void)connectionId;
+    return kj::none;
+#else
+    auto it = connections_.find(connectionId);
+    if (it == connections_.end()) {
+      throw std::runtime_error("unknown KJ connection id: " + std::to_string(connectionId));
+    }
+
+    KJ_IF_SOME(stream, kj::dynamicDowncastIfAvailable<kj::AsyncCapabilityStream>(*it->second)) {
+      auto fdMaybe = stream.getFd();
+      if (fdMaybe == kj::none) {
+        return kj::none;
+      }
+      int fdCopy = dup(KJ_ASSERT_NONNULL(fdMaybe));
+      if (fdCopy < 0) {
+        throw std::runtime_error("dup() failed while duplicating KJ connection fd");
+      }
+      return static_cast<uint32_t>(fdCopy);
+    }
+
+    return kj::none;
+#endif
+  }
+
   std::pair<uint32_t, uint32_t> newTwoWayPipe(kj::AsyncIoProvider& ioProvider) {
     auto pipe = ioProvider.newTwoWayPipe();
+    auto first = addConnection(kj::mv(pipe.ends[0]));
+    auto second = addConnection(kj::mv(pipe.ends[1]));
+    return {first, second};
+  }
+
+  std::pair<uint32_t, uint32_t> newCapabilityPipe(kj::AsyncIoProvider& ioProvider) {
+    auto pipe = ioProvider.newCapabilityPipe();
     auto first = addConnection(kj::mv(pipe.ends[0]));
     auto second = addConnection(kj::mv(pipe.ends[1]));
     return {first, second};
@@ -5028,8 +5141,12 @@ class KjAsyncRuntimeLoop {
         completeUnitFailure(std::get<QueuedConnectionAbortRead>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectionAbortWrite>(op)) {
         completeUnitFailure(std::get<QueuedConnectionAbortWrite>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectionDupFd>(op)) {
+        completeOptionalUInt32Failure(std::get<QueuedConnectionDupFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
         completeHandlePairFailure(std::get<QueuedNewTwoWayPipe>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewCapabilityPipe>(op)) {
+        completeHandlePairFailure(std::get<QueuedNewCapabilityPipe>(op).completion, message);
       } else if (std::holds_alternative<QueuedDatagramBind>(op)) {
         completeHandleFailure(std::get<QueuedDatagramBind>(op).completion, message);
       } else if (std::holds_alternative<QueuedDatagramReleasePort>(op)) {
@@ -5683,6 +5800,20 @@ class KjAsyncRuntimeLoop {
             completeUnitFailure(abort.completion,
                                 "unknown exception in Capnp.KjAsync connection abortWrite");
           }
+        } else if (std::holds_alternative<QueuedConnectionDupFd>(op)) {
+          auto dup = std::get<QueuedConnectionDupFd>(std::move(op));
+          try {
+            auto fd = connectionDupFd(dup.connectionId);
+            completeOptionalUInt32Success(dup.completion, fd);
+          } catch (const kj::Exception& e) {
+            completeOptionalUInt32Failure(dup.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeOptionalUInt32Failure(dup.completion, e.what());
+          } catch (...) {
+            completeOptionalUInt32Failure(
+                dup.completion,
+                "unknown exception in Capnp.KjAsync connection dupFd");
+          }
         } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
           auto create = std::get<QueuedNewTwoWayPipe>(std::move(op));
           try {
@@ -5695,6 +5826,19 @@ class KjAsyncRuntimeLoop {
           } catch (...) {
             completeHandlePairFailure(create.completion,
                                       "unknown exception in Capnp.KjAsync newTwoWayPipe");
+          }
+        } else if (std::holds_alternative<QueuedNewCapabilityPipe>(op)) {
+          auto create = std::get<QueuedNewCapabilityPipe>(std::move(op));
+          try {
+            auto pair = newCapabilityPipe(*io.provider);
+            completeHandlePairSuccess(create.completion, pair.first, pair.second);
+          } catch (const kj::Exception& e) {
+            completeHandlePairFailure(create.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandlePairFailure(create.completion, e.what());
+          } catch (...) {
+            completeHandlePairFailure(create.completion,
+                                      "unknown exception in Capnp.KjAsync newCapabilityPipe");
           }
         } else if (std::holds_alternative<QueuedDatagramBind>(op)) {
           auto bind = std::get<QueuedDatagramBind>(std::move(op));
@@ -8024,6 +8168,35 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_abort
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_dup_fd(
+    uint64_t runtimeId, uint32_t connectionId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueConnectionDupFd(connectionId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->value));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_dup_fd");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_new_two_way_pipe(
     uint64_t runtimeId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
@@ -8050,6 +8223,35 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_new_two_way_pipe
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_new_two_way_pipe");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_new_capability_pipe(
+    uint64_t runtimeId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNewCapabilityPipe();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_new_capability_pipe");
   }
 }
 

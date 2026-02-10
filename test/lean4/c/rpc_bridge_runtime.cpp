@@ -1720,6 +1720,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFdTake(uint32_t fd) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewTransportFromFdTake{fd, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueReleaseTransport(uint32_t transportId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -2770,6 +2784,11 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedNewTransportFromFdTake {
+    uint32_t fd;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedReleaseTransport {
     uint32_t transportId;
     std::shared_ptr<UnitCompletion> completion;
@@ -3068,7 +3087,7 @@ class RuntimeLoop {
                    QueuedNewPromiseCapability, QueuedPromiseCapabilityFulfill,
                    QueuedPromiseCapabilityReject, QueuedPromiseCapabilityRelease,
                    QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
-                   QueuedNewTransportPipe, QueuedNewTransportFromFd,
+                   QueuedNewTransportPipe, QueuedNewTransportFromFd, QueuedNewTransportFromFdTake,
                    QueuedReleaseTransport, QueuedTransportGetFd,
                    QueuedConnectTargetTransport,
                    QueuedListenLoopback,
@@ -4938,6 +4957,22 @@ class RuntimeLoop {
 #endif
   }
 
+  uint32_t newTransportFromFdTake(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("newTransportFromFdTake is not supported on Windows");
+#else
+    constexpr uint32_t maxInt = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxInt) {
+      throw std::runtime_error("fd exceeds platform int range");
+    }
+    auto stream = lowLevelProvider.wrapUnixSocketFd(
+        kj::LowLevelAsyncIoProvider::OwnFd{static_cast<int>(fd)});
+    return addTransport(kj::mv(stream));
+#endif
+  }
+
   void releaseTransport(uint32_t transportId) {
     auto erased = transports_.erase(transportId);
     if (erased == 0) {
@@ -5989,6 +6024,20 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_new_transport_from_fd");
           }
+        } else if (std::holds_alternative<QueuedNewTransportFromFdTake>(op)) {
+          auto request = std::get<QueuedNewTransportFromFdTake>(std::move(op));
+          try {
+            auto transportId = newTransportFromFdTake(*io.lowLevelProvider, request.fd);
+            completeRegisterSuccess(request.completion, transportId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_new_transport_from_fd_take");
+          }
         } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
           auto release = std::get<QueuedReleaseTransport>(std::move(op));
           try {
@@ -6864,6 +6913,8 @@ class RuntimeLoop {
         completeRegisterPairFailure(std::get<QueuedNewTransportPipe>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewTransportFromFd>(op)) {
         completeRegisterFailure(std::get<QueuedNewTransportFromFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewTransportFromFdTake>(op)) {
+        completeRegisterFailure(std::get<QueuedNewTransportFromFdTake>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
         completeUnitFailure(std::get<QueuedReleaseTransport>(op).completion, message);
       } else if (std::holds_alternative<QueuedTransportGetFd>(op)) {
@@ -7242,6 +7293,11 @@ std::shared_ptr<RegisterPairCompletion> enqueueNewTransportPipe(RuntimeLoop& run
 std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFd(RuntimeLoop& runtime,
                                                                     uint32_t fd) {
   return runtime.enqueueNewTransportFromFd(fd);
+}
+
+std::shared_ptr<RegisterTargetCompletion> enqueueNewTransportFromFdTake(RuntimeLoop& runtime,
+                                                                        uint32_t fd) {
+  return runtime.enqueueNewTransportFromFdTake(fd);
 }
 
 std::shared_ptr<UnitCompletion> enqueueReleaseTransport(RuntimeLoop& runtime,

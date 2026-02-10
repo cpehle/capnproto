@@ -494,6 +494,9 @@ opaque ffiRuntimeNewTransportPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 @[extern "capnp_lean_rpc_runtime_new_transport_from_fd"]
 opaque ffiRuntimeNewTransportFromFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_new_transport_from_fd_take"]
+opaque ffiRuntimeNewTransportFromFdTakeImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_release_transport"]
 opaque ffiRuntimeReleaseTransportImpl (runtime : UInt64) (transport : UInt32) : IO Unit
 
@@ -987,6 +990,12 @@ namespace Runtime
 
 @[inline] def newTransportFromFd (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
   return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
+
+/-- Create a transport from `fd` and take ownership of it on the runtime side.
+
+This differs from `newTransportFromFd`, which duplicates the fd. -/
+@[inline] def newTransportFromFdTake (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
+  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeNewTransportFromFdTakeImpl runtime.handle fd) }
 
 @[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit := do
   ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
@@ -1690,6 +1699,9 @@ namespace RuntimeM
 
 @[inline] def newTransportFromFd (fd : UInt32) : RuntimeM RuntimeTransport := do
   Runtime.newTransportFromFd (← runtime) fd
+
+@[inline] def newTransportFromFdTake (fd : UInt32) : RuntimeM RuntimeTransport := do
+  Runtime.newTransportFromFdTake (← runtime) fd
 
 @[inline] def releaseTransport (transport : RuntimeTransport) : RuntimeM Unit := do
   Runtime.releaseTransport (← runtime) transport

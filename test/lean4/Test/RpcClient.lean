@@ -1,5 +1,6 @@
 import LeanTest
 import Capnp.Rpc
+import Capnp.KjAsync
 import Capnp.Gen.test.lean4.fixtures.rpc_echo
 
 open LeanTest
@@ -2622,6 +2623,44 @@ def testRuntimeTransportInjectionFromFd : IO Unit := do
         ffiCloseFdImpl serverFd
       catch _ =>
         pure ()
+
+@[test]
+def testRuntimeTransportInjectionFromKjAsyncCapabilityPipe : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let payload : Capnp.Rpc.Payload := mkNullPayload
+    let kjRuntime ← Capnp.KjAsync.Runtime.init
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      let (clientConn, serverConn) ← kjRuntime.newCapabilityPipe
+      let clientFd? ← clientConn.dupFd?
+      let serverFd? ← serverConn.dupFd?
+      clientConn.release
+      serverConn.release
+
+      match (clientFd?, serverFd?) with
+      | (some clientFd, some serverFd) =>
+          let bootstrap ← runtime.registerEchoTarget
+          let server ← runtime.newServer bootstrap
+          let clientTransport ← runtime.newTransportFromFdTake clientFd
+          let serverTransport ← runtime.newTransportFromFdTake serverFd
+          server.acceptTransport serverTransport
+          let target ← runtime.connectTransport clientTransport
+
+          let response ← Capnp.Rpc.RuntimeM.run runtime do
+            Echo.callFooM target payload
+          assertEqual response.capTable.caps.size 0
+
+          runtime.releaseTarget target
+          server.release
+          runtime.releaseTarget bootstrap
+      | _ =>
+          throw (IO.userError
+            "expected Capnp.KjAsync capability pipe connections to expose an fd")
+    finally
+      runtime.shutdown
+      kjRuntime.shutdown
 
 @[test]
 def testRuntimeInitWithFdLimit : IO Unit := do

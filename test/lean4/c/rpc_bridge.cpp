@@ -1137,6 +1137,32 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_transport_from_fd
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_transport_from_fd_take(
+    uint64_t runtimeId, uint32_t fd) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = rpc::enqueueNewTransportFromFdTake(*runtime, fd);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_new_transport_from_fd_take");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_transport(
     uint64_t runtimeId, uint32_t transportId) {
   auto runtime = getRuntime(runtimeId);
