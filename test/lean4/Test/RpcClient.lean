@@ -316,8 +316,7 @@ def testGeneratedRegisterStreamingTypedTargetNetwork : IO Unit := do
     runtime.streamingCall remoteTarget Echo.fooMethod payload
     let mut seen := (← seenFoo.get)
     let mut attempts := 0
-    while !seen && attempts < 20 do
-      runtime.pump
+    while !seen && attempts < 200 do
       IO.sleep (UInt32.ofNat 5)
       seen := (← seenFoo.get)
       attempts := attempts + 1
@@ -1533,17 +1532,15 @@ def testInteropLeanClientReceivesCppExceptionDetail : IO Unit := do
     IO.sleep (UInt32.ofNat 20)
 
     let target ← connectRuntimeTargetWithRetry runtime address
-    let errMsg ←
-      try
-        let _ ← Capnp.Rpc.RuntimeM.run runtime do
-          Echo.callFooM target payload
-        pure ""
-      catch err =>
-        pure (toString err)
-    if !(errMsg.containsSubstr "remote exception: test exception") then
-      throw (IO.userError s!"missing remote exception text: {errMsg}")
-    if !(errMsg.containsSubstr "remote detail[1]: cpp-detail-1") then
-      throw (IO.userError s!"missing remote detail text: {errMsg}")
+    let res ← runtime.callResult target Echo.fooMethod payload
+    match res with
+    | .ok _ =>
+        throw (IO.userError "expected C++ one-shot server to throw")
+    | .error ex =>
+        assertEqual ex.type .failed
+        if !(ex.description.containsSubstr "remote exception: test exception") then
+          throw (IO.userError s!"missing remote exception text: {ex.description}")
+        assertEqual ex.detail "cpp-detail-1".toUTF8
 
     runtime.releaseTarget target
     match serveTask.get with

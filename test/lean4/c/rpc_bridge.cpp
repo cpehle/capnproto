@@ -581,8 +581,46 @@ struct RawCallCompletion {
   bool done = false;
   bool ok = false;
   std::string error;
+  uint8_t exceptionTypeTag = 0;  // kj::Exception::Type as uint8_t
+  std::string exceptionDescription;
+  std::string remoteTrace;
+  std::vector<uint8_t> detailBytes;
   RawCallResult result;
 };
+
+lean_object* mkRemoteExceptionObj(const RawCallCompletion& completion) {
+  // Mirror `Capnp.Rpc.RemoteException` (see `lean/Capnp/Rpc.lean`).
+  constexpr unsigned kObjFields = 3;  // description, remoteTrace, detail
+  constexpr unsigned kScalarBytes = 8;  // enough for a UInt8 with conservative padding
+  constexpr unsigned kTypeOffset = sizeof(void*) * kObjFields;
+
+  auto ex = lean_alloc_ctor(0, kObjFields, kScalarBytes);
+  lean_ctor_set(ex, 0, lean_mk_string(completion.exceptionDescription.c_str()));
+  lean_ctor_set(ex, 1, lean_mk_string(completion.remoteTrace.c_str()));
+  const auto detailSize = completion.detailBytes.size();
+  const auto* detailData = detailSize == 0 ? nullptr : completion.detailBytes.data();
+  lean_ctor_set(ex, 2, mkByteArrayCopy(detailData, detailSize));
+  lean_ctor_set_uint8(ex, kTypeOffset, completion.exceptionTypeTag);
+  return ex;
+}
+
+lean_object* mkRawCallOutcomeOkObj(const RawCallResult& result) {
+  // Mirror `Capnp.Rpc.RawCallOutcome.ok`.
+  auto responseObj = mkByteArrayCopy(result.response.data(), result.response.size());
+  auto responseCapsObj = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
+  auto out = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(out, 0, responseObj);
+  lean_ctor_set(out, 1, responseCapsObj);
+  return out;
+}
+
+lean_object* mkRawCallOutcomeErrorObj(const RawCallCompletion& completion) {
+  // Mirror `Capnp.Rpc.RawCallOutcome.error`.
+  auto ex = mkRemoteExceptionObj(completion);
+  auto out = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(out, 0, ex);
+  return out;
+}
 
 struct RegisterTargetCompletion {
   std::mutex mutex;
@@ -644,6 +682,33 @@ void completeFailure(const std::shared_ptr<RawCallCompletion>& completion, std::
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;
     completion->error = std::move(message);
+    completion->exceptionTypeTag = static_cast<uint8_t>(kj::Exception::Type::FAILED);
+    completion->exceptionDescription = completion->error;
+    completion->remoteTrace.clear();
+    completion->detailBytes.clear();
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeFailureKj(const std::shared_ptr<RawCallCompletion>& completion,
+                       const kj::Exception& e) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = describeKjException(e);
+    completion->exceptionTypeTag = static_cast<uint8_t>(e.getType());
+    completion->exceptionDescription = std::string(e.getDescription().cStr());
+    auto remoteTrace = e.getRemoteTrace();
+    if (remoteTrace != nullptr) {
+      completion->remoteTrace = std::string(remoteTrace.cStr());
+    } else {
+      completion->remoteTrace.clear();
+    }
+    completion->detailBytes.clear();
+    KJ_IF_SOME(detail, e.getDetail(1)) {
+      completion->detailBytes.assign(detail.begin(), detail.end());
+    }
     completion->done = true;
   }
   completion->cv.notify_one();
@@ -1247,7 +1312,7 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedRawCall{
           target, interfaceId, methodId, std::move(request), std::move(requestCaps), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1264,7 +1329,7 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedStartPendingCall{
           target, interfaceId, methodId, std::move(request), std::move(requestCaps), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1278,7 +1343,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedAwaitPendingCall{pendingCallId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1292,7 +1357,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleasePendingCall{pendingCallId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1308,7 +1373,7 @@ class RuntimeLoop {
       queue_.emplace_back(
           QueuedGetPipelinedCap{pendingCallId, std::move(pointerPath), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1325,7 +1390,7 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedStreamingCall{
           target, interfaceId, methodId, std::move(request), std::move(requestCaps), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1339,7 +1404,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedTargetGetFd{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1353,7 +1418,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedTargetWhenResolved{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1367,7 +1432,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedTargetWhenResolvedStart{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1381,7 +1446,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedEnableTraceEncoder{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1395,7 +1460,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedDisableTraceEncoder{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1413,7 +1478,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedSetTraceEncoder{encoderObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1432,7 +1497,7 @@ class RuntimeLoop {
           serverId, listenerId, std::move(address), portHint, interfaceId, methodId,
           std::move(request), std::move(requestCaps), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1453,7 +1518,7 @@ class RuntimeLoop {
           std::move(request), std::move(requestCaps), std::move(pipelinedRequest),
           std::move(pipelinedRequestCaps), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1467,7 +1532,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterLoopbackTarget{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1482,7 +1547,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterLoopbackBootstrapTarget{bootstrapTarget, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1501,7 +1566,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterHandlerTarget{handlerObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1520,7 +1585,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterAdvancedHandlerTarget{handlerObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1539,7 +1604,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterTailCallHandlerTarget{handlerObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1553,7 +1618,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterTailCallTarget{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1567,7 +1632,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRegisterFdTarget{fd, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1581,7 +1646,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseTarget{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1595,7 +1660,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseTargets{std::move(targets), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1609,7 +1674,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedRetainTarget{target, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1624,7 +1689,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedConnectTarget{std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1639,7 +1704,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedConnectTargetStart{std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1653,7 +1718,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedConnectTargetFd{fd, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1667,7 +1732,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewTransportPipe{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1681,7 +1746,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewTransportFromFd{fd, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1695,7 +1760,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseTransport{transportId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1709,7 +1774,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedTransportGetFd{transportId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1723,7 +1788,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedConnectTargetTransport{transportId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1738,7 +1803,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedListenLoopback{std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1752,7 +1817,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedAcceptLoopback{listenerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1766,7 +1831,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseListener{listenerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1781,7 +1846,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewClient{std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1796,7 +1861,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewClientStart{std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1810,7 +1875,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseClient{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1824,7 +1889,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientBootstrap{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1838,7 +1903,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientOnDisconnect{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1852,7 +1917,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientOnDisconnectStart{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1866,7 +1931,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientSetFlowLimit{clientId, words, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1880,7 +1945,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewServer{bootstrapTarget, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1899,7 +1964,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedNewServerWithBootstrapFactory{bootstrapFactoryObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1913,7 +1978,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseServer{serverId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1929,7 +1994,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerListen{serverId, std::move(address), portHint, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1943,7 +2008,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerAccept{serverId, listenerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1958,7 +2023,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerAcceptStart{serverId, listenerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1972,7 +2037,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerAcceptFd{serverId, fd, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -1987,7 +2052,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerAcceptTransport{serverId, transportId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2001,7 +2066,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerDrain{serverId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2015,7 +2080,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerDrainStart{serverId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2029,7 +2094,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientQueueSize{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2043,7 +2108,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientQueueCount{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2057,7 +2122,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientOutgoingWaitNanos{clientId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2071,7 +2136,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedTargetCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2085,7 +2150,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedListenerCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2099,7 +2164,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedClientCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2113,7 +2178,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedServerCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2127,7 +2192,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedPendingCallCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2141,7 +2206,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedAwaitRegisterPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2155,7 +2220,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedCancelRegisterPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2169,7 +2234,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseRegisterPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2183,7 +2248,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedAwaitUnitPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2197,7 +2262,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedCancelUnitPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2211,7 +2276,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedReleaseUnitPromise{promiseId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2225,7 +2290,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedPump{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2239,7 +2304,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatNewClient{std::move(name), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2254,7 +2319,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatNewServer{std::move(name), bootstrapTarget, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2274,7 +2339,7 @@ class RuntimeLoop {
       queue_.emplace_back(
           QueuedMultiVatNewServerWithBootstrapFactory{std::move(name), factoryObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2288,7 +2353,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatReleasePeer{peerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2304,7 +2369,7 @@ class RuntimeLoop {
       queue_.emplace_back(
           QueuedMultiVatBootstrap{sourcePeerId, std::move(host), unique, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2320,7 +2385,7 @@ class RuntimeLoop {
       queue_.emplace_back(
           QueuedMultiVatBootstrapPeer{sourcePeerId, targetPeerId, unique, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2334,7 +2399,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatSetForwardingEnabled{enabled, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2348,7 +2413,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatResetForwardingStats{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2362,7 +2427,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatForwardCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2376,7 +2441,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatThirdPartyTokenCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2390,7 +2455,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatDeniedForwardCount{completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2405,7 +2470,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatHasConnection{fromPeerId, toPeerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2424,7 +2489,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatSetRestorer{peerId, restorerObj, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2438,7 +2503,7 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedMultiVatClearRestorer{peerId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2454,7 +2519,7 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedMultiVatPublishSturdyRef{
           hostPeerId, std::move(objectId), targetId, completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2470,7 +2535,7 @@ class RuntimeLoop {
       queue_.emplace_back(QueuedMultiVatRestoreSturdyRef{
           sourcePeerId, std::move(host), unique, std::move(objectId), completion});
     }
-    queueCv_.notify_one();
+    notifyWorker();
     return completion;
   }
 
@@ -2490,6 +2555,16 @@ class RuntimeLoop {
     releaseTargets(targets);
   }
 
+  void notifyWorker() {
+    // Wake the runtime thread whether it's blocked on the legacy condition variable or on the KJ
+    // event port. This keeps KJ async I/O progressing without requiring explicit Runtime.pump calls.
+    queueCv_.notify_one();
+    auto* port = eventPort_.load(std::memory_order_acquire);
+    if (port != nullptr) {
+      port->wake();
+    }
+  }
+
   void shutdown() {
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2498,7 +2573,7 @@ class RuntimeLoop {
       }
       stopping_ = true;
     }
-    queueCv_.notify_one();
+    notifyWorker();
     if (worker_.joinable()) {
       worker_.join();
     }
@@ -5192,6 +5267,11 @@ class RuntimeLoop {
   void run() {
     try {
       auto io = kj::setupAsyncIo();
+#if _WIN32
+      eventPort_.store(&io.win32EventPort, std::memory_order_release);
+#else
+      eventPort_.store(&io.unixEventPort, std::memory_order_release);
+#endif
       {
         std::lock_guard<std::mutex> lock(startupMutex_);
         startupComplete_ = true;
@@ -5200,14 +5280,33 @@ class RuntimeLoop {
 
       while (true) {
         QueuedOperation op;
+        bool haveOp = false;
         {
-          std::unique_lock<std::mutex> lock(queueMutex_);
-          queueCv_.wait(lock, [this]() { return stopping_ || !queue_.empty(); });
-          if (stopping_ && queue_.empty()) {
+          std::lock_guard<std::mutex> lock(queueMutex_);
+          if (!queue_.empty()) {
+            op = std::move(queue_.front());
+            queue_.pop_front();
+            haveOp = true;
+          } else if (stopping_) {
             break;
           }
-          op = std::move(queue_.front());
-          queue_.pop_front();
+        }
+
+        if (!haveOp) {
+          // No queued work. Pump KJ once (non-blocking) and then block on the EventPort until
+          // either I/O arrives or another thread calls wake() due to new queued work.
+          if (io.waitScope.poll(1) > 0) {
+            continue;
+          }
+          auto* port = eventPort_.load(std::memory_order_acquire);
+          if (port != nullptr) {
+            port->wait();
+          } else {
+            // Should not happen, but avoid a tight spin if setup failed before we could publish
+            // the event port.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          }
+          continue;
         }
 
         if (std::holds_alternative<QueuedRawCall>(op)) {
@@ -5219,7 +5318,7 @@ class RuntimeLoop {
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
-            completeFailure(call.completion, describeKjException(e));
+            completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
             completeFailure(call.completion, e.what());
           } catch (...) {
@@ -5249,7 +5348,7 @@ class RuntimeLoop {
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
-            completeFailure(call.completion, describeKjException(e));
+            completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
             completeFailure(call.completion, e.what());
           } catch (...) {
@@ -5395,7 +5494,7 @@ class RuntimeLoop {
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
-            completeFailure(call.completion, describeKjException(e));
+            completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
             completeFailure(call.completion, e.what());
           } catch (...) {
@@ -5413,7 +5512,7 @@ class RuntimeLoop {
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
-            completeFailure(call.completion, describeKjException(e));
+            completeFailureKj(call.completion, e);
           } catch (const std::exception& e) {
             completeFailure(call.completion, e.what());
           } catch (...) {
@@ -6619,6 +6718,7 @@ class RuntimeLoop {
 
   std::mutex queueMutex_;
   std::condition_variable queueCv_;
+  std::atomic<kj::EventPort*> eventPort_{nullptr};
   bool stopping_ = false;
   std::deque<QueuedOperation> queue_;
 
@@ -6785,6 +6885,47 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime_outcome(
+    uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    const auto requestSize = lean_sarray_size(request);
+    const auto* requestData = lean_sarray_cptr(const_cast<lean_object*>(request));
+    std::vector<uint8_t> requestCopy(requestSize);
+    if (requestSize != 0) {
+      std::memcpy(requestCopy.data(), requestData, requestSize);
+    }
+
+    const auto requestCapsSize = lean_sarray_size(requestCaps);
+    const auto* requestCapsData = lean_sarray_cptr(const_cast<lean_object*>(requestCaps));
+    auto requestCapIds = decodeCapTable(requestCapsData, requestCapsSize);
+
+    auto completion = runtime->enqueueRawCall(target, interfaceId, methodId, std::move(requestCopy),
+                                              std::move(requestCapIds));
+    lean_object* outcomeObj = nullptr;
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (completion->ok) {
+        outcomeObj = mkRawCallOutcomeOkObj(completion->result);
+      } else {
+        outcomeObj = mkRawCallOutcomeErrorObj(*completion);
+      }
+    }
+    return lean_io_result_mk_ok(outcomeObj);
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_raw_call_with_caps_on_runtime_outcome");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_caps(
     uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
@@ -6838,6 +6979,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pending_call_await");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await_outcome(
+    uint64_t runtimeId, uint32_t pendingCallId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueAwaitPendingCall(pendingCallId);
+    lean_object* outcomeObj = nullptr;
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (completion->ok) {
+        outcomeObj = mkRawCallOutcomeOkObj(completion->result);
+      } else {
+        outcomeObj = mkRawCallOutcomeErrorObj(*completion);
+      }
+    }
+    return lean_io_result_mk_ok(outcomeObj);
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_pending_call_await_outcome");
   }
 }
 

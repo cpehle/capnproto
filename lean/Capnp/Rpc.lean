@@ -106,6 +106,29 @@ inductive RemoteExceptionType where
   | .disconnected => 2
   | .unimplemented => 3
 
+@[inline] def RemoteExceptionType.ofUInt8 : UInt8 -> RemoteExceptionType
+  | 0 => .failed
+  | 1 => .overloaded
+  | 2 => .disconnected
+  | 3 => .unimplemented
+  | _ => .failed
+
+structure RemoteException where
+  description : String
+  remoteTrace : String
+  detail : ByteArray
+  -- `kj::Exception::Type` as a `UInt8` (same encoding as `RemoteExceptionType.toUInt8`).
+  typeTag : UInt8
+  deriving Inhabited, BEq, Repr
+
+@[inline] def RemoteException.type (e : RemoteException) : RemoteExceptionType :=
+  RemoteExceptionType.ofUInt8 e.typeTag
+
+inductive RawCallOutcome where
+  | ok (response : ByteArray) (responseCaps : ByteArray)
+  | error (ex : RemoteException)
+  deriving Inhabited, BEq, Repr
+
 inductive AdvancedHandlerResult where
   | respond (payload : Payload)
   | asyncCall (target : Client) (method : Method)
@@ -305,6 +328,11 @@ opaque ffiRawCallWithCapsOnRuntimeImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO (ByteArray × ByteArray)
 
+@[extern "capnp_lean_rpc_raw_call_with_caps_on_runtime_outcome"]
+opaque ffiRawCallWithCapsOnRuntimeOutcomeImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO RawCallOutcome
+
 @[extern "capnp_lean_rpc_runtime_start_call_with_caps"]
 opaque ffiRuntimeStartCallWithCapsImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
@@ -313,6 +341,10 @@ opaque ffiRuntimeStartCallWithCapsImpl
 @[extern "capnp_lean_rpc_runtime_pending_call_await"]
 opaque ffiRuntimePendingCallAwaitImpl
     (runtime : UInt64) (pendingCall : UInt32) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_runtime_pending_call_await_outcome"]
+opaque ffiRuntimePendingCallAwaitOutcomeImpl
+    (runtime : UInt64) (pendingCall : UInt32) : IO RawCallOutcome
 
 @[extern "capnp_lean_rpc_runtime_pending_call_release"]
 opaque ffiRuntimePendingCallReleaseImpl (runtime : UInt64) (pendingCall : UInt32) : IO Unit
@@ -1086,6 +1118,21 @@ namespace Runtime
       runtime.handle target method.interfaceId method.methodId requestBytes requestCaps
     decodePayloadChecked responseBytes responseCaps
 
+@[inline] def callOutcome (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  ffiRawCallWithCapsOnRuntimeOutcomeImpl runtime.handle target method.interfaceId method.methodId
+    requestBytes requestCaps
+
+@[inline] def callResult (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Except RemoteException Payload) := do
+  match (← runtime.callOutcome target method payload) with
+  | .ok responseBytes responseCaps =>
+      return .ok (← decodePayloadChecked responseBytes responseCaps)
+  | .error ex =>
+      return .error ex
+
 @[inline] def startCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
   let requestBytes := payload.toBytes
@@ -1102,6 +1149,17 @@ namespace Runtime
   let (responseBytes, responseCaps) ←
     ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.raw
   decodePayloadChecked responseBytes responseCaps
+
+@[inline] def pendingCallAwaitOutcome (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome :=
+  ffiRuntimePendingCallAwaitOutcomeImpl pendingCall.runtime.handle pendingCall.handle.raw
+
+@[inline] def pendingCallAwaitResult (pendingCall : RuntimePendingCallRef) :
+    IO (Except RemoteException Payload) := do
+  match (← pendingCall.pendingCallAwaitOutcome) with
+  | .ok responseBytes responseCaps =>
+      return .ok (← decodePayloadChecked responseBytes responseCaps)
+  | .error ex =>
+      return .error ex
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : IO Unit :=
   ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle.raw
