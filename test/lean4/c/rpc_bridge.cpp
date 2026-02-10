@@ -8,6 +8,11 @@
 #include <kj/async.h>
 #include <kj/async-queue.h>
 #include <kj/async-io.h>
+#if _WIN32
+#include <kj/async-win32.h>
+#else
+#include <kj/async-unix.h>
+#endif
 #include <kj/io.h>
 #include <kj/map.h>
 #include <kj/time.h>
@@ -17,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -41,6 +47,20 @@ namespace {
 using TwoPartyRpcSystem = capnp::RpcSystem<capnp::rpc::twoparty::VatId>;
 namespace capnp_test = ::capnproto_test::capnp::test;
 constexpr uint32_t kRuntimeDefaultMaxFdsPerMessage = 16;
+
+bool capnpLeanRpcDebugEnabled() {
+  static bool enabled = []() {
+    const char* flag = std::getenv("CAPNP_LEAN_RPC_DEBUG");
+    return flag != nullptr && flag[0] != '\0';
+  }();
+  return enabled;
+}
+
+void capnpLeanRpcDebugLog(const char* label, const std::string& message) {
+  if (!capnpLeanRpcDebugEnabled()) return;
+  fprintf(stderr, "[capnp-lean-rpc] %s: %s\n", label, message.c_str());
+  fflush(stderr);
+}
 
 lean_obj_res mkByteArrayCopy(const uint8_t* data, size_t size) {
   lean_object* out = lean_alloc_sarray(1, size, size);
@@ -293,9 +313,12 @@ struct LeanAdvancedHandlerAction {
   bool sendResultsToCaller = false;
   bool noPromisePipelining = false;
   bool onlyPromisePipeline = false;
+  bool hasPipeline = false;
   uint32_t target = 0;
   uint64_t interfaceId = 0;
   uint16_t methodId = 0;
+  std::vector<uint8_t> pipelineBytes;
+  std::vector<uint8_t> pipelineCaps;
   std::vector<uint8_t> payloadBytes;
   std::vector<uint8_t> payloadCaps;
   std::string message;
@@ -828,6 +851,10 @@ class LoopbackCapabilityServer final : public capnp::Capability::Server {
     (void)interfaceId;
     (void)methodId;
 
+    capnpLeanRpcDebugLog(
+        "loopback.dispatch",
+        "interfaceId=" + std::to_string(interfaceId) + " methodId=" + std::to_string(methodId));
+
     context.getResults().setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
     return {kj::READY_NOW, false};
   }
@@ -841,6 +868,9 @@ class TailCallForwardingServer final : public capnp::Capability::Server {
   DispatchCallResult dispatchCall(
       uint64_t interfaceId, uint16_t methodId,
       capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
+    capnpLeanRpcDebugLog(
+        "tailcall.dispatch",
+        "interfaceId=" + std::to_string(interfaceId) + " methodId=" + std::to_string(methodId));
     auto requestBuilder = target_.typelessRequest(interfaceId, methodId, kj::none, {});
     requestBuilder.setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
     return {context.tailCall(kj::mv(requestBuilder)), false};
@@ -3641,6 +3671,14 @@ class RuntimeLoop {
         context.releaseParams();
       }
 
+      if (action.hasPipeline) {
+        if (action.kind != LeanAdvancedHandlerAction::Kind::AWAIT_TASK) {
+          throw std::runtime_error(
+              "Lean RPC advanced handler: setPipeline is only valid with defer");
+        }
+        setContextPipelineFromPayload(context, action.pipelineBytes, action.pipelineCaps);
+      }
+
       if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
         auto responseCapIds = decodeCapTable(action.payloadCaps.data(), action.payloadCaps.size());
         if (action.isStreaming) {
@@ -3822,6 +3860,16 @@ class RuntimeLoop {
           actionObj = lean_ctor_get(actionObj, 0);
           continue;
         }
+        if (tag == 9) {
+          if (action.hasPipeline) {
+            throw std::runtime_error("Lean RPC advanced handler: setPipeline may only be specified once");
+          }
+          action.hasPipeline = true;
+          action.pipelineBytes = copyByteArray(lean_ctor_get(actionObj, 0));
+          action.pipelineCaps = copyByteArray(lean_ctor_get(actionObj, 1));
+          actionObj = lean_ctor_get(actionObj, 2);
+          continue;
+        }
 
         switch (tag) {
           case 0: {
@@ -3905,6 +3953,53 @@ class RuntimeLoop {
         capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
         context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
       }
+    }
+
+    void setContextPipelineFromPayload(
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+        const std::vector<uint8_t>& pipelineBytesCopy,
+        const std::vector<uint8_t>& pipelineCapsCopy) {
+      if (pipelineBytesCopy.empty()) {
+        if (!pipelineCapsCopy.empty()) {
+          throw std::runtime_error(
+              "RPC pipeline capability table requires a non-empty payload");
+        }
+        return;
+      }
+
+      kj::ArrayPtr<const kj::byte> pipelineBytes(
+          reinterpret_cast<const kj::byte*>(pipelineBytesCopy.data()), pipelineBytesCopy.size());
+      kj::ArrayInputStream input(pipelineBytes);
+      capnp::ReaderOptions options;
+      options.traversalLimitInWords = 1ull << 30;
+      capnp::InputStreamMessageReader reader(input, options);
+      auto pipelineRoot = reader.getRoot<capnp::AnyPointer>();
+
+      capnp::PipelineBuilder<capnp::AnyPointer> pipelineBuilder;
+      if (pipelineCapsCopy.empty()) {
+        pipelineBuilder.setAs<capnp::AnyPointer>(pipelineRoot);
+      } else {
+        auto pipelineCapIds = decodeCapTable(pipelineCapsCopy.data(), pipelineCapsCopy.size());
+        auto capTableBuilder =
+            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(pipelineCapIds.size());
+        for (auto capId : pipelineCapIds) {
+          if (capId == 0) {
+            capTableBuilder.add(kj::none);
+            continue;
+          }
+          auto capIt = runtime_.targets_.find(capId);
+          if (capIt == runtime_.targets_.end()) {
+            throw std::runtime_error(
+                "unknown RPC pipeline capability id: " + std::to_string(capId));
+          }
+          capnp::Capability::Client cap = capIt->second;
+          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
+        }
+        capnp::ReaderCapabilityTable pipelineCapTable(capTableBuilder.finish());
+        pipelineBuilder.setAs<capnp::AnyPointer>(pipelineCapTable.imbue(pipelineRoot));
+      }
+
+      context.setPipeline(pipelineBuilder.build());
     }
 
     void setContextResultsFromResponse(
@@ -4518,9 +4613,15 @@ class RuntimeLoop {
       throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
     }
 
+    capnpLeanRpcDebugLog(
+        "rawcall.start",
+        "target=" + std::to_string(target) + " interfaceId=" + std::to_string(interfaceId) +
+            " methodId=" + std::to_string(methodId));
+
     auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
     setRequestPayload(requestBuilder, request, requestCaps);
     auto response = requestBuilder.send().wait(waitScope);
+    capnpLeanRpcDebugLog("rawcall.done", "target=" + std::to_string(target));
     return serializeResponse(response);
   }
 
@@ -5293,19 +5394,17 @@ class RuntimeLoop {
         }
 
         if (!haveOp) {
-          // No queued work. Pump KJ once (non-blocking) and then block on the EventPort until
-          // either I/O arrives or another thread calls wake() due to new queued work.
+          // No queued work. Pump KJ once (non-blocking) and then *block via KJ* for a short
+          // duration.
+          //
+          // We intentionally avoid calling EventPort::wait() directly: on some platforms we've
+          // observed that wake() does not reliably interrupt a naked EventPort wait, causing the
+          // runtime queue to deadlock. Waiting on a short timer promise guarantees forward
+          // progress, while still letting the event loop process async I/O immediately.
           if (io.waitScope.poll(1) > 0) {
             continue;
           }
-          auto* port = eventPort_.load(std::memory_order_acquire);
-          if (port != nullptr) {
-            port->wait();
-          } else {
-            // Should not happen, but avoid a tight spin if setup failed before we could publish
-            // the event port.
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-          }
+          io.provider->getTimer().afterDelay(1 * kj::MILLISECONDS).wait(io.waitScope);
           continue;
         }
 
@@ -6846,6 +6945,11 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
   }
 
   try {
+    capnpLeanRpcDebugLog(
+        "ffi.rawcall_with_caps.enter",
+        "runtime=" + std::to_string(runtimeId) + " target=" + std::to_string(target) +
+            " interfaceId=" + std::to_string(interfaceId) + " methodId=" +
+            std::to_string(methodId));
     const auto requestSize = lean_sarray_size(request);
     const auto* requestData = lean_sarray_cptr(const_cast<lean_object*>(request));
     std::vector<uint8_t> requestCopy(requestSize);
@@ -6859,6 +6963,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
 
     auto completion = runtime->enqueueRawCall(target, interfaceId, methodId, std::move(requestCopy),
                                               std::move(requestCapIds));
+    capnpLeanRpcDebugLog("ffi.rawcall_with_caps.enqueued", "waiting");
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -6866,6 +6971,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
         return mkIoUserError(completion->error);
       }
     }
+    capnpLeanRpcDebugLog("ffi.rawcall_with_caps.done", "ok");
 
     const auto responseSize = completion->result.response.size();
     const auto* responseData =

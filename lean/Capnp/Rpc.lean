@@ -113,13 +113,20 @@ inductive RemoteExceptionType where
   | 3 => .unimplemented
   | _ => .failed
 
+instance : ToString RemoteExceptionType where
+  toString
+    | .failed => "failed"
+    | .overloaded => "overloaded"
+    | .disconnected => "disconnected"
+    | .unimplemented => "unimplemented"
+
 structure RemoteException where
   description : String
   remoteTrace : String
   detail : ByteArray
   -- `kj::Exception::Type` as a `UInt8` (same encoding as `RemoteExceptionType.toUInt8`).
   typeTag : UInt8
-  deriving Inhabited, BEq, Repr
+  deriving Inhabited, BEq
 
 @[inline] def RemoteException.type (e : RemoteException) : RemoteExceptionType :=
   RemoteExceptionType.ofUInt8 e.typeTag
@@ -127,7 +134,7 @@ structure RemoteException where
 inductive RawCallOutcome where
   | ok (response : ByteArray) (responseCaps : ByteArray)
   | error (ex : RemoteException)
-  deriving Inhabited, BEq, Repr
+  deriving Inhabited, BEq
 
 inductive AdvancedHandlerResult where
   | respond (payload : Payload)
@@ -147,6 +154,7 @@ inductive AdvancedHandlerReply where
   | now (result : AdvancedHandlerResult)
   | deferred (task : Task (Except IO.Error AdvancedHandlerResult))
   | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply)
+  | pipeline (pipeline : Payload) (next : AdvancedHandlerReply)
 
 @[inline] def AdvancedHandlerReply.fromResult
     (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
@@ -182,6 +190,10 @@ inductive AdvancedHandlerReply where
     (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
   .control opts next
 
+@[inline] def AdvancedHandlerReply.withPipeline
+    (pipeline : Payload) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  .pipeline pipeline next
+
 @[inline] def AdvancedHandlerReply.releaseParams
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
   .control { releaseParams := true } next
@@ -209,6 +221,7 @@ inductive RawAdvancedHandlerResult where
   | callHints (noPromisePipelining : Bool) (onlyPromisePipeline : Bool)
       (next : RawAdvancedHandlerResult)
   | exceptionType (type : UInt8) (next : RawAdvancedHandlerResult)
+  | setPipeline (pipeline : ByteArray) (pipelineCaps : ByteArray) (next : RawAdvancedHandlerResult)
 
 abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
     IO RawAdvancedHandlerResult
@@ -303,6 +316,9 @@ namespace Advanced
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
     IO AdvancedHandlerReply := do
   return AdvancedHandlerReply.streaming (← defer next opts)
+
+@[inline] def setPipeline (pipeline : Payload) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.withPipeline pipeline next
 
 end Advanced
 
@@ -827,6 +843,9 @@ end CapTable
   | .control opts next =>
       return .control opts.releaseParams opts.allowCancellation opts.isStreaming
         (← toRawAdvancedHandlerReply next)
+  | .pipeline pipeline next =>
+      return .setPipeline pipeline.toBytes (CapTable.toBytes pipeline.capTable)
+        (← toRawAdvancedHandlerReply next)
 
 @[inline] private def toRawAdvancedHandlerCallAsync
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : RawAdvancedHandlerCall :=
@@ -1155,7 +1174,7 @@ namespace Runtime
 
 @[inline] def pendingCallAwaitResult (pendingCall : RuntimePendingCallRef) :
     IO (Except RemoteException Payload) := do
-  match (← pendingCall.pendingCallAwaitOutcome) with
+  match (← pendingCallAwaitOutcome pendingCall) with
   | .ok responseBytes responseCaps =>
       return .ok (← decodePayloadChecked responseBytes responseCaps)
   | .error ex =>

@@ -2346,6 +2346,64 @@ def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerDeferredSetPipeline : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let sinkSeen ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerHandlerTarget (fun _ _ _ => do
+      sinkSeen.set true
+      pure payload)
+
+    let delayedPayload := mkCapabilityPayload sink
+    let handler ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      let deferred ← Capnp.Rpc.Advanced.defer do
+        IO.sleep (UInt32.ofNat 200)
+        pure (Capnp.Rpc.Advanced.respond delayedPayload)
+      pure (Capnp.Rpc.Advanced.setPipeline delayedPayload deferred))
+
+    let server ← runtime.newServer handler
+    let listener ← server.listen address
+    let callTask ← IO.asTask (Capnp.Rpc.Interop.cppCallPipelinedCapOneShot
+      address Echo.fooMethod payload payload)
+    server.accept listener
+
+    let rec waitForSink (attempts : Nat) : IO Unit := do
+      if (← sinkSeen.get) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError "pipelined call did not reach sink before handler finished")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 5)
+            waitForSink attempts
+    waitForSink 20
+
+    match callTask.get with
+    | .ok res =>
+        assertEqual res.capTable.caps.size 0
+    | .error err =>
+        throw err
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget handler
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeAdvancedHandlerDeferredWithControl : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
