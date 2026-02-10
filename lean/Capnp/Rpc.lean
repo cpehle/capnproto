@@ -1,3 +1,4 @@
+import Capnp.Async
 import Capnp.Runtime
 
 namespace Capnp
@@ -25,6 +26,10 @@ structure RuntimeServer where
   deriving Inhabited, BEq, Repr
 
 structure RuntimePendingCall where
+  raw : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure RuntimeTransport where
   raw : UInt32
   deriving Inhabited, BEq, Repr
 
@@ -64,24 +69,6 @@ structure AdvancedForwardOptions where
   sendResultsTo : AdvancedSendResultsTo := .yourself
   callHints : AdvancedCallHints := {}
   deriving Inhabited, BEq, Repr
-
-inductive RawAdvancedHandlerResult where
-  | returnPayload (response : ByteArray) (responseCaps : ByteArray)
-  | asyncCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
-      (request : ByteArray) (requestCaps : ByteArray)
-  | tailCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
-      (request : ByteArray) (requestCaps : ByteArray)
-  | throwRemote (message : String) (detail : ByteArray)
-  | control (releaseParams : Bool) (allowCancellation : Bool) (next : RawAdvancedHandlerResult)
-  | awaitTask (task : Task (Except IO.Error RawAdvancedHandlerResult))
-  | sendResultsToCaller (next : RawAdvancedHandlerResult)
-  | callHints (noPromisePipelining : Bool) (onlyPromisePipeline : Bool)
-      (next : RawAdvancedHandlerResult)
-
-abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
-    IO RawAdvancedHandlerResult
-abbrev RawBootstrapFactoryCall := UInt16 -> IO UInt32
-abbrev RawTraceEncoder := String -> IO String
 
 inductive AdvancedHandlerResult where
   | respond (payload : Payload)
@@ -137,6 +124,25 @@ inductive AdvancedHandlerReply where
 @[inline] def AdvancedHandlerReply.allowCancellation
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
   .control { allowCancellation := true } next
+
+inductive RawAdvancedHandlerResult where
+  | returnPayload (response : ByteArray) (responseCaps : ByteArray)
+  | asyncCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+      (request : ByteArray) (requestCaps : ByteArray)
+  | tailCall (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+      (request : ByteArray) (requestCaps : ByteArray)
+  | throwRemote (message : String) (detail : ByteArray)
+  | control (releaseParams : Bool) (allowCancellation : Bool) (next : RawAdvancedHandlerResult)
+  | awaitTask (task : Task (Except IO.Error RawAdvancedHandlerResult))
+      (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
+  | sendResultsToCaller (next : RawAdvancedHandlerResult)
+  | callHints (noPromisePipelining : Bool) (onlyPromisePipeline : Bool)
+      (next : RawAdvancedHandlerResult)
+
+abbrev RawAdvancedHandlerCall := Client -> UInt64 -> UInt16 -> ByteArray -> ByteArray ->
+    IO RawAdvancedHandlerResult
+abbrev RawBootstrapFactoryCall := UInt16 -> IO UInt32
+abbrev RawTraceEncoder := String -> IO String
 
 @[inline] def AdvancedForwardOptions.toCaller
     (callHints : AdvancedCallHints := {}) : AdvancedForwardOptions :=
@@ -271,6 +277,9 @@ opaque ffiRuntimeUnitPromiseCancelImpl
 opaque ffiRuntimeUnitPromiseReleaseImpl
     (runtime : UInt64) (promise : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_runtime_pump"]
+opaque ffiRuntimePumpImpl (runtime : UInt64) : IO Unit
+
 @[extern "capnp_lean_rpc_runtime_streaming_call_with_caps"]
 opaque ffiRuntimeStreamingCallWithCapsImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
@@ -348,6 +357,15 @@ opaque ffiRuntimeConnectStartImpl
 
 @[extern "capnp_lean_rpc_runtime_connect_fd"]
 opaque ffiRuntimeConnectFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_new_transport_pipe"]
+opaque ffiRuntimeNewTransportPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_rpc_runtime_release_transport"]
+opaque ffiRuntimeReleaseTransportImpl (runtime : UInt64) (transport : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_connect_transport"]
+opaque ffiRuntimeConnectTransportImpl (runtime : UInt64) (transport : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_listen_echo"]
 opaque ffiRuntimeListenEchoImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO UInt32
@@ -430,6 +448,10 @@ opaque ffiRuntimeServerAcceptStartImpl
 @[extern "capnp_lean_rpc_runtime_server_accept_fd"]
 opaque ffiRuntimeServerAcceptFdImpl
     (runtime : UInt64) (server : UInt32) (fd : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_server_accept_transport"]
+opaque ffiRuntimeServerAcceptTransportImpl
+    (runtime : UInt64) (server : UInt32) (transport : UInt32) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_server_drain"]
 opaque ffiRuntimeServerDrainImpl (runtime : UInt64) (server : UInt32) : IO Unit
@@ -602,13 +624,18 @@ end CapTable
       toRawAdvancedHandlerResult result
   | .deferred task => do
       let rawTask ← IO.asTask do
-        let result ← IO.wait task
-        match result with
-        | .ok next =>
-            toRawAdvancedHandlerResult next
-        | .error err =>
-            throw err
-      return .awaitTask rawTask
+        try
+          let result ← IO.wait task
+          match result with
+          | .ok next =>
+              toRawAdvancedHandlerResult next
+          | .error err =>
+              throw err
+        catch err =>
+          if (← IO.checkCanceled) then
+            IO.cancel task
+          throw err
+      return .awaitTask rawTask task
   | .control opts next =>
       return .control opts.releaseParams opts.allowCancellation
         (← toRawAdvancedHandlerReply next)
@@ -692,6 +719,16 @@ namespace Runtime
 
 @[inline] def connectFd (runtime : Runtime) (fd : UInt32) : IO Client :=
   ffiRuntimeConnectFdImpl runtime.handle fd
+
+@[inline] def newTransportPipe (runtime : Runtime) : IO (RuntimeTransport × RuntimeTransport) := do
+  let (first, second) ← ffiRuntimeNewTransportPipeImpl runtime.handle
+  return ({ raw := first }, { raw := second })
+
+@[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit :=
+  ffiRuntimeReleaseTransportImpl runtime.handle transport.raw
+
+@[inline] def connectTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Client :=
+  ffiRuntimeConnectTransportImpl runtime.handle transport.raw
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
@@ -834,6 +871,9 @@ namespace Runtime
     handle := (← ffiRuntimeTargetWhenResolvedStartImpl runtime.handle target)
   }
 
+@[inline] def pump (runtime : Runtime) : IO Unit :=
+  ffiRuntimePumpImpl runtime.handle
+
 @[inline] def enableTraceEncoder (runtime : Runtime) : IO Unit :=
   ffiRuntimeEnableTraceEncoderImpl runtime.handle
 
@@ -930,6 +970,9 @@ namespace RuntimeServerRef
 @[inline] def acceptFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit :=
   ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.raw fd
 
+@[inline] def acceptTransport (server : RuntimeServerRef) (transport : RuntimeTransport) : IO Unit :=
+  ffiRuntimeServerAcceptTransportImpl server.runtime.handle server.handle.raw transport.raw
+
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
   ffiRuntimeServerDrainImpl server.runtime.handle server.handle.raw
 
@@ -961,6 +1004,20 @@ namespace RuntimePendingCallRef
     (pointerPath : Array UInt16 := #[]) : IO Client :=
   Runtime.pendingCallGetPipelinedCap pendingCall pointerPath
 
+instance : Capnp.Async.Awaitable RuntimePendingCallRef Payload where
+  await := RuntimePendingCallRef.await
+
+instance : Capnp.Async.Releasable RuntimePendingCallRef where
+  release := RuntimePendingCallRef.release
+
+@[inline] def awaitAsTask (pendingCall : RuntimePendingCallRef) :
+    IO (Task (Except IO.Error Payload)) :=
+  Capnp.Async.awaitAsTask pendingCall
+
+def toIOPromise (pendingCall : RuntimePendingCallRef) :
+    IO (IO.Promise (Except String Payload)) := do
+  Capnp.Async.toIOPromise pendingCall
+
 end RuntimePendingCallRef
 
 namespace RuntimeRegisterPromiseRef
@@ -975,9 +1032,7 @@ namespace RuntimeRegisterPromiseRef
   Runtime.registerPromiseRelease promise
 
 @[inline] def awaitAndRelease (promise : RuntimeRegisterPromiseRef) : IO UInt32 := do
-  let value ← promise.await
-  promise.release
-  return value
+  promise.await
 
 @[inline] def awaitTarget (promise : RuntimeRegisterPromiseRef) : IO Client :=
   promise.await
@@ -997,6 +1052,23 @@ namespace RuntimeRegisterPromiseRef
     handle := { raw := (← promise.await) }
   }
 
+instance : Capnp.Async.Awaitable RuntimeRegisterPromiseRef UInt32 where
+  await := RuntimeRegisterPromiseRef.await
+
+instance : Capnp.Async.Cancelable RuntimeRegisterPromiseRef where
+  cancel := RuntimeRegisterPromiseRef.cancel
+
+instance : Capnp.Async.Releasable RuntimeRegisterPromiseRef where
+  release := RuntimeRegisterPromiseRef.release
+
+@[inline] def awaitAsTask (promise : RuntimeRegisterPromiseRef) :
+    IO (Task (Except IO.Error UInt32)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : RuntimeRegisterPromiseRef) :
+    IO (IO.Promise (Except String UInt32)) := do
+  Capnp.Async.toIOPromise promise
+
 end RuntimeRegisterPromiseRef
 
 namespace RuntimeUnitPromiseRef
@@ -1012,7 +1084,23 @@ namespace RuntimeUnitPromiseRef
 
 @[inline] def awaitAndRelease (promise : RuntimeUnitPromiseRef) : IO Unit := do
   promise.await
-  promise.release
+
+instance : Capnp.Async.Awaitable RuntimeUnitPromiseRef Unit where
+  await := RuntimeUnitPromiseRef.await
+
+instance : Capnp.Async.Cancelable RuntimeUnitPromiseRef where
+  cancel := RuntimeUnitPromiseRef.cancel
+
+instance : Capnp.Async.Releasable RuntimeUnitPromiseRef where
+  release := RuntimeUnitPromiseRef.release
+
+@[inline] def awaitAsTask (promise : RuntimeUnitPromiseRef) :
+    IO (Task (Except IO.Error Unit)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : RuntimeUnitPromiseRef) :
+    IO (IO.Promise (Except String Unit)) := do
+  Capnp.Async.toIOPromise promise
 
 end RuntimeUnitPromiseRef
 
@@ -1084,6 +1172,15 @@ namespace RuntimeM
 
 @[inline] def connectFd (fd : UInt32) : RuntimeM Client := do
   Runtime.connectFd (← runtime) fd
+
+@[inline] def newTransportPipe : RuntimeM (RuntimeTransport × RuntimeTransport) := do
+  Runtime.newTransportPipe (← runtime)
+
+@[inline] def releaseTransport (transport : RuntimeTransport) : RuntimeM Unit := do
+  Runtime.releaseTransport (← runtime) transport
+
+@[inline] def connectTransport (transport : RuntimeTransport) : RuntimeM Client := do
+  Runtime.connectTransport (← runtime) transport
 
 @[inline] def listenEcho (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
   Runtime.listenEcho (← runtime) address portHint
@@ -1164,6 +1261,10 @@ namespace RuntimeM
 
 @[inline] def serverAcceptFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
   server.acceptFd fd
+
+@[inline] def serverAcceptTransport (server : RuntimeServerRef)
+    (transport : RuntimeTransport) : RuntimeM Unit := do
+  server.acceptTransport transport
 
 @[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
   server.drain
@@ -1252,6 +1353,9 @@ namespace RuntimeM
 
 @[inline] def targetWhenResolvedStart (target : Client) : RuntimeM RuntimeUnitPromiseRef := do
   Runtime.targetWhenResolvedStart (← runtime) target
+
+@[inline] def pump : RuntimeM Unit := do
+  Runtime.pump (← runtime)
 
 @[inline] def enableTraceEncoder : RuntimeM Unit := do
   Runtime.enableTraceEncoder (← runtime)

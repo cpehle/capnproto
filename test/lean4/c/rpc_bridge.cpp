@@ -25,6 +25,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 #if !defined(_WIN32)
@@ -147,6 +148,37 @@ struct DeferredLeanTask {
   lean_object* task;
 };
 
+struct DeferredLeanTaskState {
+  DeferredLeanTaskState(kj::Own<DeferredLeanTask>&& waitTask,
+                        kj::Own<DeferredLeanTask>&& cancelTask,
+                        bool allowCancellation)
+      : waitTask(kj::mv(waitTask)),
+        cancelTask(kj::mv(cancelTask)),
+        allowCancellation(allowCancellation) {}
+
+  bool requestCancellation() {
+    if (!allowCancellation || completed.load(std::memory_order_acquire)) {
+      return false;
+    }
+    if (cancellationRequested.exchange(true, std::memory_order_acq_rel)) {
+      return false;
+    }
+    lean_io_cancel_core(cancelTask->task);
+    if (waitTask.get() != cancelTask.get()) {
+      lean_io_cancel_core(waitTask->task);
+    }
+    return true;
+  }
+
+  ~DeferredLeanTaskState() { requestCancellation(); }
+
+  kj::Own<DeferredLeanTask> waitTask;
+  kj::Own<DeferredLeanTask> cancelTask;
+  bool allowCancellation;
+  std::atomic<bool> completed = false;
+  std::atomic<bool> cancellationRequested = false;
+};
+
 struct LeanAdvancedHandlerAction {
   enum class Kind : uint8_t {
     RETURN_PAYLOAD = 0,
@@ -169,7 +201,8 @@ struct LeanAdvancedHandlerAction {
   std::vector<uint8_t> payloadCaps;
   std::string message;
   std::vector<uint8_t> detailBytes;
-  kj::Own<DeferredLeanTask> deferredTask;
+  kj::Own<DeferredLeanTask> deferredWaitTask;
+  kj::Own<DeferredLeanTask> deferredCancelTask;
 };
 
 [[noreturn]] void throwRemoteException(const std::string& message,
@@ -487,6 +520,16 @@ struct Int64Completion {
   int64_t value = 0;
 };
 
+struct RegisterPairCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  uint32_t first = 0;
+  uint32_t second = 0;
+};
+
 void completeSuccess(const std::shared_ptr<RawCallCompletion>& completion, RawCallResult result) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
@@ -581,6 +624,29 @@ void completeInt64Success(const std::shared_ptr<Int64Completion>& completion, in
 
 void completeInt64Failure(const std::shared_ptr<Int64Completion>& completion,
                           std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeRegisterPairSuccess(const std::shared_ptr<RegisterPairCompletion>& completion,
+                                 uint32_t first, uint32_t second) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->first = first;
+    completion->second = second;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeRegisterPairFailure(const std::shared_ptr<RegisterPairCompletion>& completion,
+                                 std::string message) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;
@@ -1092,6 +1158,48 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterPairCompletion> enqueueNewTransportPipe() {
+    auto completion = std::make_shared<RegisterPairCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterPairFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNewTransportPipe{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueReleaseTransport(uint32_t transportId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedReleaseTransport{transportId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueConnectTargetTransport(uint32_t transportId) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedConnectTargetTransport{transportId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueListenLoopback(std::string address,
                                                               uint32_t portHint) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
@@ -1341,6 +1449,21 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueServerAcceptTransport(uint32_t serverId,
+                                                               uint32_t transportId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedServerAcceptTransport{serverId, transportId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueServerDrain(uint32_t serverId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -1565,6 +1688,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueuePump() {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedPump{completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   void shutdown() {
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1750,6 +1887,20 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedNewTransportPipe {
+    std::shared_ptr<RegisterPairCompletion> completion;
+  };
+
+  struct QueuedReleaseTransport {
+    uint32_t transportId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedConnectTargetTransport {
+    uint32_t transportId;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedListenLoopback {
     std::string address;
     uint32_t portHint;
@@ -1844,6 +1995,12 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedServerAcceptTransport {
+    uint32_t serverId;
+    uint32_t transportId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   struct QueuedServerDrain {
     uint32_t serverId;
     std::shared_ptr<UnitCompletion> completion;
@@ -1919,6 +2076,10 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedPump {
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
   using QueuedOperation =
       std::variant<QueuedRawCall, QueuedStartPendingCall, QueuedAwaitPendingCall,
                    QueuedReleasePendingCall, QueuedGetPipelinedCap, QueuedStreamingCall,
@@ -1932,6 +2093,8 @@ class RuntimeLoop {
                    QueuedRegisterTailCallTarget, QueuedRegisterFdTarget,
                    QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
                    QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
+                   QueuedNewTransportPipe, QueuedReleaseTransport,
+                   QueuedConnectTargetTransport,
                    QueuedListenLoopback,
                    QueuedAcceptLoopback, QueuedReleaseListener, QueuedNewClient,
                    QueuedNewClientStart, QueuedReleaseClient, QueuedClientBootstrap,
@@ -1939,7 +2102,7 @@ class RuntimeLoop {
                    QueuedClientSetFlowLimit,
                    QueuedNewServer, QueuedNewServerWithBootstrapFactory,
                    QueuedReleaseServer, QueuedServerListen, QueuedServerAccept,
-                   QueuedServerAcceptStart, QueuedServerAcceptFd,
+                   QueuedServerAcceptStart, QueuedServerAcceptFd, QueuedServerAcceptTransport,
                    QueuedServerDrain, QueuedServerDrainStart,
                    QueuedClientQueueSize, QueuedClientQueueCount,
                    QueuedClientOutgoingWaitNanos, QueuedTargetCount,
@@ -1947,7 +2110,7 @@ class RuntimeLoop {
                    QueuedPendingCallCount, QueuedAwaitRegisterPromise,
                    QueuedCancelRegisterPromise, QueuedReleaseRegisterPromise,
                    QueuedAwaitUnitPromise, QueuedCancelUnitPromise,
-                   QueuedReleaseUnitPromise>;
+                   QueuedReleaseUnitPromise, QueuedPump>;
 
   struct LoopbackPeer {
     kj::Own<kj::AsyncCapabilityStream> clientStream;
@@ -2020,9 +2183,17 @@ class RuntimeLoop {
   };
 
   struct PendingCall {
-    explicit PendingCall(capnp::RemotePromise<capnp::AnyPointer>&& promiseAndPipeline)
-        : promiseAndPipeline(kj::mv(promiseAndPipeline)) {}
-    capnp::RemotePromise<capnp::AnyPointer> promiseAndPipeline;
+    PendingCall(kj::Promise<capnp::Response<capnp::AnyPointer>>&& promise,
+                capnp::AnyPointer::Pipeline&& pipeline, kj::Own<kj::Canceler>&& canceler)
+        : promise(kj::mv(promise)), pipeline(kj::mv(pipeline)), canceler(kj::mv(canceler)) {}
+    PendingCall(PendingCall&&) = default;
+    PendingCall& operator=(PendingCall&&) = default;
+    PendingCall(const PendingCall&) = delete;
+    PendingCall& operator=(const PendingCall&) = delete;
+
+    kj::Promise<capnp::Response<capnp::AnyPointer>> promise;
+    capnp::AnyPointer::Pipeline pipeline;
+    kj::Own<kj::Canceler> canceler;
   };
 
   struct PendingRegisterPromise {
@@ -2398,10 +2569,12 @@ class RuntimeLoop {
       cleanupState->done = true;
     }
 
-    kj::Promise<LeanAdvancedHandlerAction> waitLeanActionTask(kj::Own<DeferredLeanTask>&& task) {
+    kj::Promise<LeanAdvancedHandlerAction> waitLeanActionTask(
+        const std::shared_ptr<DeferredLeanTaskState>& taskState) {
       constexpr uint8_t kLeanTaskStateFinished = 2;
-      if (lean_io_get_task_state_core(task->task) == kLeanTaskStateFinished) {
-        auto taskResult = lean_task_get(task->task);
+      if (lean_io_get_task_state_core(taskState->waitTask->task) == kLeanTaskStateFinished) {
+        auto taskResult = lean_task_get(taskState->waitTask->task);
+        taskState->completed.store(true, std::memory_order_release);
         auto taskResultTag = lean_obj_tag(taskResult);
         if (taskResultTag == 0) {
           throw std::runtime_error("Lean RPC advanced deferred handler task returned IO error");
@@ -2415,8 +2588,8 @@ class RuntimeLoop {
         lean_dec(actionObj);
         return action;
       }
-      return kj::evalLater([this, task = kj::mv(task)]() mutable {
-        return waitLeanActionTask(kj::mv(task));
+      return kj::yield().then([this, taskState]() mutable {
+        return waitLeanActionTask(taskState);
       });
     }
 
@@ -2497,7 +2670,19 @@ class RuntimeLoop {
         throwRemoteException(action.message, action.detailBytes);
       }
 
-      auto completion = waitLeanActionTask(kj::mv(action.deferredTask)).then(
+      auto deferredTaskState =
+          std::make_shared<DeferredLeanTaskState>(kj::mv(action.deferredWaitTask),
+                                                  kj::mv(action.deferredCancelTask),
+                                                  action.allowCancellation);
+      if (action.allowCancellation) {
+        if (runtime_.pendingDeferredCancelRequests_ > 0) {
+          --runtime_.pendingDeferredCancelRequests_;
+          deferredTaskState->requestCancellation();
+        } else {
+          runtime_.activeCancelableDeferredTasks_.push_back(deferredTaskState);
+        }
+      }
+      auto completion = waitLeanActionTask(deferredTaskState).then(
           [this, context = kj::mv(context), cleanupState, earlyAllowCancellation = action.allowCancellation](
               LeanAdvancedHandlerAction nextAction) mutable -> kj::Promise<void> {
             if (nextAction.allowCancellation && !earlyAllowCancellation) {
@@ -2516,7 +2701,7 @@ class RuntimeLoop {
           [this, cleanupState](kj::Exception&& e) -> kj::Promise<void> {
             cleanupRequestCaps(cleanupState, {});
             return kj::mv(e);
-          });
+          }).attach(std::move(deferredTaskState));
       return {kj::mv(completion), false, action.allowCancellation};
     }
 
@@ -2593,9 +2778,12 @@ class RuntimeLoop {
           }
           case 5: {
             action.kind = LeanAdvancedHandlerAction::Kind::AWAIT_TASK;
-            auto taskObj = lean_ctor_get(actionObj, 0);
-            lean_inc(taskObj);
-            action.deferredTask = kj::heap<DeferredLeanTask>(taskObj);
+            auto waitTaskObj = lean_ctor_get(actionObj, 0);
+            auto cancelTaskObj = lean_ctor_get(actionObj, 1);
+            lean_inc(waitTaskObj);
+            lean_inc(cancelTaskObj);
+            action.deferredWaitTask = kj::heap<DeferredLeanTask>(waitTaskObj);
+            action.deferredCancelTask = kj::heap<DeferredLeanTask>(cancelTaskObj);
             return action;
           }
           default:
@@ -2662,12 +2850,12 @@ class RuntimeLoop {
     return targetId;
   }
 
-  uint32_t addPendingCall(capnp::RemotePromise<capnp::AnyPointer>&& promiseAndPipeline) {
+  uint32_t addPendingCall(PendingCall&& pendingCall) {
     uint32_t pendingCallId = nextPendingCallId_++;
     while (pendingCalls_.find(pendingCallId) != pendingCalls_.end()) {
       pendingCallId = nextPendingCallId_++;
     }
-    pendingCalls_.emplace(pendingCallId, PendingCall(kj::mv(promiseAndPipeline)));
+    pendingCalls_.emplace(pendingCallId, std::move(pendingCall));
     return pendingCallId;
   }
 
@@ -2876,7 +3064,10 @@ class RuntimeLoop {
     auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
     setRequestPayload(requestBuilder, request, requestCaps);
     auto promiseAndPipeline = requestBuilder.send();
-    return addPendingCall(kj::mv(promiseAndPipeline));
+    auto canceler = kj::heap<kj::Canceler>();
+    auto pipeline = promiseAndPipeline.noop();
+    auto promise = canceler->wrap(kj::mv(promiseAndPipeline).dropPipeline());
+    return addPendingCall(PendingCall(kj::mv(promise), kj::mv(pipeline), kj::mv(canceler)));
   }
 
   RawCallResult awaitPendingCall(kj::WaitScope& waitScope, uint32_t pendingCallId) {
@@ -2884,9 +3075,10 @@ class RuntimeLoop {
     if (pendingIt == pendingCalls_.end()) {
       throw std::runtime_error("unknown pending RPC call id: " + std::to_string(pendingCallId));
     }
-    auto promiseAndPipeline = kj::mv(pendingIt->second.promiseAndPipeline);
+    auto pending = kj::mv(pendingIt->second);
     pendingCalls_.erase(pendingIt);
-    auto response = kj::mv(promiseAndPipeline).wait(waitScope);
+    pending.canceler->release();
+    auto response = kj::mv(pending.promise).wait(waitScope);
     return serializeResponse(response);
   }
 
@@ -2895,10 +3087,20 @@ class RuntimeLoop {
     if (pendingIt == pendingCalls_.end()) {
       throw std::runtime_error("unknown pending RPC call id: " + std::to_string(pendingCallId));
     }
-    // Keep canceled calls alive until shutdown to avoid destroying unresolved remote
-    // promises while running this operation on the runtime event loop thread.
-    releasedPendingCalls_.add(kj::mv(pendingIt->second.promiseAndPipeline));
+    cancelOneActiveDeferredTask();
+    pendingIt->second.canceler->cancel("Capnp.Rpc pending call released from Lean");
     pendingCalls_.erase(pendingIt);
+  }
+
+  void cancelOneActiveDeferredTask() {
+    while (!activeCancelableDeferredTasks_.empty()) {
+      auto taskState = activeCancelableDeferredTasks_.front().lock();
+      activeCancelableDeferredTasks_.pop_front();
+      if (taskState && taskState->requestCancellation()) {
+        return;
+      }
+    }
+    ++pendingDeferredCancelRequests_;
   }
 
   uint32_t getPipelinedCap(uint32_t pendingCallId, const std::vector<uint16_t>& pointerPath) {
@@ -2907,7 +3109,7 @@ class RuntimeLoop {
       throw std::runtime_error("unknown pending RPC call id: " + std::to_string(pendingCallId));
     }
 
-    auto pipeline = pendingIt->second.promiseAndPipeline.noop();
+    auto pipeline = pendingIt->second.pipeline.noop();
     for (auto pointerIndex : pointerPath) {
       pipeline = pipeline.getPointerField(pointerIndex);
     }
@@ -3250,6 +3452,56 @@ class RuntimeLoop {
     return serverId;
   }
 
+  uint32_t addTransport(kj::Own<kj::AsyncCapabilityStream>&& stream) {
+    uint32_t transportId = nextTransportId_++;
+    while (transports_.find(transportId) != transports_.end()) {
+      transportId = nextTransportId_++;
+    }
+    transports_.emplace(transportId, kj::mv(stream));
+    return transportId;
+  }
+
+  kj::Own<kj::AsyncCapabilityStream> takeTransport(uint32_t transportId) {
+    auto transportIt = transports_.find(transportId);
+    if (transportIt == transports_.end()) {
+      throw std::runtime_error("unknown RPC transport id: " + std::to_string(transportId));
+    }
+    auto stream = kj::mv(transportIt->second);
+    transports_.erase(transportIt);
+    return stream;
+  }
+
+  std::pair<uint32_t, uint32_t> newTransportPipe(kj::AsyncIoProvider& ioProvider) {
+    auto pipe = ioProvider.newCapabilityPipe();
+    auto firstId = addTransport(kj::mv(pipe.ends[0]));
+    auto secondId = addTransport(kj::mv(pipe.ends[1]));
+    return {firstId, secondId};
+  }
+
+  void releaseTransport(uint32_t transportId) {
+    auto erased = transports_.erase(transportId);
+    if (erased == 0) {
+      throw std::runtime_error("unknown RPC transport id: " + std::to_string(transportId));
+    }
+  }
+
+  uint32_t connectTargetPeer(kj::Own<NetworkClientPeer>&& peer) {
+    capnp::word scratch[4];
+    memset(&scratch, 0, sizeof(scratch));
+    capnp::MallocMessageBuilder message(scratch);
+    auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
+    vatId.setSide(peer->network->getSide() == capnp::rpc::twoparty::Side::CLIENT
+                      ? capnp::rpc::twoparty::Side::SERVER
+                      : capnp::rpc::twoparty::Side::CLIENT);
+    auto cap = peer->rpcSystem->bootstrap(vatId);
+
+    auto targetId = addTarget(kj::mv(cap));
+    networkClientPeers_.emplace(targetId, kj::mv(peer));
+    networkPeerOwnerByTarget_.emplace(targetId, targetId);
+    networkPeerOwnerRefCount_.emplace(targetId, 1);
+    return targetId;
+  }
+
   kj::Own<NetworkClientPeer> connectPeer(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
                                          const std::string& address, uint32_t portHint) {
     auto addr = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
@@ -3290,20 +3542,7 @@ class RuntimeLoop {
   uint32_t connectTarget(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
                          const std::string& address, uint32_t portHint) {
     auto peer = connectPeer(ioProvider, waitScope, address, portHint);
-    capnp::word scratch[4];
-    memset(&scratch, 0, sizeof(scratch));
-    capnp::MallocMessageBuilder message(scratch);
-    auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
-    vatId.setSide(peer->network->getSide() == capnp::rpc::twoparty::Side::CLIENT
-                      ? capnp::rpc::twoparty::Side::SERVER
-                      : capnp::rpc::twoparty::Side::CLIENT);
-    auto cap = peer->rpcSystem->bootstrap(vatId);
-
-    auto targetId = addTarget(kj::mv(cap));
-    networkClientPeers_.emplace(targetId, kj::mv(peer));
-    networkPeerOwnerByTarget_.emplace(targetId, targetId);
-    networkPeerOwnerRefCount_.emplace(targetId, 1);
-    return targetId;
+    return connectTargetPeer(kj::mv(peer));
   }
 
   uint32_t connectTargetStart(kj::AsyncIoProvider& ioProvider, std::string address,
@@ -3312,20 +3551,7 @@ class RuntimeLoop {
     auto promise = canceler->wrap(
         connectPeerStart(ioProvider, std::move(address), portHint)
             .then([this](kj::Own<NetworkClientPeer>&& peer) {
-              capnp::word scratch[4];
-              memset(&scratch, 0, sizeof(scratch));
-              capnp::MallocMessageBuilder message(scratch);
-              auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
-              vatId.setSide(peer->network->getSide() == capnp::rpc::twoparty::Side::CLIENT
-                                ? capnp::rpc::twoparty::Side::SERVER
-                                : capnp::rpc::twoparty::Side::CLIENT);
-              auto cap = peer->rpcSystem->bootstrap(vatId);
-
-              auto targetId = addTarget(kj::mv(cap));
-              networkClientPeers_.emplace(targetId, kj::mv(peer));
-              networkPeerOwnerByTarget_.emplace(targetId, targetId);
-              networkPeerOwnerRefCount_.emplace(targetId, 1);
-              return targetId;
+              return connectTargetPeer(kj::mv(peer));
             }));
     return addRegisterPromise(PendingRegisterPromise(kj::mv(promise), kj::mv(canceler)));
   }
@@ -3351,24 +3577,26 @@ class RuntimeLoop {
     auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
     applyTraceEncoder(*rpcSystem);
 
-    capnp::word scratch[4];
-    memset(&scratch, 0, sizeof(scratch));
-    capnp::MallocMessageBuilder message(scratch);
-    auto vatId = message.getRoot<capnp::rpc::twoparty::VatId>();
-    vatId.setSide(capnp::rpc::twoparty::Side::SERVER);
-    auto cap = rpcSystem->bootstrap(vatId);
+    auto peer = kj::heap<NetworkClientPeer>();
+    peer->stream = kj::mv(stream);
+    peer->network = kj::mv(network);
+    peer->rpcSystem = kj::mv(rpcSystem);
+    return connectTargetPeer(kj::mv(peer));
+#endif
+  }
+
+  uint32_t connectTargetTransport(uint32_t transportId) {
+    auto stream = takeTransport(transportId);
+    auto network = kj::heap<capnp::TwoPartyVatNetwork>(
+        *stream, maxFdsPerMessage_, capnp::rpc::twoparty::Side::CLIENT);
+    auto rpcSystem = kj::heap<TwoPartyRpcSystem>(capnp::makeRpcClient(*network));
+    applyTraceEncoder(*rpcSystem);
 
     auto peer = kj::heap<NetworkClientPeer>();
     peer->stream = kj::mv(stream);
     peer->network = kj::mv(network);
     peer->rpcSystem = kj::mv(rpcSystem);
-
-    auto targetId = addTarget(kj::mv(cap));
-    networkClientPeers_.emplace(targetId, kj::mv(peer));
-    networkPeerOwnerByTarget_.emplace(targetId, targetId);
-    networkPeerOwnerRefCount_.emplace(targetId, 1);
-    return targetId;
-#endif
+    return connectTargetPeer(kj::mv(peer));
   }
 
   uint32_t newClient(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
@@ -3672,6 +3900,16 @@ class RuntimeLoop {
     auto peer = makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection));
     serverIt->second->peers.add(kj::mv(peer));
 #endif
+  }
+
+  void serverAcceptTransport(uint32_t serverId, uint32_t transportId) {
+    auto serverIt = servers_.find(serverId);
+    if (serverIt == servers_.end()) {
+      throw std::runtime_error("unknown RPC server id: " + std::to_string(serverId));
+    }
+    auto connection = takeTransport(transportId);
+    auto peer = makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection));
+    serverIt->second->peers.add(kj::mv(peer));
   }
 
   void serverDrain(kj::WaitScope& waitScope, uint32_t serverId) {
@@ -4151,6 +4389,46 @@ class RuntimeLoop {
                 connect.completion,
                 "unknown exception in capnp_lean_rpc_runtime_connect_fd");
           }
+        } else if (std::holds_alternative<QueuedNewTransportPipe>(op)) {
+          auto pipe = std::get<QueuedNewTransportPipe>(std::move(op));
+          try {
+            auto ids = newTransportPipe(*io.provider);
+            completeRegisterPairSuccess(pipe.completion, ids.first, ids.second);
+          } catch (const kj::Exception& e) {
+            completeRegisterPairFailure(pipe.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterPairFailure(pipe.completion, e.what());
+          } catch (...) {
+            completeRegisterPairFailure(pipe.completion,
+                                        "unknown exception in capnp_lean_rpc_runtime_new_transport_pipe");
+          }
+        } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
+          auto release = std::get<QueuedReleaseTransport>(std::move(op));
+          try {
+            releaseTransport(release.transportId);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(release.completion,
+                                "unknown exception in capnp_lean_rpc_runtime_release_transport");
+          }
+        } else if (std::holds_alternative<QueuedConnectTargetTransport>(op)) {
+          auto connect = std::get<QueuedConnectTargetTransport>(std::move(op));
+          try {
+            auto targetId = connectTargetTransport(connect.transportId);
+            completeRegisterSuccess(connect.completion, targetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(connect.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(connect.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                connect.completion,
+                "unknown exception in capnp_lean_rpc_runtime_connect_transport");
+          }
         } else if (std::holds_alternative<QueuedListenLoopback>(op)) {
           auto listen = std::get<QueuedListenLoopback>(std::move(op));
           try {
@@ -4480,6 +4758,20 @@ class RuntimeLoop {
                 accept.completion,
                 "unknown exception in capnp_lean_rpc_runtime_server_accept_fd");
           }
+        } else if (std::holds_alternative<QueuedServerAcceptTransport>(op)) {
+          auto accept = std::get<QueuedServerAcceptTransport>(std::move(op));
+          try {
+            serverAcceptTransport(accept.serverId, accept.transportId);
+            completeUnitSuccess(accept.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(accept.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(accept.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                accept.completion,
+                "unknown exception in capnp_lean_rpc_runtime_server_accept_transport");
+          }
         } else if (std::holds_alternative<QueuedServerDrain>(op)) {
           auto drain = std::get<QueuedServerDrain>(std::move(op));
           try {
@@ -4577,7 +4869,7 @@ class RuntimeLoop {
                 promise.completion,
                 "unknown exception in capnp_lean_rpc_runtime_unit_promise_cancel");
           }
-        } else {
+        } else if (std::holds_alternative<QueuedReleaseUnitPromise>(op)) {
           auto promise = std::get<QueuedReleaseUnitPromise>(std::move(op));
           try {
             releaseUnitPromise(promise.promiseId);
@@ -4591,6 +4883,20 @@ class RuntimeLoop {
                 promise.completion,
                 "unknown exception in capnp_lean_rpc_runtime_unit_promise_release");
           }
+        } else {
+          auto pump = std::get<QueuedPump>(std::move(op));
+          try {
+            io.waitScope.poll(1);
+            completeUnitSuccess(pump.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(pump.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(pump.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                pump.completion,
+                "unknown exception in capnp_lean_rpc_runtime_pump");
+          }
         }
       }
 
@@ -4599,13 +4905,15 @@ class RuntimeLoop {
       listeners_.clear();
       loopbackPeers_.clear();
       networkClientPeers_.clear();
+      transports_.clear();
       loopbackPeerOwnerByTarget_.clear();
       loopbackPeerOwnerRefCount_.clear();
       networkPeerOwnerByTarget_.clear();
       networkPeerOwnerRefCount_.clear();
       networkServerPeers_.clear();
       pendingCalls_.clear();
-      releasedPendingCalls_.clear();
+      activeCancelableDeferredTasks_.clear();
+      pendingDeferredCancelRequests_ = 0;
       registerPromises_.clear();
       unitPromises_.clear();
       clients_.clear();
@@ -4708,6 +5016,12 @@ class RuntimeLoop {
         completeRegisterFailure(std::get<QueuedConnectTargetStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTargetFd>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTargetFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNewTransportPipe>(op)) {
+        completeRegisterPairFailure(std::get<QueuedNewTransportPipe>(op).completion, message);
+      } else if (std::holds_alternative<QueuedReleaseTransport>(op)) {
+        completeUnitFailure(std::get<QueuedReleaseTransport>(op).completion, message);
+      } else if (std::holds_alternative<QueuedConnectTargetTransport>(op)) {
+        completeRegisterFailure(std::get<QueuedConnectTargetTransport>(op).completion, message);
       } else if (std::holds_alternative<QueuedListenLoopback>(op)) {
         completeRegisterFailure(std::get<QueuedListenLoopback>(op).completion, message);
       } else if (std::holds_alternative<QueuedAcceptLoopback>(op)) {
@@ -4744,6 +5058,8 @@ class RuntimeLoop {
         completeRegisterFailure(std::get<QueuedServerAcceptStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerAcceptFd>(op)) {
         completeUnitFailure(std::get<QueuedServerAcceptFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedServerAcceptTransport>(op)) {
+        completeUnitFailure(std::get<QueuedServerAcceptTransport>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerDrain>(op)) {
         completeUnitFailure(std::get<QueuedServerDrain>(op).completion, message);
       } else if (std::holds_alternative<QueuedServerDrainStart>(op)) {
@@ -4774,8 +5090,10 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedAwaitUnitPromise>(op).completion, message);
       } else if (std::holds_alternative<QueuedCancelUnitPromise>(op)) {
         completeUnitFailure(std::get<QueuedCancelUnitPromise>(op).completion, message);
-      } else {
+      } else if (std::holds_alternative<QueuedReleaseUnitPromise>(op)) {
         completeUnitFailure(std::get<QueuedReleaseUnitPromise>(op).completion, message);
+      } else {
+        completeUnitFailure(std::get<QueuedPump>(op).completion, message);
       }
     }
   }
@@ -4797,13 +5115,15 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, kj::Own<kj::ConnectionReceiver>> listeners_;
   std::unordered_map<uint32_t, kj::Own<LoopbackPeer>> loopbackPeers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> networkClientPeers_;
+  std::unordered_map<uint32_t, kj::Own<kj::AsyncCapabilityStream>> transports_;
   std::unordered_map<uint32_t, uint32_t> loopbackPeerOwnerByTarget_;
   std::unordered_map<uint32_t, uint32_t> loopbackPeerOwnerRefCount_;
   std::unordered_map<uint32_t, uint32_t> networkPeerOwnerByTarget_;
   std::unordered_map<uint32_t, uint32_t> networkPeerOwnerRefCount_;
   kj::Vector<kj::Own<NetworkServerPeer>> networkServerPeers_;
   std::unordered_map<uint32_t, PendingCall> pendingCalls_;
-  kj::Vector<capnp::RemotePromise<capnp::AnyPointer>> releasedPendingCalls_;
+  std::deque<std::weak_ptr<DeferredLeanTaskState>> activeCancelableDeferredTasks_;
+  uint64_t pendingDeferredCancelRequests_ = 0;
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
@@ -4812,6 +5132,7 @@ class RuntimeLoop {
   lean_object* traceEncoderHandler_ = nullptr;
   uint32_t nextTargetId_ = 1;
   uint32_t nextListenerId_ = 1;
+  uint32_t nextTransportId_ = 1;
   uint32_t nextClientId_ = 1;
   uint32_t nextServerId_ = 1;
   uint32_t nextPendingCallId_ = 1;
@@ -5225,6 +5546,33 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_unit_promise_release(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pump(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueuePump();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pump");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_streaming_call_with_caps(
     uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
@@ -5591,6 +5939,88 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_connect_fd(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_connect_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new_transport_pipe(uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNewTransportPipe();
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      lean_object* resultTuple = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(resultTuple, 0, lean_box_uint32(completion->first));
+      lean_ctor_set(resultTuple, 1, lean_box_uint32(completion->second));
+      return lean_io_result_mk_ok(resultTuple);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_new_transport_pipe");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release_transport(
+    uint64_t runtimeId, uint32_t transportId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueReleaseTransport(transportId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_release_transport");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_connect_transport(
+    uint64_t runtimeId, uint32_t transportId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueConnectTargetTransport(transportId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_connect_transport");
   }
 }
 
@@ -6266,6 +6696,34 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_accept_fd(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_server_accept_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_server_accept_transport(
+    uint64_t runtimeId, uint32_t serverId, uint32_t transportId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueServerAcceptTransport(serverId, transportId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_server_accept_transport");
   }
 }
 

@@ -21,6 +21,23 @@ def mkNullPayload : Capnp.Rpc.Payload := Id.run do
     ).run (Capnp.initMessageBuilder 16)
   { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
 
+def mkUInt64Payload (n : UInt64) : Capnp.Rpc.Payload := Id.run do
+  let (_, builder) :=
+    (do
+      let root ← Capnp.getRootPointer
+      let s ← Capnp.initStructPointer root 1 0
+      Capnp.setUInt64 s 0 n
+    ).run (Capnp.initMessageBuilder 16)
+  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
+
+def readUInt64Payload (payload : Capnp.Rpc.Payload) : IO UInt64 := do
+  let root := Capnp.getRoot payload.msg
+  match Capnp.readStructChecked root with
+  | .ok s =>
+      pure (Capnp.getUInt64 s 0)
+  | .error err =>
+      throw (IO.userError s!"invalid uint64 RPC payload: {err}")
+
 def mkUnixTestAddress : IO (String × String) := do
   let n ← IO.rand 0 1000000000
   let path := s!"/tmp/capnp-lean4-rpc-{n}.sock"
@@ -1566,56 +1583,95 @@ def testRuntimeTargetWhenResolvedPipeline : IO Unit := do
       pure ()
 
 @[test]
-def testRuntimePipelinedCallBeforeResolveOrdering : IO Unit := do
-  let payload : Capnp.Rpc.Payload := mkNullPayload
-  let (address, socketPath) ← mkUnixTestAddress
+def testRuntimeTwoHopPipelinedResolveOrdering : IO Unit := do
+  let (frontAddress, frontSocketPath) ← mkUnixTestAddress
+  let (backAddress, backSocketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
-  try
+  let cleanupSocket (path : String) : IO Unit := do
     try
-      IO.FS.removeFile socketPath
+      IO.FS.removeFile path
     catch _ =>
       pure ()
+  let step {α : Type} (label : String) (action : IO α) : IO α := do
+    try
+      action
+    catch err =>
+      throw (IO.userError s!"{label}: {err}")
+  try
+    cleanupSocket frontSocketPath
+    cleanupSocket backSocketPath
 
-    let sink ← runtime.registerEchoTarget
-    let returnPayload := mkCapabilityPayload sink
-    let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => do
-      IO.sleep (UInt32.ofNat 50)
-      pure returnPayload)
-    let server ← runtime.newServer bootstrap
-    let listener ← server.listen address
-    let client ← runtime.newClient address
-    server.accept listener
+    let nextExpected ← IO.mkRef (UInt64.ofNat 0)
+    let callOrder ← step "register call-order target" <| runtime.registerHandlerTarget (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in call-order target: {method.interfaceId}/{method.methodId}")
+      let expected ← readUInt64Payload req
+      let current ← nextExpected.get
+      if expected != current then
+        throw (IO.userError s!"call-order mismatch: expected {current}, got {expected}")
+      nextExpected.set (current + (UInt64.ofNat 1))
+      pure (mkUInt64Payload current))
 
-    let remoteTarget ← client.bootstrap
-    let pending ← runtime.startCall remoteTarget Echo.fooMethod payload
-    let pipelinedCap ← pending.getPipelinedCap
-    let pipelinedCallTask ← IO.asTask (Capnp.Rpc.RuntimeM.run runtime do
-      Echo.callFooM pipelinedCap payload)
+    let backBootstrap ← step "register back bootstrap" <| runtime.registerEchoTarget
+    let backServer ← step "new back server" <| runtime.newServer backBootstrap
+    let backListener ← step "listen back server" <| backServer.listen backAddress
 
-    IO.sleep (UInt32.ofNat 10)
-    let response ← pending.await
-    assertEqual response.capTable.caps.size 1
-    runtime.releaseCapTable response.capTable
+    let proxyBootstrap ← step "connect proxy bootstrap to back" <| runtime.connect backAddress
+    step "accept back server connection" <| backServer.accept backListener
 
-    match pipelinedCallTask.get with
-    | .ok pipelinedResponse =>
-        assertEqual pipelinedResponse.capTable.caps.size 0
-    | .error err =>
-        throw err
+    let frontServer ← step "new front server" <| runtime.newServer proxyBootstrap
+    let frontListener ← step "listen front server" <| frontServer.listen frontAddress
+    let frontClient ← step "new front client" <| runtime.newClient frontAddress
+    step "accept front server connection" <| frontServer.accept frontListener
 
-    runtime.releaseTarget pipelinedCap
-    runtime.releaseTarget remoteTarget
-    client.release
-    server.release
-    runtime.releaseListener listener
-    runtime.releaseTarget bootstrap
-    runtime.releaseTarget sink
+    let remoteBootstrap ← step "bootstrap front client" <| frontClient.bootstrap
+    let pendingEcho ← step "start echo call through front" <|
+      runtime.startCall remoteBootstrap Echo.fooMethod (mkCapabilityPayload callOrder)
+    let pipelineCap ← step "get pipelined cap" <| pendingEcho.getPipelinedCap
+
+    let call0Pending ← step "start call0" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
+    let call1Pending ← step "start call1" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
+
+    let earlyResponse ← step "early bar call" <| Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM remoteBootstrap mkNullPayload
+    assertEqual earlyResponse.capTable.caps.size 0
+
+    let call2Pending ← step "start call2" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 2))
+
+    let echoResponse ← step "await echo call" <| pendingEcho.await
+    assertEqual echoResponse.capTable.caps.size 1
+    let resolvedCap? := Capnp.readCapabilityFromTable echoResponse.capTable (Capnp.getRoot echoResponse.msg)
+    assertEqual resolvedCap?.isSome true
+
+    let call3Pending ← step "start call3" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 3))
+    let call4Pending ← step "start call4" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 4))
+    let call5Pending ← step "start call5" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 5))
+
+    let call0Response ← step "await call0" <| call0Pending.await
+    let call1Response ← step "await call1" <| call1Pending.await
+    let call2Response ← step "await call2" <| call2Pending.await
+    let call3Response ← step "await call3" <| call3Pending.await
+    let call4Response ← step "await call4" <| call4Pending.await
+    let call5Response ← step "await call5" <| call5Pending.await
+
+    assertEqual (← readUInt64Payload call0Response) (UInt64.ofNat 0)
+    assertEqual (← readUInt64Payload call1Response) (UInt64.ofNat 1)
+    assertEqual (← readUInt64Payload call2Response) (UInt64.ofNat 2)
+    assertEqual (← readUInt64Payload call3Response) (UInt64.ofNat 3)
+    assertEqual (← readUInt64Payload call4Response) (UInt64.ofNat 4)
+    assertEqual (← readUInt64Payload call5Response) (UInt64.ofNat 5)
+    assertEqual (← nextExpected.get) (UInt64.ofNat 6)
   finally
     runtime.shutdown
-    try
-      IO.FS.removeFile socketPath
-    catch _ =>
-      pure ()
+    cleanupSocket frontSocketPath
+    cleanupSocket backSocketPath
 
 @[test]
 def testRuntimePendingCallRelease : IO Unit := do
@@ -1958,23 +2014,49 @@ def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO 
 
 @[test]
 def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit := do
+  let canceled ← IO.mkRef false
+  let entered ← IO.mkRef false
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let sink ← runtime.registerEchoTarget
     let handler ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      entered.set true
       let deferred ← Capnp.Rpc.Advanced.defer do
-        IO.sleep (UInt32.ofNat 200)
-        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+        let rec waitForCancel (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+          if (← IO.checkCanceled) then
+            canceled.set true
+            pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+          else
+            match attempts with
+            | 0 =>
+                pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+            | attempts + 1 =>
+                IO.sleep (UInt32.ofNat 5)
+                waitForCancel attempts
+        waitForCancel 10000
       pure (.control { releaseParams := true, allowCancellation := true } deferred))
+    let loopback ← runtime.registerLoopbackTarget handler
 
     let baselineTargets := (← runtime.targetCount)
-    assertEqual baselineTargets (UInt64.ofNat 2)
+    assertEqual baselineTargets (UInt64.ofNat 3)
 
-    let pending ← runtime.startCall handler Echo.fooMethod (mkCapabilityPayload sink)
-    IO.sleep (UInt32.ofNat 10)
+    let pending ← runtime.startCall loopback Echo.fooMethod (mkCapabilityPayload sink)
+    let rec waitForEntered (attempts : Nat) : IO Unit := do
+      runtime.pump
+      if (← entered.get) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError "deferred handler was not entered")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForEntered attempts
+    waitForEntered 500
     pending.release
 
     let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
       let current ← runtime.targetCount
       if current == baselineTargets then
         pure ()
@@ -1986,11 +2068,22 @@ def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit 
             IO.sleep (UInt32.ofNat 10)
             waitForTargetCount attempts
 
-    waitForTargetCount 50
-    -- Deferred handler tasks are currently not canceled; let the task finish
-    -- before runtime teardown to avoid cross-test interference.
-    IO.sleep (UInt32.ofNat 250)
+    let rec waitForCanceled (attempts : Nat) : IO Unit := do
+      runtime.pump
+      if (← canceled.get) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError "deferred handler task was not canceled")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForCanceled attempts
 
+    waitForTargetCount 200
+    waitForCanceled 200
+
+    runtime.releaseTarget loopback
     runtime.releaseTarget handler
     runtime.releaseTarget sink
     assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
@@ -2122,6 +2215,25 @@ def testRuntimeConnectFdAndServerAcceptFd : IO Unit := do
         pure ()
 
 @[test]
+def testRuntimeConnectTransportAndServerAcceptTransport : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let (clientTransport, serverTransport) ← runtime.newTransportPipe
+    server.acceptTransport serverTransport
+    let target ← runtime.connectTransport clientTransport
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget target
+    server.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeInitWithFdLimit : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.initWithFdLimit (UInt32.ofNat 4)
@@ -2162,7 +2274,6 @@ def testRuntimeFdPassingOverNetwork : IO Unit := do
         IO.FS.removeFile socketPath
       catch _ =>
         pure ()
-
       let fdTarget ← runtime.registerFdTarget (UInt32.ofNat 0)
       let returnPayload := mkCapabilityPayload fdTarget
       let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => pure returnPayload)
@@ -2195,3 +2306,85 @@ def testRuntimeFdPassingOverNetwork : IO Unit := do
         IO.FS.removeFile socketPath
       catch _ =>
         pure ()
+
+@[test]
+def testRuntimeSharedAsyncHelpersForRegisterAndUnitPromises : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let payload : Capnp.Rpc.Payload := mkNullPayload
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.Rpc.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let bootstrap ← runtime.registerEchoTarget
+      let server ← runtime.newServer bootstrap
+      let listener ← server.listen address
+      let acceptPromise ← server.acceptStart listener
+      let connectPromise ← runtime.connectStart address
+
+      let connectTask ← connectPromise.awaitAsTask
+      let target ←
+        match (← IO.wait connectTask) with
+        | .ok connectedTarget => pure connectedTarget
+        | .error err =>
+            throw (IO.userError s!"register promise awaitAsTask failed: {err}")
+
+      let acceptIoPromise ← acceptPromise.toIOPromise
+      let acceptResult? ← IO.wait acceptIoPromise.result?
+      match acceptResult? with
+      | some (.ok ()) => pure ()
+      | some (.error err) =>
+          throw (IO.userError s!"unit promise toIOPromise failed: {err}")
+      | none =>
+          throw (IO.userError "unit promise toIOPromise dropped without a result")
+
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      assertEqual response.capTable.caps.size 0
+
+      runtime.releaseTarget target
+      runtime.releaseListener listener
+      server.release
+      runtime.releaseTarget bootstrap
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testRuntimePendingCallSharedAsyncHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+
+    let pending ← runtime.startCall target Echo.fooMethod payload
+    let pendingTask ← pending.awaitAsTask
+    let response ←
+      match (← IO.wait pendingTask) with
+      | .ok rsp => pure rsp
+      | .error err =>
+          throw (IO.userError s!"pending call awaitAsTask failed: {err}")
+    assertEqual response.capTable.caps.size 0
+
+    let pending2 ← runtime.startCall target Echo.fooMethod payload
+    let pendingIoPromise ← pending2.toIOPromise
+    let pendingIoResult? ← IO.wait pendingIoPromise.result?
+    match pendingIoResult? with
+    | some (.ok rsp) =>
+        assertEqual rsp.capTable.caps.size 0
+    | some (.error err) =>
+        throw (IO.userError s!"pending call toIOPromise failed: {err}")
+    | none =>
+        throw (IO.userError "pending call toIOPromise dropped without a result")
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
