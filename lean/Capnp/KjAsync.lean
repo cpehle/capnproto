@@ -1,3 +1,4 @@
+import Capnp.Async
 import Init
 import Init.System.Promise
 
@@ -53,14 +54,32 @@ structure DatagramReceivePromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure HttpHeader where
+  name : String
+  value : String
+  deriving Inhabited, BEq, Repr
+
 structure HttpResponse where
   status : UInt32
+  body : ByteArray
+  deriving Inhabited, BEq
+
+structure HttpResponseEx where
+  status : UInt32
+  statusText : String
+  headers : Array HttpHeader
   body : ByteArray
   deriving Inhabited, BEq
 
 structure HttpResponsePromiseRef where
   runtime : Runtime
   handle : UInt32
+  deriving Inhabited, BEq, Repr
+
+structure HttpServer where
+  runtime : Runtime
+  handle : UInt32
+  boundPort : UInt32
   deriving Inhabited, BEq, Repr
 
 structure WebSocket where
@@ -285,6 +304,42 @@ opaque ffiRuntimeHttpResponsePromiseCancelImpl (runtime : UInt64) (promise : UIn
 @[extern "capnp_lean_kj_async_runtime_http_response_promise_release"]
 opaque ffiRuntimeHttpResponsePromiseReleaseImpl (runtime : UInt64) (promise : UInt32) : IO Unit
 
+@[extern "capnp_lean_kj_async_runtime_http_request_with_headers"]
+opaque ffiRuntimeHttpRequestWithHeadersImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) :
+    IO (UInt32 × String × ByteArray × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_request_start_with_headers"]
+opaque ffiRuntimeHttpRequestStartWithHeadersImpl
+    (runtime : UInt64) (method : UInt32) (address : @& String) (portHint : UInt32)
+    (path : @& String) (requestHeaders : @& ByteArray) (body : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_http_response_promise_await_with_headers"]
+opaque ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl
+    (runtime : UInt64) (promise : UInt32) : IO (UInt32 × String × ByteArray × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_server_listen"]
+opaque ffiRuntimeHttpServerListenImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_kj_async_runtime_http_server_release"]
+opaque ffiRuntimeHttpServerReleaseImpl (runtime : UInt64) (server : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_server_poll_request"]
+opaque ffiRuntimeHttpServerPollRequestImpl
+    (runtime : UInt64) (server : UInt32) : IO (Bool × ByteArray)
+
+@[extern "capnp_lean_kj_async_runtime_http_server_respond"]
+opaque ffiRuntimeHttpServerRespondImpl
+    (runtime : UInt64) (server : UInt32) (requestId : UInt32) (status : UInt32)
+    (statusText : @& String) (responseHeaders : @& ByteArray) (body : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_http_server_respond_websocket"]
+opaque ffiRuntimeHttpServerRespondWebSocketImpl
+    (runtime : UInt64) (server : UInt32) (requestId : UInt32) (responseHeaders : @& ByteArray) :
+    IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_websocket_connect"]
 opaque ffiRuntimeWebSocketConnectImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String) :
@@ -294,6 +349,16 @@ opaque ffiRuntimeWebSocketConnectImpl
 opaque ffiRuntimeWebSocketConnectStartImpl
     (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String) :
     IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_websocket_connect_with_headers"]
+opaque ffiRuntimeWebSocketConnectWithHeadersImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
+    (requestHeaders : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_websocket_connect_start_with_headers"]
+opaque ffiRuntimeWebSocketConnectStartWithHeadersImpl
+    (runtime : UInt64) (address : @& String) (portHint : UInt32) (path : @& String)
+    (requestHeaders : @& ByteArray) : IO UInt32
 
 @[extern "capnp_lean_kj_async_runtime_websocket_promise_await"]
 opaque ffiRuntimeWebSocketPromiseAwaitImpl (runtime : UInt64) (promise : UInt32) : IO UInt32
@@ -361,15 +426,83 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 @[inline] private def millisToNanos (millis : UInt32) : UInt64 :=
   millis.toUInt64 * (1000000 : UInt64)
 
-@[inline] private def uint32ToLeBytes (value : UInt32) : ByteArray :=
-  let b0 := value.toUInt8
-  let b1 := (value >>> 8).toUInt8
-  let b2 := (value >>> 16).toUInt8
-  let b3 := (value >>> 24).toUInt8
-  ByteArray.empty.push b0 |>.push b1 |>.push b2 |>.push b3
-
 @[inline] private def encodeUInt32Array (values : Array UInt32) : ByteArray :=
-  values.foldl (fun out value => out ++ uint32ToLeBytes value) ByteArray.empty
+  Id.run do
+    let mut out := ByteArray.emptyWithCapacity (values.size * 4)
+    for value in values do
+      out := out.push value.toUInt8
+      out := out.push ((value >>> 8).toUInt8)
+      out := out.push ((value >>> 16).toUInt8)
+      out := out.push ((value >>> 24).toUInt8)
+    pure out
+
+@[inline] private def appendUInt32Le (bytes : ByteArray) (value : UInt32) : ByteArray :=
+  bytes.push value.toUInt8
+    |>.push ((value >>> 8).toUInt8)
+    |>.push ((value >>> 16).toUInt8)
+    |>.push ((value >>> 24).toUInt8)
+
+@[inline] private def appendBytes (dst src : ByteArray) : ByteArray :=
+  Id.run do
+    let mut out := dst
+    for b in src do
+      out := out.push b
+    pure out
+
+@[inline] private def decodeUInt32Le? (bytes : ByteArray) (offset : Nat) :
+    Option (UInt32 × Nat) :=
+  if offset + 3 < bytes.size then
+    let b0 := UInt32.ofNat (bytes.get! offset).toNat
+    let b1 := (UInt32.ofNat (bytes.get! (offset + 1)).toNat) <<< 8
+    let b2 := (UInt32.ofNat (bytes.get! (offset + 2)).toNat) <<< 16
+    let b3 := (UInt32.ofNat (bytes.get! (offset + 3)).toNat) <<< 24
+    some (b0 ||| b1 ||| b2 ||| b3, offset + 4)
+  else
+    none
+
+@[inline] private def decodeUtf8At (bytes : ByteArray) (offset length : Nat) : IO String := do
+  if offset + length ≤ bytes.size then
+    let slice := bytes.extract offset (offset + length)
+    match String.fromUTF8? slice with
+    | some s => pure s
+    | none => throw (IO.userError "invalid UTF-8 in KJ async payload")
+  else
+    throw (IO.userError "truncated KJ async payload")
+
+@[inline] private def encodeHeaders (headers : Array HttpHeader) : ByteArray :=
+  Id.run do
+    let mut out := ByteArray.emptyWithCapacity 16
+    out := appendUInt32Le out (UInt32.ofNat headers.size)
+    for header in headers do
+      let nameBytes := header.name.toUTF8
+      let valueBytes := header.value.toUTF8
+      out := appendUInt32Le out (UInt32.ofNat nameBytes.size)
+      out := appendBytes out nameBytes
+      out := appendUInt32Le out (UInt32.ofNat valueBytes.size)
+      out := appendBytes out valueBytes
+    pure out
+
+@[inline] private def decodeHeaders (bytes : ByteArray) : IO (Array HttpHeader) := do
+  let some (count, offset0) := decodeUInt32Le? bytes 0
+    | throw (IO.userError "invalid header list payload")
+  let mut offset := offset0
+  let mut headers : Array HttpHeader := #[]
+  for _ in [0:count.toNat] do
+    let some (nameLen, nextOffset) := decodeUInt32Le? bytes offset
+      | throw (IO.userError "invalid header list payload")
+    let nameLenNat := nameLen.toNat
+    let name ← decodeUtf8At bytes nextOffset nameLenNat
+    offset := nextOffset + nameLenNat
+    let some (valueLen, nextOffset2) := decodeUInt32Le? bytes offset
+      | throw (IO.userError "invalid header list payload")
+    let valueLenNat := valueLen.toNat
+    let value ← decodeUtf8At bytes nextOffset2 valueLenNat
+    offset := nextOffset2 + valueLenNat
+    headers := headers.push { name := name, value := value }
+  if offset == bytes.size then
+    pure headers
+  else
+    throw (IO.userError "invalid header list payload: trailing bytes")
 
 inductive HttpMethod where
   | get
@@ -393,6 +526,26 @@ inductive HttpMethod where
   | .options => UInt32.ofNat 6
   | .trace => UInt32.ofNat 7
 
+@[inline] private def httpMethodFromTag (tag : UInt32) : IO HttpMethod := do
+  if tag == UInt32.ofNat 0 then
+    return .get
+  else if tag == UInt32.ofNat 1 then
+    return .head
+  else if tag == UInt32.ofNat 2 then
+    return .post
+  else if tag == UInt32.ofNat 3 then
+    return .put
+  else if tag == UInt32.ofNat 4 then
+    return .delete
+  else if tag == UInt32.ofNat 5 then
+    return .patch
+  else if tag == UInt32.ofNat 6 then
+    return .options
+  else if tag == UInt32.ofNat 7 then
+    return .trace
+  else
+    throw (IO.userError s!"unknown HTTP method tag: {tag.toNat}")
+
 @[inline] private def decodeWebSocketMessage
     (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : ByteArray) :
     IO WebSocketMessage := do
@@ -404,6 +557,75 @@ inductive HttpMethod where
     return .close closeCode.toUInt16 text
   else
     throw (IO.userError s!"unknown websocket message tag: {tag.toNat}")
+
+structure HttpServerRequest where
+  requestId : UInt32
+  method : HttpMethod
+  webSocketRequested : Bool
+  path : String
+  headers : Array HttpHeader
+  body : ByteArray
+  deriving Inhabited, BEq
+
+structure Endpoint where
+  address : String
+  portHint : UInt32 := 0
+  deriving Inhabited, BEq, Repr
+
+namespace Endpoint
+
+@[inline] def tcp (address : String) (port : UInt32) : Endpoint :=
+  { address := address, portHint := port }
+
+@[inline] def unix (path : String) : Endpoint :=
+  { address := s!"unix:{path}", portHint := 0 }
+
+end Endpoint
+
+structure HttpEndpoint where
+  host : String
+  port : UInt32 := 0
+  deriving Inhabited, BEq, Repr
+
+@[inline] private def decodeHttpServerRequest (bytes : ByteArray) : IO HttpServerRequest := do
+  let some (requestId, offset1) := decodeUInt32Le? bytes 0
+    | throw (IO.userError "invalid HTTP server request payload")
+  let some (methodTag, offset2) := decodeUInt32Le? bytes offset1
+    | throw (IO.userError "invalid HTTP server request payload")
+  let some (webSocketTag, offset3) := decodeUInt32Le? bytes offset2
+    | throw (IO.userError "invalid HTTP server request payload")
+  let some (pathLen, offset4) := decodeUInt32Le? bytes offset3
+    | throw (IO.userError "invalid HTTP server request payload")
+  let pathLenNat := pathLen.toNat
+  let path ← decodeUtf8At bytes offset4 pathLenNat
+  let offset5 := offset4 + pathLenNat
+  let some (headersLen, offset6) := decodeUInt32Le? bytes offset5
+    | throw (IO.userError "invalid HTTP server request payload")
+  let headersLenNat := headersLen.toNat
+  if offset6 + headersLenNat ≤ bytes.size then
+    let headerBytes := bytes.extract offset6 (offset6 + headersLenNat)
+    let headers ← decodeHeaders headerBytes
+    let offset7 := offset6 + headersLenNat
+    let some (bodyLen, offset8) := decodeUInt32Le? bytes offset7
+      | throw (IO.userError "invalid HTTP server request payload")
+    let bodyLenNat := bodyLen.toNat
+    if offset8 + bodyLenNat ≤ bytes.size then
+      let body := bytes.extract offset8 (offset8 + bodyLenNat)
+      if offset8 + bodyLenNat == bytes.size then
+        return {
+          requestId := requestId
+          method := (← httpMethodFromTag methodTag)
+          webSocketRequested := (webSocketTag != UInt32.ofNat 0)
+          path := path
+          headers := headers
+          body := body
+        }
+      else
+        throw (IO.userError "invalid HTTP server request payload: trailing bytes")
+    else
+      throw (IO.userError "invalid HTTP server request payload")
+  else
+    throw (IO.userError "invalid HTTP server request payload")
 
 namespace Runtime
 
@@ -665,6 +887,19 @@ namespace Runtime
     ffiRuntimeHttpRequestImpl runtime.handle (httpMethodToTag method) address portHint path body
   return { status := status, body := responseBody }
 
+@[inline] def httpRequestWithHeaders (runtime : Runtime) (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersImpl runtime.handle (httpMethodToTag method) address
+      portHint path (encodeHeaders requestHeaders) body
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
+
 @[inline] def httpRequestStart (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     IO HttpResponsePromiseRef := do
@@ -674,11 +909,33 @@ namespace Runtime
       runtime.handle (httpMethodToTag method) address portHint path body)
   }
 
+@[inline] def httpRequestStartWithHeaders (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO HttpResponsePromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersImpl
+      runtime.handle (httpMethodToTag method) address portHint path
+      (encodeHeaders requestHeaders) body)
+  }
+
 @[inline] def httpResponsePromiseAwait (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponse := do
   let (status, responseBody) ←
     ffiRuntimeHttpResponsePromiseAwaitImpl runtime.handle promise.handle
   return { status := status, body := responseBody }
+
+@[inline] def httpResponsePromiseAwaitWithHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl runtime.handle promise.handle
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
 
 @[inline] def httpResponsePromiseCancel (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO Unit :=
@@ -696,18 +953,68 @@ namespace Runtime
     (body : ByteArray) (portHint : UInt32 := 0) : IO HttpResponse :=
   runtime.httpRequest .post address path body portHint
 
+@[inline] def httpServerListen (runtime : Runtime) (address : String)
+    (portHint : UInt32 := 0) : IO HttpServer := do
+  let (serverId, boundPort) ← ffiRuntimeHttpServerListenImpl runtime.handle address portHint
+  return { runtime := runtime, handle := serverId, boundPort := boundPort }
+
+@[inline] def httpServerRelease (runtime : Runtime) (server : HttpServer) : IO Unit :=
+  ffiRuntimeHttpServerReleaseImpl runtime.handle server.handle
+
+@[inline] def httpServerPollRequest? (runtime : Runtime) (server : HttpServer) :
+    IO (Option HttpServerRequest) := do
+  let (hasRequest, payload) ← ffiRuntimeHttpServerPollRequestImpl runtime.handle server.handle
+  if hasRequest then
+    return some (← decodeHttpServerRequest payload)
+  else
+    return none
+
+@[inline] def httpServerRespond (runtime : Runtime) (server : HttpServer) (requestId : UInt32)
+    (status : UInt32) (statusText : String) (responseHeaders : Array HttpHeader := #[])
+    (body : ByteArray := ByteArray.empty) : IO Unit :=
+  ffiRuntimeHttpServerRespondImpl runtime.handle server.handle requestId status statusText
+    (encodeHeaders responseHeaders) body
+
+@[inline] def httpServerRespondWebSocket (runtime : Runtime) (server : HttpServer)
+    (requestId : UInt32) (responseHeaders : Array HttpHeader := #[]) : IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpServerRespondWebSocketImpl runtime.handle server.handle requestId
+      (encodeHeaders responseHeaders))
+  }
+
 @[inline] def webSocketConnect (runtime : Runtime) (address : String)
     (path : String) (portHint : UInt32 := 0) : IO WebSocket := do
   return {
     runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectImpl runtime.handle address portHint path)
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersImpl runtime.handle address portHint path
+      (encodeHeaders #[]))
   }
 
 @[inline] def webSocketConnectStart (runtime : Runtime) (address : String)
     (path : String) (portHint : UInt32 := 0) : IO WebSocketPromiseRef := do
   return {
     runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectStartImpl runtime.handle address portHint path)
+    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
+      runtime.handle address portHint path (encodeHeaders #[]))
+  }
+
+@[inline] def webSocketConnectWithHeaders (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersImpl runtime.handle address portHint path
+      (encodeHeaders requestHeaders))
+  }
+
+@[inline] def webSocketConnectStartWithHeaders (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO WebSocketPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
+      runtime.handle address portHint path (encodeHeaders requestHeaders))
   }
 
 @[inline] def webSocketPromiseAwait (runtime : Runtime)
@@ -803,6 +1110,38 @@ namespace Runtime
     { runtime := runtime, handle := second }
   )
 
+@[inline] def listenEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO Listener :=
+  runtime.listen endpoint.address endpoint.portHint
+
+@[inline] def connectEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO Connection :=
+  runtime.connect endpoint.address endpoint.portHint
+
+@[inline] def connectStartEndpoint (runtime : Runtime) (endpoint : Endpoint) :
+    IO ConnectionPromiseRef :=
+  runtime.connectStart endpoint.address endpoint.portHint
+
+@[inline] def httpRequestEndpoint (runtime : Runtime) (method : HttpMethod)
+    (endpoint : HttpEndpoint) (path : String) (body : ByteArray := ByteArray.empty) :
+    IO HttpResponse :=
+  runtime.httpRequest method endpoint.host path body endpoint.port
+
+@[inline] def httpRequestWithHeadersEndpoint (runtime : Runtime) (method : HttpMethod)
+    (endpoint : HttpEndpoint) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) : IO HttpResponseEx :=
+  runtime.httpRequestWithHeaders method endpoint.host path requestHeaders body endpoint.port
+
+@[inline] def webSocketConnectEndpoint (runtime : Runtime) (endpoint : HttpEndpoint)
+    (path : String) : IO WebSocket :=
+  runtime.webSocketConnect endpoint.host path endpoint.port
+
+@[inline] def webSocketConnectWithHeadersEndpoint (runtime : Runtime) (endpoint : HttpEndpoint)
+    (path : String) (requestHeaders : Array HttpHeader) : IO WebSocket :=
+  runtime.webSocketConnectWithHeaders endpoint.host path requestHeaders endpoint.port
+
+@[inline] def httpServerListenEndpoint (runtime : Runtime) (endpoint : Endpoint) :
+    IO HttpServer :=
+  runtime.httpServerListen endpoint.address endpoint.portHint
+
 def withRuntime (action : Runtime -> IO α) : IO α := do
   let runtime ← init
   try
@@ -826,20 +1165,20 @@ namespace PromiseRef
 @[inline] def awaitAndRelease (promise : PromiseRef) : IO Unit := do
   promise.await
 
+instance : Capnp.Async.Awaitable PromiseRef Unit where
+  await := PromiseRef.await
+
+instance : Capnp.Async.Cancelable PromiseRef where
+  cancel := PromiseRef.cancel
+
+instance : Capnp.Async.Releasable PromiseRef where
+  release := PromiseRef.release
+
 @[inline] def awaitAsTask (promise : PromiseRef) : IO (Task (Except IO.Error Unit)) :=
-  IO.asTask promise.awaitAndRelease
+  Capnp.Async.awaitAsTask promise
 
 def toIOPromise (promise : PromiseRef) : IO (IO.Promise (Except String Unit)) := do
-  let out ← IO.Promise.new
-  let _task ← IO.asTask do
-    let result ←
-      try
-        promise.await
-        pure (Except.ok ())
-      catch e =>
-        pure (Except.error e.toString)
-    out.resolve result
-  return out
+  Capnp.Async.toIOPromise promise
 
 end PromiseRef
 
@@ -850,6 +1189,16 @@ namespace HttpResponsePromiseRef
     ffiRuntimeHttpResponsePromiseAwaitImpl promise.runtime.handle promise.handle
   return { status := status, body := responseBody }
 
+@[inline] def awaitWithHeaders (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl promise.runtime.handle promise.handle
+  return {
+    status := status
+    statusText := statusText
+    headers := (← decodeHeaders responseHeaderBytes)
+    body := responseBody
+  }
+
 @[inline] def cancel (promise : HttpResponsePromiseRef) : IO Unit :=
   ffiRuntimeHttpResponsePromiseCancelImpl promise.runtime.handle promise.handle
 
@@ -858,6 +1207,23 @@ namespace HttpResponsePromiseRef
 
 @[inline] def awaitAndRelease (promise : HttpResponsePromiseRef) : IO HttpResponse := do
   promise.await
+
+instance : Capnp.Async.Awaitable HttpResponsePromiseRef HttpResponse where
+  await := HttpResponsePromiseRef.await
+
+instance : Capnp.Async.Cancelable HttpResponsePromiseRef where
+  cancel := HttpResponsePromiseRef.cancel
+
+instance : Capnp.Async.Releasable HttpResponsePromiseRef where
+  release := HttpResponsePromiseRef.release
+
+@[inline] def awaitAsTask (promise : HttpResponsePromiseRef) :
+    IO (Task (Except IO.Error HttpResponse)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : HttpResponsePromiseRef) :
+    IO (IO.Promise (Except String HttpResponse)) := do
+  Capnp.Async.toIOPromise promise
 
 end HttpResponsePromiseRef
 
@@ -878,6 +1244,23 @@ namespace WebSocketPromiseRef
 @[inline] def awaitAndRelease (promise : WebSocketPromiseRef) : IO WebSocket := do
   promise.await
 
+instance : Capnp.Async.Awaitable WebSocketPromiseRef WebSocket where
+  await := WebSocketPromiseRef.await
+
+instance : Capnp.Async.Cancelable WebSocketPromiseRef where
+  cancel := WebSocketPromiseRef.cancel
+
+instance : Capnp.Async.Releasable WebSocketPromiseRef where
+  release := WebSocketPromiseRef.release
+
+@[inline] def awaitAsTask (promise : WebSocketPromiseRef) :
+    IO (Task (Except IO.Error WebSocket)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : WebSocketPromiseRef) :
+    IO (IO.Promise (Except String WebSocket)) := do
+  Capnp.Async.toIOPromise promise
+
 end WebSocketPromiseRef
 
 namespace WebSocketMessagePromiseRef
@@ -895,6 +1278,23 @@ namespace WebSocketMessagePromiseRef
 
 @[inline] def awaitAndRelease (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
   promise.await
+
+instance : Capnp.Async.Awaitable WebSocketMessagePromiseRef WebSocketMessage where
+  await := WebSocketMessagePromiseRef.await
+
+instance : Capnp.Async.Cancelable WebSocketMessagePromiseRef where
+  cancel := WebSocketMessagePromiseRef.cancel
+
+instance : Capnp.Async.Releasable WebSocketMessagePromiseRef where
+  release := WebSocketMessagePromiseRef.release
+
+@[inline] def awaitAsTask (promise : WebSocketMessagePromiseRef) :
+    IO (Task (Except IO.Error WebSocketMessage)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : WebSocketMessagePromiseRef) :
+    IO (IO.Promise (Except String WebSocketMessage)) := do
+  Capnp.Async.toIOPromise promise
 
 end WebSocketMessagePromiseRef
 
@@ -986,6 +1386,23 @@ namespace ConnectionPromiseRef
 @[inline] def awaitAndRelease (promise : ConnectionPromiseRef) : IO Connection := do
   promise.await
 
+instance : Capnp.Async.Awaitable ConnectionPromiseRef Connection where
+  await := ConnectionPromiseRef.await
+
+instance : Capnp.Async.Cancelable ConnectionPromiseRef where
+  cancel := ConnectionPromiseRef.cancel
+
+instance : Capnp.Async.Releasable ConnectionPromiseRef where
+  release := ConnectionPromiseRef.release
+
+@[inline] def awaitAsTask (promise : ConnectionPromiseRef) :
+    IO (Task (Except IO.Error Connection)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : ConnectionPromiseRef) :
+    IO (IO.Promise (Except String Connection)) := do
+  Capnp.Async.toIOPromise promise
+
 end ConnectionPromiseRef
 
 namespace BytesPromiseRef
@@ -1002,6 +1419,23 @@ namespace BytesPromiseRef
 @[inline] def awaitAndRelease (promise : BytesPromiseRef) : IO ByteArray := do
   promise.await
 
+instance : Capnp.Async.Awaitable BytesPromiseRef ByteArray where
+  await := BytesPromiseRef.await
+
+instance : Capnp.Async.Cancelable BytesPromiseRef where
+  cancel := BytesPromiseRef.cancel
+
+instance : Capnp.Async.Releasable BytesPromiseRef where
+  release := BytesPromiseRef.release
+
+@[inline] def awaitAsTask (promise : BytesPromiseRef) :
+    IO (Task (Except IO.Error ByteArray)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : BytesPromiseRef) :
+    IO (IO.Promise (Except String ByteArray)) := do
+  Capnp.Async.toIOPromise promise
+
 end BytesPromiseRef
 
 namespace UInt32PromiseRef
@@ -1017,6 +1451,23 @@ namespace UInt32PromiseRef
 
 @[inline] def awaitAndRelease (promise : UInt32PromiseRef) : IO UInt32 := do
   promise.await
+
+instance : Capnp.Async.Awaitable UInt32PromiseRef UInt32 where
+  await := UInt32PromiseRef.await
+
+instance : Capnp.Async.Cancelable UInt32PromiseRef where
+  cancel := UInt32PromiseRef.cancel
+
+instance : Capnp.Async.Releasable UInt32PromiseRef where
+  release := UInt32PromiseRef.release
+
+@[inline] def awaitAsTask (promise : UInt32PromiseRef) :
+    IO (Task (Except IO.Error UInt32)) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : UInt32PromiseRef) :
+    IO (IO.Promise (Except String UInt32)) := do
+  Capnp.Async.toIOPromise promise
 
 end UInt32PromiseRef
 
@@ -1113,7 +1564,52 @@ namespace DatagramReceivePromiseRef
     IO (String × ByteArray) := do
   promise.await
 
+instance : Capnp.Async.Awaitable DatagramReceivePromiseRef (String × ByteArray) where
+  await := DatagramReceivePromiseRef.await
+
+instance : Capnp.Async.Cancelable DatagramReceivePromiseRef where
+  cancel := DatagramReceivePromiseRef.cancel
+
+instance : Capnp.Async.Releasable DatagramReceivePromiseRef where
+  release := DatagramReceivePromiseRef.release
+
+@[inline] def awaitAsTask (promise : DatagramReceivePromiseRef) :
+    IO (Task (Except IO.Error (String × ByteArray))) :=
+  Capnp.Async.awaitAsTask promise
+
+def toIOPromise (promise : DatagramReceivePromiseRef) :
+    IO (IO.Promise (Except String (String × ByteArray))) := do
+  Capnp.Async.toIOPromise promise
+
 end DatagramReceivePromiseRef
+
+namespace HttpServer
+
+@[inline] def release (server : HttpServer) : IO Unit :=
+  ffiRuntimeHttpServerReleaseImpl server.runtime.handle server.handle
+
+@[inline] def pollRequest? (server : HttpServer) : IO (Option HttpServerRequest) := do
+  let (hasRequest, payload) ← ffiRuntimeHttpServerPollRequestImpl server.runtime.handle server.handle
+  if hasRequest then
+    return some (← decodeHttpServerRequest payload)
+  else
+    return none
+
+@[inline] def respond (server : HttpServer) (requestId : UInt32) (status : UInt32)
+    (statusText : String) (responseHeaders : Array HttpHeader := #[])
+    (body : ByteArray := ByteArray.empty) : IO Unit :=
+  ffiRuntimeHttpServerRespondImpl server.runtime.handle server.handle requestId status statusText
+    (encodeHeaders responseHeaders) body
+
+@[inline] def respondWebSocket (server : HttpServer) (requestId : UInt32)
+    (responseHeaders : Array HttpHeader := #[]) : IO WebSocket := do
+  return {
+    runtime := server.runtime
+    handle := (← ffiRuntimeHttpServerRespondWebSocketImpl
+      server.runtime.handle server.handle requestId (encodeHeaders responseHeaders))
+  }
+
+end HttpServer
 
 namespace WebSocket
 
@@ -1380,13 +1876,28 @@ namespace RuntimeM
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : RuntimeM HttpResponse := do
   Runtime.httpRequest (← runtime) method address path body portHint
 
+@[inline] def httpRequestWithHeaders (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
+  Runtime.httpRequestWithHeaders (← runtime) method address path requestHeaders body portHint
+
 @[inline] def httpRequestStart (method : HttpMethod) (address : String) (path : String)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStart (← runtime) method address path body portHint
 
+@[inline] def httpRequestStartWithHeaders (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM HttpResponsePromiseRef := do
+  Runtime.httpRequestStartWithHeaders (← runtime) method address path requestHeaders body portHint
+
 @[inline] def awaitHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM HttpResponse := do
   promise.await
+
+@[inline] def awaitHttpResponseWithHeaders (promise : HttpResponsePromiseRef) :
+    RuntimeM HttpResponseEx := do
+  promise.awaitWithHeaders
 
 @[inline] def cancelHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
   promise.cancel
@@ -1402,13 +1913,43 @@ namespace RuntimeM
     (portHint : UInt32 := 0) : RuntimeM HttpResponse := do
   Runtime.httpPost (← runtime) address path body portHint
 
+@[inline] def httpServerListen (address : String) (portHint : UInt32 := 0) :
+    RuntimeM HttpServer := do
+  Runtime.httpServerListen (← runtime) address portHint
+
+@[inline] def httpServerRelease (server : HttpServer) : RuntimeM Unit := do
+  server.release
+
+@[inline] def httpServerPollRequest? (server : HttpServer) :
+    RuntimeM (Option HttpServerRequest) := do
+  server.pollRequest?
+
+@[inline] def httpServerRespond (server : HttpServer) (requestId : UInt32) (status : UInt32)
+    (statusText : String) (responseHeaders : Array HttpHeader := #[])
+    (body : ByteArray := ByteArray.empty) : RuntimeM Unit := do
+  server.respond requestId status statusText responseHeaders body
+
+@[inline] def httpServerRespondWebSocket (server : HttpServer) (requestId : UInt32)
+    (responseHeaders : Array HttpHeader := #[]) : RuntimeM WebSocket := do
+  server.respondWebSocket requestId responseHeaders
+
 @[inline] def webSocketConnect (address : String) (path : String) (portHint : UInt32 := 0) :
     RuntimeM WebSocket := do
   Runtime.webSocketConnect (← runtime) address path portHint
 
+@[inline] def webSocketConnectWithHeaders (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM WebSocket := do
+  Runtime.webSocketConnectWithHeaders (← runtime) address path requestHeaders portHint
+
 @[inline] def webSocketConnectStart (address : String) (path : String)
     (portHint : UInt32 := 0) : RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStart (← runtime) address path portHint
+
+@[inline] def webSocketConnectStartWithHeaders (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM WebSocketPromiseRef := do
+  Runtime.webSocketConnectStartWithHeaders (← runtime) address path requestHeaders portHint
 
 @[inline] def awaitWebSocket (promise : WebSocketPromiseRef) : RuntimeM WebSocket := do
   promise.await
@@ -1471,6 +2012,35 @@ namespace RuntimeM
 
 @[inline] def newWebSocketPipe : RuntimeM (WebSocket × WebSocket) := do
   Runtime.newWebSocketPipe (← runtime)
+
+@[inline] def listenEndpoint (endpoint : Endpoint) : RuntimeM Listener := do
+  Runtime.listenEndpoint (← runtime) endpoint
+
+@[inline] def connectEndpoint (endpoint : Endpoint) : RuntimeM Connection := do
+  Runtime.connectEndpoint (← runtime) endpoint
+
+@[inline] def connectStartEndpoint (endpoint : Endpoint) : RuntimeM ConnectionPromiseRef := do
+  Runtime.connectStartEndpoint (← runtime) endpoint
+
+@[inline] def httpRequestEndpoint (method : HttpMethod) (endpoint : HttpEndpoint) (path : String)
+    (body : ByteArray := ByteArray.empty) : RuntimeM HttpResponse := do
+  Runtime.httpRequestEndpoint (← runtime) method endpoint path body
+
+@[inline] def httpRequestWithHeadersEndpoint (method : HttpMethod) (endpoint : HttpEndpoint)
+    (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) : RuntimeM HttpResponseEx := do
+  Runtime.httpRequestWithHeadersEndpoint (← runtime) method endpoint path requestHeaders body
+
+@[inline] def webSocketConnectEndpoint (endpoint : HttpEndpoint) (path : String) :
+    RuntimeM WebSocket := do
+  Runtime.webSocketConnectEndpoint (← runtime) endpoint path
+
+@[inline] def webSocketConnectWithHeadersEndpoint (endpoint : HttpEndpoint) (path : String)
+    (requestHeaders : Array HttpHeader) : RuntimeM WebSocket := do
+  Runtime.webSocketConnectWithHeadersEndpoint (← runtime) endpoint path requestHeaders
+
+@[inline] def httpServerListenEndpoint (endpoint : Endpoint) : RuntimeM HttpServer := do
+  Runtime.httpServerListenEndpoint (← runtime) endpoint
 
 end RuntimeM
 
