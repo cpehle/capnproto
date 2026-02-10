@@ -207,6 +207,45 @@ def testKjAsyncSharedAsyncHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testCapnpAsyncPromiseCatch : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let sleep ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    sleep.cancel
+    let p ← Capnp.Async.Promise.fromAwaitable (α := Unit) sleep
+    let recovered :=
+      Capnp.Async.Promise.catch p (fun _ => Capnp.Async.Promise.pure ())
+    recovered.await
+  finally
+    runtime.shutdown
+
+@[test]
+def testCapnpAsyncPromiseAll : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let p1 ← Capnp.Async.Promise.fromAwaitable (α := Unit)
+      (← runtime.sleepMillisStart (UInt32.ofNat 5))
+    let p2 ← Capnp.Async.Promise.fromAwaitable (α := Unit)
+      (← runtime.sleepMillisStart (UInt32.ofNat 5))
+    let all := Capnp.Async.Promise.all #[p1, p2]
+    let results ← all.await
+    assertEqual results.size 2
+  finally
+    runtime.shutdown
+
+@[test]
+def testCapnpAsyncPromiseRace : IO Unit := do
+  let fast : Capnp.Async.Promise UInt32 :=
+    Capnp.Async.Promise.ofTask (Task.pure (.ok (UInt32.ofNat 1)))
+  let slowTask ← IO.asTask do
+    IO.sleep (UInt32.ofNat 50)
+    pure (UInt32.ofNat 2)
+  let slow := Capnp.Async.Promise.ofTask slowTask
+  let raced ← Capnp.Async.Promise.race fast slow
+  let value ← raced.await
+  assertEqual value (UInt32.ofNat 1)
+
+@[test]
 def testKjAsyncRuntimeMRunWithNewRuntime : IO Unit := do
   let alive ← Capnp.KjAsync.RuntimeM.runWithNewRuntime do
     let alive ← Capnp.KjAsync.RuntimeM.isAlive
