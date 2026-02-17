@@ -2678,6 +2678,34 @@ def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit 
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerDeferredCancellationDoesNotCarryAcrossCalls : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let sawCanceled ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let echo ← runtime.registerEchoTarget
+    let canceledPending ← runtime.startCall echo Echo.fooMethod payload
+    canceledPending.release
+    runtime.releaseTarget echo
+
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      Capnp.Rpc.Advanced.defer (opts := { allowCancellation := true }) do
+        IO.sleep (UInt32.ofNat 25)
+        if (← IO.checkCanceled) then
+          sawCanceled.set true
+          pure (Capnp.Rpc.Advanced.throwRemote "unexpected deferred cancellation")
+        else
+          pure (Capnp.Rpc.Advanced.respond req))
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM deferred payload
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← sawCanceled.get) false
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let seenRespond ← IO.mkRef false

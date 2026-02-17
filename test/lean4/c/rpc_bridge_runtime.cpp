@@ -3388,12 +3388,7 @@ class RuntimeLoop {
                                                   kj::mv(action.deferredCancelTask),
                                                   action.allowCancellation);
       if (action.allowCancellation) {
-        if (runtime_.pendingDeferredCancelRequests_ > 0) {
-          --runtime_.pendingDeferredCancelRequests_;
-          deferredTaskState->requestCancellation();
-        } else {
-          runtime_.activeCancelableDeferredTasks_.push_back(deferredTaskState);
-        }
+        runtime_.activeCancelableDeferredTasks_.push_back(deferredTaskState);
       }
       auto completion = waitLeanActionTask(deferredTaskState).then(
           [this, context = kj::mv(context), cleanupState, earlyAllowCancellation = action.allowCancellation,
@@ -4270,7 +4265,6 @@ class RuntimeLoop {
         return;
       }
     }
-    ++pendingDeferredCancelRequests_;
   }
 
   uint32_t getPipelinedCap(uint32_t pendingCallId, const std::vector<uint16_t>& pointerPath) {
@@ -6813,7 +6807,6 @@ class RuntimeLoop {
       networkServerPeers_.clear();
       pendingCalls_.clear();
       activeCancelableDeferredTasks_.clear();
-      pendingDeferredCancelRequests_ = 0;
       registerPromises_.clear();
       unitPromises_.clear();
       kjAsyncPromises_.clear();
@@ -7128,7 +7121,6 @@ class RuntimeLoop {
   kj::Vector<kj::Own<NetworkServerPeer>> networkServerPeers_;
   std::unordered_map<uint32_t, PendingCall> pendingCalls_;
   std::deque<std::weak_ptr<DeferredLeanTaskState>> activeCancelableDeferredTasks_;
-  uint64_t pendingDeferredCancelRequests_ = 0;
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> kjAsyncPromises_;
