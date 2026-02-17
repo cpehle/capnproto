@@ -3271,8 +3271,16 @@ class RuntimeLoop {
         }
         auto actionObj = lean_ctor_get(taskResult, 0);
         lean_inc(actionObj);
-        auto action = decodeAction(actionObj);
-        lean_dec(actionObj);
+        auto action = [&]() -> LeanAdvancedHandlerAction {
+          try {
+            auto decoded = decodeAction(actionObj);
+            lean_dec(actionObj);
+            return decoded;
+          } catch (...) {
+            lean_dec(actionObj);
+            throw;
+          }
+        }();
         return action;
       }
       return kj::yield().then([this, taskState]() mutable {
