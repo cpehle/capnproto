@@ -3417,6 +3417,24 @@ def testRuntimeVatNetworkPeerRuntimeMismatchForSturdyRefOps : IO Unit := do
     let aliceA ← networkA.newClient "alice-network-mismatch-a"
     let bobB ← networkB.newServer "bob-network-mismatch-b" bootstrapB
 
+    let bootstrapErr ←
+      try
+        let _ ← networkA.bootstrap aliceA bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(bootstrapErr.containsSubstr "VatNetwork.bootstrap: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network bootstrap mismatch error, got: {bootstrapErr}")
+
+    let hasConnectionErr ←
+      try
+        let _ ← networkA.hasConnection aliceA bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(hasConnectionErr.containsSubstr "VatNetwork.hasConnection: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network hasConnection mismatch error, got: {hasConnectionErr}")
+
     let setRestorerErr ←
       try
         networkA.setRestorer bobB (fun _ _ => pure bootstrapA)

@@ -1458,7 +1458,9 @@ namespace VatNetwork
   Runtime.newMultiVatServerWithBootstrapFactory network.runtime name bootstrapFactory
 
 @[inline] def bootstrap (network : VatNetwork) (sourcePeer : RuntimeVatPeerRef)
-    (targetPeer : RuntimeVatPeerRef) (unique : Bool := false) : IO Client :=
+    (targetPeer : RuntimeVatPeerRef) (unique : Bool := false) : IO Client := do
+  ensurePeerRuntime network sourcePeer "bootstrap"
+  ensurePeerRuntime network targetPeer "bootstrap"
   Runtime.multiVatBootstrapPeer network.runtime sourcePeer targetPeer unique
 
 @[inline] def setRestorer (network : VatNetwork) (peer : RuntimeVatPeerRef)
@@ -1490,7 +1492,9 @@ namespace VatNetwork
   Runtime.multiVatStats network.runtime
 
 @[inline] def hasConnection (network : VatNetwork)
-    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool :=
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool := do
+  ensurePeerRuntime network fromPeer "hasConnection"
+  ensurePeerRuntime network toPeer "hasConnection"
   Runtime.multiVatHasConnection network.runtime fromPeer toPeer
 
 @[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
