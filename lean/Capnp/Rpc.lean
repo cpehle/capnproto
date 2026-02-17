@@ -1003,7 +1003,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def transportGetFd? (runtime : Runtime) (transport : RuntimeTransport) :
     IO (Option UInt32) := do
   ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
-  let noneSentinel : UInt32 := UInt32.ofNat 4294967295
+  let noneSentinel : UInt32 := 0xFFFFFFFF
   let fd ← ffiRuntimeTransportGetFdImpl runtime.handle transport.raw
   if fd == noneSentinel then
     return none
@@ -1262,7 +1262,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     requestBytes requestCaps
 
 @[inline] def targetGetFd? (runtime : Runtime) (target : Client) : IO (Option UInt32) := do
-  let noneSentinel : UInt32 := UInt32.ofNat 4294967295
+  let noneSentinel : UInt32 := 0xFFFFFFFF
   let fd ← ffiRuntimeTargetGetFdImpl runtime.handle target
   if fd == noneSentinel then
     return none
