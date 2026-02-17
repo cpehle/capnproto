@@ -1,6 +1,7 @@
 import LeanTest
 import Capnp.KjAsync
 import Capnp.Rpc
+import Capnp.RpcKjAsync
 
 open LeanTest
 
@@ -257,7 +258,7 @@ def testKjAsyncRuntimeMRunWithNewRuntime : IO Unit := do
 @[test]
 def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
   let rpcRuntime ← Capnp.Rpc.Runtime.init
-  let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+  let runtime := rpcRuntime.asKjAsyncRuntime
   try
     assertEqual (← runtime.isAlive) true
 
@@ -290,7 +291,7 @@ def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
 @[test]
 def testKjAsyncRuntimeShutdownViaRpcHandle : IO Unit := do
   let rpcRuntime ← Capnp.Rpc.Runtime.init
-  let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+  let runtime := rpcRuntime.asKjAsyncRuntime
   try
     assertEqual (← rpcRuntime.isAlive) true
     assertEqual (← runtime.isAlive) true
@@ -314,7 +315,7 @@ def testKjAsyncRuntimeShutdownViaRpcHandle : IO Unit := do
 @[test]
 def testKjAsyncTaskSetOpsOnRpcRuntimeHandle : IO Unit := do
   let rpcRuntime ← Capnp.Rpc.Runtime.init
-  let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+  let runtime := rpcRuntime.asKjAsyncRuntime
   try
     let taskSet ← runtime.taskSetNew
     assertEqual (← taskSet.isEmpty) true
@@ -338,7 +339,7 @@ def testKjAsyncPipeFdOpsOnRpcRuntimeHandle : IO Unit := do
     pure ()
   else
     let rpcRuntime ← Capnp.Rpc.Runtime.init
-    let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+    let runtime := rpcRuntime.asKjAsyncRuntime
     try
       let (a, b) ← runtime.newTwoWayPipe
       let (c, d) ← runtime.newCapabilityPipe
@@ -368,6 +369,17 @@ def testKjAsyncPipeFdOpsOnRpcRuntimeHandle : IO Unit := do
       d.release
     finally
       rpcRuntime.shutdown
+
+@[test]
+def testRpcRuntimeMRunKjAsyncBridge : IO Unit := do
+  let rpcRuntime ← Capnp.Rpc.Runtime.init
+  try
+    let alive ← Capnp.Rpc.RuntimeM.run rpcRuntime do
+      Capnp.Rpc.RuntimeM.runKjAsync do
+        Capnp.KjAsync.RuntimeM.isAlive
+    assertEqual alive true
+  finally
+    rpcRuntime.shutdown
 
 @[test]
 def testKjAsyncNetworkRoundtrip : IO Unit := do
