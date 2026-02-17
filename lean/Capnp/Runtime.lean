@@ -2025,10 +2025,10 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
       let mut out := ba
       let base := lb.startWord * 8
       for i in [0:vals.size] do
-        let n := (vals.getD i 0).toNat
+        let v := vals.getD i 0
         let off := base + i * 2
-        out := setByteU out off (UInt8.ofNat (n &&& 0xff))
-        out := setByteU out (off + 1) (UInt8.ofNat ((n >>> 8) &&& 0xff))
+        out := setByteU out off v.toUInt8
+        out := setByteU out (off + 1) ((v >>> 8).toUInt8)
       return out)
 
 @[inline] def writeListUInt32 (p : AnyPointerBuilder) (vals : Array UInt32) : BuilderM Unit := do
@@ -2038,12 +2038,12 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
       let mut out := ba
       let base := lb.startWord * 8
       for i in [0:vals.size] do
-        let n := (vals.getD i 0).toNat
+        let v := vals.getD i 0
         let off := base + i * 4
-        out := setByteU out off (UInt8.ofNat (n &&& 0xff))
-        out := setByteU out (off + 1) (UInt8.ofNat ((n >>> 8) &&& 0xff))
-        out := setByteU out (off + 2) (UInt8.ofNat ((n >>> 16) &&& 0xff))
-        out := setByteU out (off + 3) (UInt8.ofNat ((n >>> 24) &&& 0xff))
+        out := setByteU out off v.toUInt8
+        out := setByteU out (off + 1) ((v >>> 8).toUInt8)
+        out := setByteU out (off + 2) ((v >>> 16).toUInt8)
+        out := setByteU out (off + 3) ((v >>> 24).toUInt8)
       return out)
 
 @[inline] def writeListUInt64 (p : AnyPointerBuilder) (vals : Array UInt64) : BuilderM Unit := do
@@ -2056,7 +2056,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
         let v := vals.getD i 0
         let off := base + i * 8
         for j in [0:8] do
-          let b := UInt8.ofNat (((shr64 v (8 * j)) &&& 0xff).toNat)
+          let b := (shr64 v (8 * j)).toUInt8
           out := setByteU out (off + j) b
       return out)
 
