@@ -500,6 +500,108 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncRuntimeWithConnectionHelper : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket helper test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+      let listener ← serverRuntime.listen address
+      let serverTask ← IO.asTask do
+        let serverConn ← listener.accept
+        let req ← serverConn.read (1 : UInt32) (1024 : UInt32)
+        serverConn.write req
+        serverConn.shutdownWrite
+        serverConn.release
+      clientRuntime.withConnection address (fun clientConn => do
+        let payload := mkPayload
+        clientConn.write payload
+        clientConn.shutdownWrite
+        let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+        assertEqual echoed payload
+      )
+      let serverResult ← IO.wait serverTask
+      match serverResult with
+      | .ok _ => pure ()
+      | .error err =>
+        throw (IO.userError s!"server task failed: {err}")
+      listener.release
+    finally
+      serverRuntime.shutdown
+      clientRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncListenerWithAcceptHelper : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket helper test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+      let listener ← serverRuntime.listen address
+      let serverTask ← IO.asTask do
+        listener.withAccept fun serverConn => do
+          let req ← serverConn.read (1 : UInt32) (1024 : UInt32)
+          serverConn.write req
+          serverConn.shutdownWrite
+      let clientConn ← clientRuntime.connect address
+      let payload := mkPayload
+      clientConn.write payload
+      clientConn.shutdownWrite
+      let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+      assertEqual echoed payload
+      clientConn.release
+      let serverResult ← IO.wait serverTask
+      match serverResult with
+      | .ok _ => pure ()
+      | .error err =>
+        throw (IO.userError s!"server task failed: {err}")
+      listener.release
+    finally
+      serverRuntime.shutdown
+      clientRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncRuntimeWithListenerHelper : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket helper test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+      let opened ← runtime.withListener address (fun _ => pure true)
+      assertEqual opened true
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncPromiseComposition : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -701,6 +803,39 @@ def testKjAsyncTwoWayPipeAsyncReadWritePrimitives : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncConnectionReadAllAndPipeHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let payload1 := mkPayload
+    let payload2 := appendByteArray (ByteArray.empty.push (UInt8.ofNat 45)) mkPayload
+    let expected := appendByteArray payload1 payload2
+
+    let (writer, reader) ← runtime.newTwoWayPipe
+    writer.write payload1
+    writer.write payload2
+    writer.shutdownWrite
+    let all ← reader.readAll (4 : UInt32)
+    assertEqual all expected
+    writer.release
+    reader.release
+
+    let (sourceWrite, sourceRead) ← runtime.newTwoWayPipe
+    let (targetWrite, targetRead) ← runtime.newTwoWayPipe
+    sourceWrite.write payload1
+    sourceWrite.write payload2
+    sourceWrite.shutdownWrite
+    let copied ← sourceRead.pipeToAndShutdownWrite targetWrite (4 : UInt32)
+    assertEqual copied expected.size.toUInt64
+    let piped ← targetRead.readAll (4 : UInt32)
+    assertEqual piped expected
+    sourceWrite.release
+    sourceRead.release
+    targetWrite.release
+    targetRead.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncDatagramAsyncPromiseRefs : IO Unit := do
   let senderRuntime ← Capnp.KjAsync.Runtime.init
   let receiverRuntime ← Capnp.KjAsync.Runtime.init
@@ -733,6 +868,43 @@ def testKjAsyncDatagramAsyncPromiseRefs : IO Unit := do
       receiverPort.release
     | _, _ =>
       assertTrue true "datagram async promise test skipped (bind unavailable)"
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
+
+@[test]
+def testKjAsyncDatagramSendAwaitAndReceiveManyHelpers : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverPort ← receiverRuntime.datagramBind "127.0.0.1" 0
+    let receiverPortNumber ← receiverPort.getPort
+    let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
+    let payload1 := mkPayload
+    let payload2 := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 1))
+
+    let receiveTask ← IO.asTask do
+      receiverPort.receiveMany (2 : UInt32) (1024 : UInt32)
+
+    let sent1 ← senderPort.sendAwait "127.0.0.1" payload1 receiverPortNumber
+    let sent2 ← senderPort.sendAwait "127.0.0.1" payload2 receiverPortNumber
+    assertEqual sent1 (UInt32.ofNat payload1.size)
+    assertEqual sent2 (UInt32.ofNat payload2.size)
+
+    let receiveResult ← IO.wait receiveTask
+    let received ←
+      match receiveResult with
+      | .ok datagrams => pure datagrams
+      | .error err =>
+        throw (IO.userError s!"datagram receiveMany task failed: {err}")
+    assertEqual received.size 2
+    assertTrue (received.any (fun (_, bytes) => bytes == payload1))
+      "receiveMany missing payload1"
+    assertTrue (received.any (fun (_, bytes) => bytes == payload2))
+      "receiveMany missing payload2"
+
+    senderPort.release
+    receiverPort.release
   finally
     senderRuntime.shutdown
     receiverRuntime.shutdown

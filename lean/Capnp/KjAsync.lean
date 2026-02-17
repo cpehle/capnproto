@@ -1008,6 +1008,22 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
+@[inline] def withListener (runtime : Runtime) (address : String)
+    (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
+  let listener ← runtime.listen address portHint
+  try
+    action listener
+  finally
+    ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
+
+@[inline] def withConnection (runtime : Runtime) (address : String)
+    (action : Connection -> IO α) (portHint : UInt32 := 0) : IO α := do
+  let connection ← runtime.connect address portHint
+  try
+    action connection
+  finally
+    ffiRuntimeReleaseConnectionImpl runtime.handle connection.handle
+
 @[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit := do
   ensureSameRuntime runtime listener.runtime "Listener"
   ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
@@ -2147,6 +2163,13 @@ namespace Listener
     handle := (← ffiRuntimeListenerAcceptStartImpl listener.runtime.handle listener.handle)
   }
 
+@[inline] def withAccept (listener : Listener) (action : Connection -> IO α) : IO α := do
+  let connection ← listener.accept
+  try
+    action connection
+  finally
+    ffiRuntimeReleaseConnectionImpl listener.runtime.handle connection.handle
+
 end Listener
 
 namespace Connection
@@ -2184,6 +2207,45 @@ namespace Connection
     handle := (← ffiRuntimeConnectionShutdownWriteStartImpl
       connection.runtime.handle connection.handle)
   }
+
+@[inline] def writeAndShutdownWrite (connection : Connection) (bytes : ByteArray) : IO Unit := do
+  connection.write bytes
+  connection.shutdownWrite
+
+@[inline] def readAll (connection : Connection) (chunkSize : UInt32 := 0x1000) : IO ByteArray := do
+  if chunkSize == 0 then
+    throw (IO.userError "Connection.readAll requires chunkSize > 0")
+  let mut out := ByteArray.empty
+  let mut done := false
+  while !done do
+    let chunk ← connection.read (1 : UInt32) chunkSize
+    if chunk.size == 0 then
+      done := true
+    else
+      out := appendBytes out chunk
+  pure out
+
+@[inline] def pipeTo (source target : Connection) (chunkSize : UInt32 := 0x1000) : IO UInt64 := do
+  if source.runtime.handle != target.runtime.handle then
+    throw (IO.userError "Connection.pipeTo requires both connections to share the same runtime")
+  if chunkSize == 0 then
+    throw (IO.userError "Connection.pipeTo requires chunkSize > 0")
+  let mut copied : UInt64 := 0
+  let mut done := false
+  while !done do
+    let chunk ← source.read (1 : UInt32) chunkSize
+    if chunk.size == 0 then
+      done := true
+    else
+      target.write chunk
+      copied := copied + chunk.size.toUInt64
+  pure copied
+
+@[inline] def pipeToAndShutdownWrite (source target : Connection)
+    (chunkSize : UInt32 := 0x1000) : IO UInt64 := do
+  let copied ← source.pipeTo target chunkSize
+  target.shutdownWrite
+  pure copied
 
 @[inline] def whenWriteDisconnectedStart (connection : Connection) : IO PromiseRef := do
   return {
@@ -2382,6 +2444,20 @@ namespace DatagramPort
     runtime := port.runtime
     handle := (← ffiRuntimeDatagramReceiveStartImpl port.runtime.handle port.handle maxBytes)
   }
+
+@[inline] def sendAwait (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
+  let promise ← port.sendStart address bytes portHint
+  promise.await
+
+@[inline] def receiveMany (port : DatagramPort) (count : UInt32)
+    (maxBytes : UInt32 := 0x2000) : IO (Array (String × ByteArray)) := do
+  let mut remaining := count
+  let mut out : Array (String × ByteArray) := #[]
+  while remaining != 0 do
+    out := out.push (← port.receive maxBytes)
+    remaining := remaining - 1
+  pure out
 
 @[inline] def withPort (port : DatagramPort) (action : DatagramPort -> IO α) : IO α := do
   try
@@ -2691,6 +2767,22 @@ namespace RuntimeM
     RuntimeM ConnectionPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
 
+@[inline] def withListener (address : String) (action : Listener -> RuntimeM α)
+    (portHint : UInt32 := 0) : RuntimeM α := do
+  let listener ← listen address portHint
+  try
+    action listener
+  finally
+    listener.release
+
+@[inline] def withConnection (address : String) (action : Connection -> RuntimeM α)
+    (portHint : UInt32 := 0) : RuntimeM α := do
+  let connection ← connect address portHint
+  try
+    action connection
+  finally
+    connection.release
+
 @[inline] def releaseListener (listener : Listener) : RuntimeM Unit := do
   Runtime.releaseListener (← runtime) listener
 
@@ -2716,11 +2808,27 @@ namespace RuntimeM
     RuntimeM BytesPromiseRef := do
   Runtime.connectionReadStart (← runtime) connection minBytes maxBytes
 
+@[inline] def readAll (connection : Connection) (chunkSize : UInt32 := 0x1000) :
+    RuntimeM ByteArray := do
+  connection.readAll chunkSize
+
 @[inline] def shutdownWrite (connection : Connection) : RuntimeM Unit := do
   Runtime.connectionShutdownWrite (← runtime) connection
 
 @[inline] def shutdownWriteStart (connection : Connection) : RuntimeM PromiseRef := do
   Runtime.connectionShutdownWriteStart (← runtime) connection
+
+@[inline] def writeAndShutdownWrite (connection : Connection) (bytes : ByteArray) :
+    RuntimeM Unit := do
+  connection.writeAndShutdownWrite bytes
+
+@[inline] def pipeTo (source target : Connection) (chunkSize : UInt32 := 0x1000) :
+    RuntimeM UInt64 := do
+  source.pipeTo target chunkSize
+
+@[inline] def pipeToAndShutdownWrite (source target : Connection)
+    (chunkSize : UInt32 := 0x1000) : RuntimeM UInt64 := do
+  source.pipeToAndShutdownWrite target chunkSize
 
 @[inline] def awaitConnection (promise : ConnectionPromiseRef) : RuntimeM Connection := do
   promise.await
@@ -2832,6 +2940,10 @@ namespace RuntimeM
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32PromiseRef := do
   Runtime.datagramSendStart (← runtime) port address bytes portHint
 
+@[inline] def datagramSendAwait (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
+  port.sendAwait address bytes portHint
+
 @[inline] def awaitUInt32 (promise : UInt32PromiseRef) : RuntimeM UInt32 := do
   promise.await
 
@@ -2848,6 +2960,10 @@ namespace RuntimeM
 @[inline] def datagramReceiveStart (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
   Runtime.datagramReceiveStart (← runtime) port maxBytes
+
+@[inline] def datagramReceiveMany (port : DatagramPort) (count : UInt32)
+    (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
+  port.receiveMany count maxBytes
 
 @[inline] def awaitDatagramReceive (promise : DatagramReceivePromiseRef) :
     RuntimeM (String × ByteArray) := do
