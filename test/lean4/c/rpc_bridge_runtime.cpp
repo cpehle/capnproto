@@ -2917,6 +2917,49 @@ class RuntimeLoop {
     peers.erase(owner);
   }
 
+  struct EncodedRequestForLean {
+    lean_object* requestObj;
+    lean_object* requestCapsObj;
+    std::vector<uint32_t> requestCapIds;
+  };
+
+  EncodedRequestForLean encodeRequestForLean(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context) {
+    capnp::MallocMessageBuilder requestMessage;
+    capnp::BuilderCapabilityTable requestCapTable;
+    requestCapTable
+        .imbue(requestMessage.getRoot<capnp::AnyPointer>())
+        .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
+
+    auto requestWords = capnp::messageToFlatArray(requestMessage);
+    auto requestBytes = requestWords.asBytes();
+    auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
+                                      requestBytes.size());
+
+    std::vector<uint32_t> requestCapIds;
+    auto requestCapEntries = requestCapTable.getTable();
+    requestCapIds.reserve(requestCapEntries.size());
+    const size_t requestCapsSize = requestCapEntries.size() * 4;
+    auto requestCapsObj = lean_alloc_sarray(1, requestCapsSize, requestCapsSize);
+    auto* requestCapsData = reinterpret_cast<uint8_t*>(lean_sarray_cptr(requestCapsObj));
+    size_t requestCapsOffset = 0;
+    for (auto& maybeHook : requestCapEntries) {
+      uint32_t capId = 0;
+      KJ_IF_SOME(hook, maybeHook) {
+        auto cap = capnp::Capability::Client(hook->addRef());
+        capId = addTarget(kj::mv(cap));
+        requestCapIds.push_back(capId);
+      }
+      requestCapsData[requestCapsOffset] = static_cast<uint8_t>(capId & 0xff);
+      requestCapsData[requestCapsOffset + 1] = static_cast<uint8_t>((capId >> 8) & 0xff);
+      requestCapsData[requestCapsOffset + 2] = static_cast<uint8_t>((capId >> 16) & 0xff);
+      requestCapsData[requestCapsOffset + 3] = static_cast<uint8_t>((capId >> 24) & 0xff);
+      requestCapsOffset += 4;
+    }
+    lean_sarray_set_size(requestCapsObj, requestCapsOffset);
+    return {requestObj, requestCapsObj, kj::mv(requestCapIds)};
+  }
+
   class LeanCapabilityServer final : public capnp::Capability::Server {
    public:
     LeanCapabilityServer(RuntimeLoop& runtime,
@@ -2931,38 +2974,10 @@ class RuntimeLoop {
     DispatchCallResult dispatchCall(
         uint64_t interfaceId, uint16_t methodId,
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
-      capnp::MallocMessageBuilder requestMessage;
-      capnp::BuilderCapabilityTable requestCapTable;
-      requestCapTable
-          .imbue(requestMessage.getRoot<capnp::AnyPointer>())
-          .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
-
-      auto requestWords = capnp::messageToFlatArray(requestMessage);
-      auto requestBytes = requestWords.asBytes();
-      auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
-                                        requestBytes.size());
-
-      std::vector<uint32_t> requestCapIds;
-      auto requestCapEntries = requestCapTable.getTable();
-      requestCapIds.reserve(requestCapEntries.size());
-      const size_t requestCapsSize = requestCapEntries.size() * 4;
-      auto requestCapsObj = lean_alloc_sarray(1, requestCapsSize, requestCapsSize);
-      auto* requestCapsData = reinterpret_cast<uint8_t*>(lean_sarray_cptr(requestCapsObj));
-      size_t requestCapsOffset = 0;
-      for (auto& maybeHook : requestCapEntries) {
-        uint32_t capId = 0;
-        KJ_IF_SOME(hook, maybeHook) {
-          auto cap = capnp::Capability::Client(hook->addRef());
-          capId = runtime_.addTarget(kj::mv(cap));
-          requestCapIds.push_back(capId);
-        }
-        requestCapsData[requestCapsOffset] = static_cast<uint8_t>(capId & 0xff);
-        requestCapsData[requestCapsOffset + 1] = static_cast<uint8_t>((capId >> 8) & 0xff);
-        requestCapsData[requestCapsOffset + 2] = static_cast<uint8_t>((capId >> 16) & 0xff);
-        requestCapsData[requestCapsOffset + 3] = static_cast<uint8_t>((capId >> 24) & 0xff);
-        requestCapsOffset += 4;
-      }
-      lean_sarray_set_size(requestCapsObj, requestCapsOffset);
+      auto encodedRequest = runtime_.encodeRequestForLean(context);
+      auto requestObj = encodedRequest.requestObj;
+      auto requestCapsObj = encodedRequest.requestCapsObj;
+      auto requestCapIds = kj::mv(encodedRequest.requestCapIds);
 
       auto targetId = targetId_->load(std::memory_order_relaxed);
       lean_inc(handler_);
@@ -3072,38 +3087,10 @@ class RuntimeLoop {
     DispatchCallResult dispatchCall(
         uint64_t interfaceId, uint16_t methodId,
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
-      capnp::MallocMessageBuilder requestMessage;
-      capnp::BuilderCapabilityTable requestCapTable;
-      requestCapTable
-          .imbue(requestMessage.getRoot<capnp::AnyPointer>())
-          .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
-
-      auto requestWords = capnp::messageToFlatArray(requestMessage);
-      auto requestBytes = requestWords.asBytes();
-      auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
-                                        requestBytes.size());
-
-      std::vector<uint32_t> requestCapIds;
-      auto requestCapEntries = requestCapTable.getTable();
-      requestCapIds.reserve(requestCapEntries.size());
-      const size_t requestCapsSize = requestCapEntries.size() * 4;
-      auto requestCapsObj = lean_alloc_sarray(1, requestCapsSize, requestCapsSize);
-      auto* requestCapsData = reinterpret_cast<uint8_t*>(lean_sarray_cptr(requestCapsObj));
-      size_t requestCapsOffset = 0;
-      for (auto& maybeHook : requestCapEntries) {
-        uint32_t capId = 0;
-        KJ_IF_SOME(hook, maybeHook) {
-          auto cap = capnp::Capability::Client(hook->addRef());
-          capId = runtime_.addTarget(kj::mv(cap));
-          requestCapIds.push_back(capId);
-        }
-        requestCapsData[requestCapsOffset] = static_cast<uint8_t>(capId & 0xff);
-        requestCapsData[requestCapsOffset + 1] = static_cast<uint8_t>((capId >> 8) & 0xff);
-        requestCapsData[requestCapsOffset + 2] = static_cast<uint8_t>((capId >> 16) & 0xff);
-        requestCapsData[requestCapsOffset + 3] = static_cast<uint8_t>((capId >> 24) & 0xff);
-        requestCapsOffset += 4;
-      }
-      lean_sarray_set_size(requestCapsObj, requestCapsOffset);
+      auto encodedRequest = runtime_.encodeRequestForLean(context);
+      auto requestObj = encodedRequest.requestObj;
+      auto requestCapsObj = encodedRequest.requestCapsObj;
+      auto requestCapIds = kj::mv(encodedRequest.requestCapIds);
 
       auto cleanupRequestCaps = [&](uint32_t retainedCapId) {
         for (auto capId : requestCapIds) {
@@ -3163,38 +3150,10 @@ class RuntimeLoop {
     DispatchCallResult dispatchCall(
         uint64_t interfaceId, uint16_t methodId,
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer> context) override {
-      capnp::MallocMessageBuilder requestMessage;
-      capnp::BuilderCapabilityTable requestCapTable;
-      requestCapTable
-          .imbue(requestMessage.getRoot<capnp::AnyPointer>())
-          .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
-
-      auto requestWords = capnp::messageToFlatArray(requestMessage);
-      auto requestBytes = requestWords.asBytes();
-      auto requestObj = mkByteArrayCopy(reinterpret_cast<const uint8_t*>(requestBytes.begin()),
-                                        requestBytes.size());
-
-      std::vector<uint32_t> requestCapIds;
-      auto requestCapEntries = requestCapTable.getTable();
-      requestCapIds.reserve(requestCapEntries.size());
-      const size_t requestCapsSize = requestCapEntries.size() * 4;
-      auto requestCapsObj = lean_alloc_sarray(1, requestCapsSize, requestCapsSize);
-      auto* requestCapsData = reinterpret_cast<uint8_t*>(lean_sarray_cptr(requestCapsObj));
-      size_t requestCapsOffset = 0;
-      for (auto& maybeHook : requestCapEntries) {
-        uint32_t capId = 0;
-        KJ_IF_SOME(hook, maybeHook) {
-          auto cap = capnp::Capability::Client(hook->addRef());
-          capId = runtime_.addTarget(kj::mv(cap));
-          requestCapIds.push_back(capId);
-        }
-        requestCapsData[requestCapsOffset] = static_cast<uint8_t>(capId & 0xff);
-        requestCapsData[requestCapsOffset + 1] = static_cast<uint8_t>((capId >> 8) & 0xff);
-        requestCapsData[requestCapsOffset + 2] = static_cast<uint8_t>((capId >> 16) & 0xff);
-        requestCapsData[requestCapsOffset + 3] = static_cast<uint8_t>((capId >> 24) & 0xff);
-        requestCapsOffset += 4;
-      }
-      lean_sarray_set_size(requestCapsObj, requestCapsOffset);
+      auto encodedRequest = runtime_.encodeRequestForLean(context);
+      auto requestObj = encodedRequest.requestObj;
+      auto requestCapsObj = encodedRequest.requestCapsObj;
+      auto requestCapIds = kj::mv(encodedRequest.requestCapIds);
       auto cleanupState =
           std::make_shared<RequestCapCleanupState>(std::move(requestCapIds));
 
