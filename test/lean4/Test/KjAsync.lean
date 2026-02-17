@@ -288,6 +288,30 @@ def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
     rpcRuntime.shutdown
 
 @[test]
+def testKjAsyncRuntimeShutdownViaRpcHandle : IO Unit := do
+  let rpcRuntime ← Capnp.Rpc.Runtime.init
+  let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+  try
+    assertEqual (← rpcRuntime.isAlive) true
+    assertEqual (← runtime.isAlive) true
+
+    runtime.shutdown
+
+    assertEqual (← runtime.isAlive) false
+    assertEqual (← rpcRuntime.isAlive) false
+
+    let failedAfterShutdown ←
+      try
+        let _ ← runtime.sleepMillisStart (UInt32.ofNat 1)
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedAfterShutdown true
+  finally
+    if (← rpcRuntime.isAlive) then
+      rpcRuntime.shutdown
+
+@[test]
 def testKjAsyncNetworkRoundtrip : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket test skipped on Windows"

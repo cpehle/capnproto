@@ -7223,6 +7223,11 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_release(uint64_t
     auto runtime = unregisterKjAsyncRuntime(runtimeId);
     if (runtime) {
       runtime->shutdown();
+    } else {
+      auto rpcRuntime = capnp_lean_rpc::unregisterRuntime(runtimeId);
+      if (rpcRuntime) {
+        capnp_lean_rpc::shutdown(*rpcRuntime);
+      }
     }
 
     lean_obj_res ok;
