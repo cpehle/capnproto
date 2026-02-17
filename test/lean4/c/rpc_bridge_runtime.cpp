@@ -2961,6 +2961,146 @@ class RuntimeLoop {
     return {requestObj, requestCapsObj, kj::mv(requestCapIds)};
   }
 
+  void dropRequestCaps(const std::vector<uint32_t>& requestCapIds) {
+    for (auto capId : requestCapIds) {
+      dropTargetIfPresent(capId);
+    }
+  }
+
+  void dropRequestCapsExcept(const std::vector<uint32_t>& requestCapIds,
+                             const std::vector<uint32_t>& retainedCaps) {
+    if (retainedCaps.empty()) {
+      dropRequestCaps(requestCapIds);
+      return;
+    }
+
+    kj::HashSet<uint32_t> retained;
+    retained.reserve(retainedCaps.size());
+    for (auto capId : retainedCaps) {
+      if (capId != 0) {
+        retained.insert(capId);
+      }
+    }
+    for (auto capId : requestCapIds) {
+      if (!retained.contains(capId)) {
+        dropTargetIfPresent(capId);
+      }
+    }
+  }
+
+  void dropRequestCapsExcept(const std::vector<uint32_t>& requestCapIds,
+                             uint32_t retainedCapId) {
+    for (auto capId : requestCapIds) {
+      if (capId == 0 || capId == retainedCapId) {
+        continue;
+      }
+      dropTargetIfPresent(capId);
+    }
+  }
+
+  template <typename SetPayloadFn>
+  void withDecodedPayloadAndCapTable(const uint8_t* payloadBytesData, size_t payloadBytesSize,
+                                     const std::vector<uint32_t>& payloadCapIds,
+                                     const char* unknownCapErrorPrefix,
+                                     SetPayloadFn&& setPayload) {
+    kj::ArrayPtr<const kj::byte> payloadBytes(
+        reinterpret_cast<const kj::byte*>(payloadBytesData), payloadBytesSize);
+    kj::ArrayInputStream input(payloadBytes);
+    capnp::ReaderOptions options;
+    options.traversalLimitInWords = 1ull << 30;
+    capnp::InputStreamMessageReader reader(input, options);
+    auto payloadRoot = reader.getRoot<capnp::AnyPointer>();
+
+    if (payloadCapIds.empty()) {
+      setPayload(payloadRoot);
+      return;
+    }
+
+    auto capTableBuilder =
+        kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(payloadCapIds.size());
+    for (auto capId : payloadCapIds) {
+      if (capId == 0) {
+        capTableBuilder.add(kj::none);
+        continue;
+      }
+      auto capIt = targets_.find(capId);
+      if (capIt == targets_.end()) {
+        throw std::runtime_error(std::string(unknownCapErrorPrefix) + std::to_string(capId));
+      }
+      capnp::Capability::Client cap = capIt->second;
+      capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
+    }
+
+    capnp::ReaderCapabilityTable payloadCapTable(capTableBuilder.finish());
+    setPayload(payloadCapTable.imbue(payloadRoot));
+  }
+
+  void setContextResultsFromPayloadWithCapIds(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+      const uint8_t* responseBytesData, size_t responseBytesSize,
+      const std::vector<uint32_t>& responseCapIds, const char* unknownCapErrorPrefix) {
+    withDecodedPayloadAndCapTable(
+        responseBytesData, responseBytesSize, responseCapIds, unknownCapErrorPrefix,
+        [&context](capnp::AnyPointer::Reader responseRoot) {
+          context.getResults().setAs<capnp::AnyPointer>(responseRoot);
+        });
+  }
+
+  void setContextResultsFromPayload(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+      const uint8_t* responseBytesData, size_t responseBytesSize,
+      const uint8_t* responseCapsData, size_t responseCapsSize,
+      const char* unknownCapErrorPrefix) {
+    auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
+    setContextResultsFromPayloadWithCapIds(context, responseBytesData, responseBytesSize,
+                                           responseCapIds, unknownCapErrorPrefix);
+  }
+
+  void setContextResultsFromPayload(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+      const std::vector<uint8_t>& responseBytesCopy, const std::vector<uint8_t>& responseCapsCopy,
+      const char* unknownCapErrorPrefix) {
+    setContextResultsFromPayload(context, responseBytesCopy.data(), responseBytesCopy.size(),
+                                 responseCapsCopy.data(), responseCapsCopy.size(),
+                                 unknownCapErrorPrefix);
+  }
+
+  void setContextPipelineFromPayload(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+      const uint8_t* pipelineBytesData, size_t pipelineBytesSize,
+      const uint8_t* pipelineCapsData, size_t pipelineCapsSize,
+      const char* unknownCapErrorPrefix) {
+    if (pipelineBytesSize == 0) {
+      if (pipelineCapsSize != 0) {
+        throw std::runtime_error(
+            "RPC pipeline capability table requires a non-empty payload");
+      }
+      return;
+    }
+
+    std::vector<uint32_t> pipelineCapIds;
+    if (pipelineCapsSize != 0) {
+      pipelineCapIds = decodeCapTable(pipelineCapsData, pipelineCapsSize);
+    }
+
+    capnp::PipelineBuilder<capnp::AnyPointer> pipelineBuilder;
+    withDecodedPayloadAndCapTable(
+        pipelineBytesData, pipelineBytesSize, pipelineCapIds, unknownCapErrorPrefix,
+        [&pipelineBuilder](capnp::AnyPointer::Reader pipelineRoot) {
+          pipelineBuilder.setAs<capnp::AnyPointer>(pipelineRoot);
+        });
+    context.setPipeline(pipelineBuilder.build());
+  }
+
+  void setContextPipelineFromPayload(
+      capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+      const std::vector<uint8_t>& pipelineBytesCopy,
+      const std::vector<uint8_t>& pipelineCapsCopy, const char* unknownCapErrorPrefix) {
+    setContextPipelineFromPayload(context, pipelineBytesCopy.data(), pipelineBytesCopy.size(),
+                                  pipelineCapsCopy.data(), pipelineCapsCopy.size(),
+                                  unknownCapErrorPrefix);
+  }
+
   class LeanCapabilityServer final : public capnp::Capability::Server {
    public:
     LeanCapabilityServer(RuntimeLoop& runtime,
@@ -2986,11 +3126,7 @@ class RuntimeLoop {
                                    lean_box(static_cast<size_t>(methodId)), requestObj,
                                    requestCapsObj, lean_box(0));
       if (lean_io_result_is_error(ioResult)) {
-        for (auto capId : requestCapIds) {
-          if (capId != 0) {
-            runtime_.dropTargetIfPresent(capId);
-          }
-        }
+        runtime_.dropRequestCapsExcept(requestCapIds, 0);
         lean_dec(ioResult);
         throw std::runtime_error("Lean RPC handler returned IO error");
       }
@@ -3009,55 +3145,14 @@ class RuntimeLoop {
       const auto* responseCapsData =
           reinterpret_cast<const uint8_t*>(lean_sarray_cptr(responseCapsObj));
 
-      auto cleanupRequestCaps = [&](const std::vector<uint32_t>& retainedCaps) {
-        kj::HashSet<uint32_t> retained;
-        retained.reserve(retainedCaps.size());
-        for (auto capId : retainedCaps) {
-          if (capId != 0) {
-            retained.insert(capId);
-          }
-        }
-        for (auto capId : requestCapIds) {
-          if (!retained.contains(capId)) {
-            runtime_.dropTargetIfPresent(capId);
-          }
-        }
-      };
-
       try {
-        kj::ArrayPtr<const kj::byte> responseBytes(
-            reinterpret_cast<const kj::byte*>(responseBytesData), responseBytesSize);
-        kj::ArrayInputStream input(responseBytes);
-        capnp::ReaderOptions options;
-        options.traversalLimitInWords = 1ull << 30;
-        capnp::InputStreamMessageReader reader(input, options);
-        auto responseRoot = reader.getRoot<capnp::AnyPointer>();
-
         auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
-        cleanupRequestCaps(responseCapIds);
-        if (responseCapIds.empty()) {
-          context.getResults().setAs<capnp::AnyPointer>(responseRoot);
-        } else {
-          auto capTableBuilder =
-              kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
-          for (auto capId : responseCapIds) {
-            if (capId == 0) {
-              capTableBuilder.add(kj::none);
-              continue;
-            }
-            auto capIt = runtime_.targets_.find(capId);
-            if (capIt == runtime_.targets_.end()) {
-              throw std::runtime_error("unknown RPC response capability id from Lean handler: " +
-                                       std::to_string(capId));
-            }
-            capnp::Capability::Client cap = capIt->second;
-            capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
-          }
-          capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
-          context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
-        }
+        runtime_.dropRequestCapsExcept(requestCapIds, responseCapIds);
+        runtime_.setContextResultsFromPayloadWithCapIds(
+            context, responseBytesData, responseBytesSize, responseCapIds,
+            "unknown RPC response capability id from Lean handler: ");
       } catch (...) {
-        cleanupRequestCaps({});
+        runtime_.dropRequestCaps(requestCapIds);
         lean_dec(responseObj);
         lean_dec(responseCapsObj);
         throw;
@@ -3093,22 +3188,13 @@ class RuntimeLoop {
       auto requestCapsObj = encodedRequest.requestCapsObj;
       auto requestCapIds = kj::mv(encodedRequest.requestCapIds);
 
-      auto cleanupRequestCaps = [&](uint32_t retainedCapId) {
-        for (auto capId : requestCapIds) {
-          if (capId == 0 || capId == retainedCapId) {
-            continue;
-          }
-          runtime_.dropTargetIfPresent(capId);
-        }
-      };
-
       auto targetId = targetId_->load(std::memory_order_relaxed);
       lean_inc(handler_);
       auto ioResult = lean_apply_6(handler_, lean_box_uint32(targetId), lean_box_uint64(interfaceId),
                                    lean_box(static_cast<size_t>(methodId)), requestObj,
                                    requestCapsObj, lean_box(0));
       if (lean_io_result_is_error(ioResult)) {
-        cleanupRequestCaps(0);
+        runtime_.dropRequestCapsExcept(requestCapIds, 0);
         lean_dec(ioResult);
         throw std::runtime_error("Lean RPC tail-call handler returned IO error");
       }
@@ -3119,12 +3205,12 @@ class RuntimeLoop {
 
       auto targetIt = runtime_.targets_.find(forwardTargetId);
       if (targetIt == runtime_.targets_.end()) {
-        cleanupRequestCaps(0);
+        runtime_.dropRequestCapsExcept(requestCapIds, 0);
         throw std::runtime_error("unknown RPC tail-call target capability id from Lean handler: " +
                                  std::to_string(forwardTargetId));
       }
 
-      cleanupRequestCaps(forwardTargetId);
+      runtime_.dropRequestCapsExcept(requestCapIds, forwardTargetId);
 
       auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
       requestBuilder.setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
@@ -3171,16 +3257,7 @@ class RuntimeLoop {
 
       try {
         auto actionObj = lean_io_result_take_value(ioResult);
-        auto action = [&]() -> LeanAdvancedHandlerAction {
-          try {
-            auto decoded = decodeAction(actionObj);
-            lean_dec(actionObj);
-            return decoded;
-          } catch (...) {
-            lean_dec(actionObj);
-            throw;
-          }
-        }();
+        auto action = decodeOwnedAction(actionObj);
         return dispatchDecodedAction(kj::mv(action), kj::mv(context), cleanupState);
       } catch (...) {
         cleanupRequestCaps(cleanupState, {});
@@ -3201,18 +3278,7 @@ class RuntimeLoop {
       if (cleanupState->done) {
         return;
       }
-      kj::HashSet<uint32_t> retained;
-      retained.reserve(retainedCaps.size());
-      for (auto capId : retainedCaps) {
-        if (capId != 0) {
-          retained.insert(capId);
-        }
-      }
-      for (auto capId : cleanupState->requestCapIds) {
-        if (!retained.contains(capId)) {
-          runtime_.dropTargetIfPresent(capId);
-        }
-      }
+      runtime_.dropRequestCapsExcept(cleanupState->requestCapIds, retainedCaps);
       cleanupState->done = true;
     }
 
@@ -3231,16 +3297,7 @@ class RuntimeLoop {
         }
         auto actionObj = lean_ctor_get(taskResult, 0);
         lean_inc(actionObj);
-        auto action = [&]() -> LeanAdvancedHandlerAction {
-          try {
-            auto decoded = decodeAction(actionObj);
-            lean_dec(actionObj);
-            return decoded;
-          } catch (...) {
-            lean_dec(actionObj);
-            throw;
-          }
-        }();
+        auto action = decodeOwnedAction(actionObj);
         return action;
       }
       return kj::yield().then([this, taskState]() mutable {
@@ -3280,10 +3337,11 @@ class RuntimeLoop {
               "Lean RPC advanced handler: setPipeline is only valid with defer");
         }
         try {
-          setContextPipelineFromPayload(context, action.pipelineBytes.data(),
-                                        action.pipelineBytes.size(),
-                                        action.pipelineCaps.data(),
-                                        action.pipelineCaps.size());
+          runtime_.setContextPipelineFromPayload(context, action.pipelineBytes.data(),
+                                                 action.pipelineBytes.size(),
+                                                 action.pipelineCaps.data(),
+                                                 action.pipelineCaps.size(),
+                                                 "unknown RPC pipeline capability id: ");
         } catch (...) {
           cleanupRequestCaps(cleanupState, {});
           throw;
@@ -3301,8 +3359,9 @@ class RuntimeLoop {
           }
         } else {
           cleanupRequestCaps(cleanupState, responseCapIds);
-          setContextResultsFromPayloadWithCapIds(context, action.payloadBytes.data(),
-                                                 action.payloadBytes.size(), responseCapIds);
+          runtime_.setContextResultsFromPayloadWithCapIds(
+              context, action.payloadBytes.data(), action.payloadBytes.size(), responseCapIds,
+              "unknown RPC response capability id from Lean advanced handler: ");
         }
         return {kj::READY_NOW, action.isStreaming, action.allowCancellation};
       }
@@ -3404,6 +3463,17 @@ class RuntimeLoop {
             return kj::mv(e);
           }).attach(std::move(deferredTaskState));
       return {kj::mv(completion), action.isStreaming, action.allowCancellation};
+    }
+
+    static LeanAdvancedHandlerAction decodeOwnedAction(lean_object* actionObj) {
+      try {
+        auto action = decodeAction(actionObj);
+        lean_dec(actionObj);
+        return action;
+      } catch (...) {
+        lean_dec(actionObj);
+        throw;
+      }
     }
 
     static LeanAdvancedHandlerAction decodeAction(lean_object* actionObj) {
@@ -3530,119 +3600,13 @@ class RuntimeLoop {
       }
     }
 
-    void setContextResultsFromPayloadWithCapIds(
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
-        const uint8_t* responseBytesData, size_t responseBytesSize,
-        const std::vector<uint32_t>& responseCapIds) {
-      kj::ArrayPtr<const kj::byte> responseBytes(
-          reinterpret_cast<const kj::byte*>(responseBytesData), responseBytesSize);
-      kj::ArrayInputStream input(responseBytes);
-      capnp::ReaderOptions options;
-      options.traversalLimitInWords = 1ull << 30;
-      capnp::InputStreamMessageReader reader(input, options);
-      auto responseRoot = reader.getRoot<capnp::AnyPointer>();
-
-      if (responseCapIds.empty()) {
-        context.getResults().setAs<capnp::AnyPointer>(responseRoot);
-      } else {
-        auto capTableBuilder =
-            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(responseCapIds.size());
-        for (auto capId : responseCapIds) {
-          if (capId == 0) {
-            capTableBuilder.add(kj::none);
-            continue;
-          }
-          auto capIt = runtime_.targets_.find(capId);
-          if (capIt == runtime_.targets_.end()) {
-            throw std::runtime_error(
-                "unknown RPC response capability id from Lean advanced handler: " +
-                std::to_string(capId));
-          }
-          capnp::Capability::Client cap = capIt->second;
-          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
-        }
-        capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
-        context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
-      }
-    }
-
-    void setContextResultsFromPayload(
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
-        const uint8_t* responseBytesData, size_t responseBytesSize,
-        const uint8_t* responseCapsData, size_t responseCapsSize) {
-      auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
-      setContextResultsFromPayloadWithCapIds(context, responseBytesData, responseBytesSize,
-                                             responseCapIds);
-    }
-
-    void setContextResultsFromPayload(
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
-        const std::vector<uint8_t>& responseBytesCopy,
-        const std::vector<uint8_t>& responseCapsCopy) {
-      setContextResultsFromPayload(context, responseBytesCopy.data(), responseBytesCopy.size(),
-                                   responseCapsCopy.data(), responseCapsCopy.size());
-    }
-
-    void setContextPipelineFromPayload(
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
-        const uint8_t* pipelineBytesData, size_t pipelineBytesSize,
-        const uint8_t* pipelineCapsData, size_t pipelineCapsSize) {
-      if (pipelineBytesSize == 0) {
-        if (pipelineCapsSize != 0) {
-          throw std::runtime_error(
-              "RPC pipeline capability table requires a non-empty payload");
-        }
-        return;
-      }
-
-      kj::ArrayPtr<const kj::byte> pipelineBytes(
-          reinterpret_cast<const kj::byte*>(pipelineBytesData), pipelineBytesSize);
-      kj::ArrayInputStream input(pipelineBytes);
-      capnp::ReaderOptions options;
-      options.traversalLimitInWords = 1ull << 30;
-      capnp::InputStreamMessageReader reader(input, options);
-      auto pipelineRoot = reader.getRoot<capnp::AnyPointer>();
-
-      capnp::PipelineBuilder<capnp::AnyPointer> pipelineBuilder;
-      if (pipelineCapsSize == 0) {
-        pipelineBuilder.setAs<capnp::AnyPointer>(pipelineRoot);
-      } else {
-        auto pipelineCapIds = decodeCapTable(pipelineCapsData, pipelineCapsSize);
-        auto capTableBuilder =
-            kj::heapArrayBuilder<kj::Maybe<kj::Own<capnp::ClientHook>>>(pipelineCapIds.size());
-        for (auto capId : pipelineCapIds) {
-          if (capId == 0) {
-            capTableBuilder.add(kj::none);
-            continue;
-          }
-          auto capIt = runtime_.targets_.find(capId);
-          if (capIt == runtime_.targets_.end()) {
-            throw std::runtime_error(
-                "unknown RPC pipeline capability id: " + std::to_string(capId));
-          }
-          capnp::Capability::Client cap = capIt->second;
-          capTableBuilder.add(capnp::ClientHook::from(kj::mv(cap)));
-        }
-        capnp::ReaderCapabilityTable pipelineCapTable(capTableBuilder.finish());
-        pipelineBuilder.setAs<capnp::AnyPointer>(pipelineCapTable.imbue(pipelineRoot));
-      }
-
-      context.setPipeline(pipelineBuilder.build());
-    }
-
-    void setContextPipelineFromPayload(
-        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
-        const std::vector<uint8_t>& pipelineBytesCopy,
-        const std::vector<uint8_t>& pipelineCapsCopy) {
-      setContextPipelineFromPayload(context, pipelineBytesCopy.data(), pipelineBytesCopy.size(),
-                                    pipelineCapsCopy.data(), pipelineCapsCopy.size());
-    }
-
     void setContextResultsFromResponse(
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
         capnp::Response<capnp::AnyPointer>& response) {
       auto raw = runtime_.serializeResponse(response);
-      setContextResultsFromPayload(context, raw.response, raw.responseCaps);
+      runtime_.setContextResultsFromPayload(
+          context, raw.response, raw.responseCaps,
+          "unknown RPC response capability id from Lean advanced handler: ");
     }
 
     RuntimeLoop& runtime_;
