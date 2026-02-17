@@ -54,6 +54,61 @@ std::vector<uint16_t> decodePipelineOps(const uint8_t* data, size_t size);
 std::vector<uint16_t> decodePipelineOps(b_lean_obj_arg bytes);
 std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes);
 
+// Move-only retained Lean ByteArray reference.
+struct LeanByteArrayRef {
+  LeanByteArrayRef() = default;
+
+  explicit LeanByteArrayRef(lean_object* bytes): bytes_(bytes) {
+    if (bytes_ != nullptr) {
+      lean_inc(bytes_);
+    }
+  }
+
+  LeanByteArrayRef(const LeanByteArrayRef&) = delete;
+  LeanByteArrayRef& operator=(const LeanByteArrayRef&) = delete;
+
+  LeanByteArrayRef(LeanByteArrayRef&& other) noexcept : bytes_(other.bytes_) {
+    other.bytes_ = nullptr;
+  }
+
+  LeanByteArrayRef& operator=(LeanByteArrayRef&& other) noexcept {
+    if (this != &other) {
+      reset();
+      bytes_ = other.bytes_;
+      other.bytes_ = nullptr;
+    }
+    return *this;
+  }
+
+  ~LeanByteArrayRef() { reset(); }
+
+  void reset() {
+    if (bytes_ != nullptr) {
+      lean_dec(bytes_);
+      bytes_ = nullptr;
+    }
+  }
+
+  size_t size() const {
+    if (bytes_ == nullptr) {
+      return 0;
+    }
+    return lean_sarray_size(bytes_);
+  }
+
+  bool empty() const { return size() == 0; }
+
+  const uint8_t* data() const {
+    if (bytes_ == nullptr) {
+      return nullptr;
+    }
+    return reinterpret_cast<const uint8_t*>(lean_sarray_cptr(bytes_));
+  }
+
+ private:
+  lean_object* bytes_ = nullptr;
+};
+
 // Deferred Task structures
 struct DeferredLeanTask {
   explicit DeferredLeanTask(lean_object* task): task(task) {}
@@ -97,13 +152,13 @@ struct LeanAdvancedHandlerAction {
   uint32_t target = 0;
   uint64_t interfaceId = 0;
   uint16_t methodId = 0;
-  std::vector<uint8_t> pipelineBytes;
-  std::vector<uint8_t> pipelineCaps;
-  std::vector<uint8_t> payloadBytes;
-  std::vector<uint8_t> payloadCaps;
+  LeanByteArrayRef pipelineBytes;
+  LeanByteArrayRef pipelineCaps;
+  LeanByteArrayRef payloadBytes;
+  LeanByteArrayRef payloadCaps;
   std::string message;
   kj::Exception::Type remoteExceptionType = kj::Exception::Type::FAILED;
-  std::vector<uint8_t> detailBytes;
+  LeanByteArrayRef detailBytes;
   kj::Own<DeferredLeanTask> deferredWaitTask;
   kj::Own<DeferredLeanTask> deferredCancelTask;
 };
