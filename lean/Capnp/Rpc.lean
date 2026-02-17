@@ -1617,6 +1617,14 @@ namespace RuntimeM
 
 @[inline] def runtime : RuntimeM Runtime := read
 
+@[inline] private def ensureCurrentRuntime
+    (owner : Runtime) (resource : String) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) owner resource
+
+@[inline] private def ensureCurrentRuntimeHandle
+    (ownerHandle : UInt64) (resource : String) : RuntimeM Unit := do
+  ensureSameRuntimeHandle (← runtime) ownerHandle resource
+
 @[inline] def backend : RuntimeM Backend := do
   return Runtime.backend (← runtime)
 
@@ -1670,14 +1678,17 @@ namespace RuntimeM
 
 @[inline] def promiseCapabilityFulfill (fulfiller : RuntimePromiseCapabilityFulfillerRef)
     (target : Client) : RuntimeM Unit := do
+  ensureCurrentRuntime fulfiller.runtime "RuntimePromiseCapabilityFulfillerRef"
   Runtime.promiseCapabilityFulfill fulfiller target
 
 @[inline] def promiseCapabilityReject (fulfiller : RuntimePromiseCapabilityFulfillerRef)
     (type : RemoteExceptionType) (message : String)
     (detail : ByteArray := ByteArray.empty) : RuntimeM Unit := do
+  ensureCurrentRuntime fulfiller.runtime "RuntimePromiseCapabilityFulfillerRef"
   Runtime.promiseCapabilityReject fulfiller type message detail
 
 @[inline] def promiseCapabilityRelease (fulfiller : RuntimePromiseCapabilityFulfillerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime fulfiller.runtime "RuntimePromiseCapabilityFulfillerRef"
   Runtime.promiseCapabilityRelease fulfiller
 
 @[inline] def releaseCapTable (capTable : Capnp.CapTable) : RuntimeM Unit := do
@@ -1749,10 +1760,12 @@ namespace RuntimeM
   Runtime.newMultiVatServerWithBootstrapFactory (← runtime) name bootstrapFactory
 
 @[inline] def releaseMultiVatPeer (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.releaseMultiVatPeer peer
 
 @[inline] def multiVatBootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) :
     RuntimeM Client := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatBootstrap peer vatId
 
 @[inline] def multiVatBootstrapPeer (sourcePeer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
@@ -1783,45 +1796,57 @@ namespace RuntimeM
 
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatSetRestorer peer restorer
 
 @[inline] def multiVatClearRestorer (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatClearRestorer peer
 
 @[inline] def multiVatPublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatPublishSturdyRef peer objectId target
 
 @[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : RuntimeM Client := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatRestoreSturdyRef peer sturdyRef
 
 @[inline] def vatNetwork : RuntimeM VatNetwork := do
   return Runtime.vatNetwork (← runtime)
 
 @[inline] def clientRelease (client : RuntimeClientRef) : RuntimeM Unit := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.release
 
 @[inline] def clientBootstrap (client : RuntimeClientRef) : RuntimeM Client := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.bootstrap
 
 @[inline] def clientOnDisconnect (client : RuntimeClientRef) : RuntimeM Unit := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.onDisconnect
 
 @[inline] def clientOnDisconnectStart (client : RuntimeClientRef) :
     RuntimeM RuntimeUnitPromiseRef := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.onDisconnectStart
 
 @[inline] def clientSetFlowLimit (client : RuntimeClientRef) (words : UInt64) : RuntimeM Unit := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.setFlowLimit words
 
 @[inline] def clientQueueSize (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.queueSize
 
 @[inline] def clientQueueCount (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.queueCount
 
 @[inline] def clientOutgoingWaitNanos (client : RuntimeClientRef) : RuntimeM UInt64 := do
+  ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.outgoingWaitNanos
 
 @[inline] def targetCount : RuntimeM UInt64 := do
@@ -1840,33 +1865,45 @@ namespace RuntimeM
   Runtime.pendingCallCount (← runtime)
 
 @[inline] def serverRelease (server : RuntimeServerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.release
 
 @[inline] def serverListen (server : RuntimeServerRef) (address : String)
     (portHint : UInt32 := 0) : RuntimeM Listener := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.listen address portHint
 
 @[inline] def serverAccept (server : RuntimeServerRef) (listener : Listener) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
+  ensureCurrentRuntimeHandle listener.runtimeHandle "Listener"
   server.accept listener
 
 @[inline] def serverAcceptStart (server : RuntimeServerRef) (listener : Listener) :
     RuntimeM RuntimeUnitPromiseRef := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
+  ensureCurrentRuntimeHandle listener.runtimeHandle "Listener"
   server.acceptStart listener
 
 @[inline] def serverAcceptFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.acceptFd fd
 
 @[inline] def serverAcceptTransport (server : RuntimeServerRef)
     (transport : RuntimeTransport) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
+  ensureCurrentRuntimeHandle transport.runtimeHandle "RuntimeTransport"
   server.acceptTransport transport
 
 @[inline] def serverAcceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.acceptTransportFd fd
 
 @[inline] def serverDrain (server : RuntimeServerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.drain
 
 @[inline] def serverDrainStart (server : RuntimeServerRef) : RuntimeM RuntimeUnitPromiseRef := do
+  ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.drainStart
 
 @[inline] def withClient (address : String)
@@ -1911,32 +1948,41 @@ namespace RuntimeM
   Runtime.startCall (← runtime) target method payload
 
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallAwait pendingCall
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Unit := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallRelease pendingCall
 
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : RuntimeM Client := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallGetPipelinedCap pendingCall pointerPath
 
 @[inline] def registerPromiseAwait (promise : RuntimeRegisterPromiseRef) : RuntimeM UInt32 := do
-  promise.await
+  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
+  Runtime.registerPromiseAwait promise
 
 @[inline] def registerPromiseCancel (promise : RuntimeRegisterPromiseRef) : RuntimeM Unit := do
-  promise.cancel
+  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
+  Runtime.registerPromiseCancel promise
 
 @[inline] def registerPromiseRelease (promise : RuntimeRegisterPromiseRef) : RuntimeM Unit := do
-  promise.release
+  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
+  Runtime.registerPromiseRelease promise
 
 @[inline] def unitPromiseAwait (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
-  promise.await
+  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
+  Runtime.unitPromiseAwait promise
 
 @[inline] def unitPromiseCancel (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
-  promise.cancel
+  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
+  Runtime.unitPromiseCancel promise
 
 @[inline] def unitPromiseRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
-  promise.release
+  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
+  Runtime.unitPromiseRelease promise
 
 @[inline] def streamingCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Unit := do

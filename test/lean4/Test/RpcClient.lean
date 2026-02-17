@@ -1199,6 +1199,72 @@ def testRuntimeTransportRuntimeMismatchErrors : IO Unit := do
     runtimeB.shutdown
 
 @[test]
+def testRuntimeMHandleRuntimeMismatchErrors : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtimeA ← Capnp.Rpc.Runtime.init
+  let runtimeB ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrapA ← runtimeA.registerEchoTarget
+    let serverA ← runtimeA.newServer bootstrapA
+    let listenerA ← serverA.listen address
+
+    let registerPromiseA ← runtimeA.connectStart address
+    let unitPromiseA ← serverA.acceptStart listenerA
+    let pendingA ← runtimeA.startCall bootstrapA Echo.fooMethod payload
+
+    let registerErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtimeB do
+          Capnp.Rpc.RuntimeM.registerPromiseAwait registerPromiseA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(registerErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected RuntimeM register promise mismatch error, got: {registerErr}")
+
+    let unitErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtimeB do
+          Capnp.Rpc.RuntimeM.unitPromiseAwait unitPromiseA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(unitErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected RuntimeM unit promise mismatch error, got: {unitErr}")
+
+    let pendingErr ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtimeB do
+          Capnp.Rpc.RuntimeM.pendingCallRelease pendingA
+        pure ""
+      catch e =>
+        pure (toString e)
+    if !(pendingErr.containsSubstr "different Capnp.Rpc runtime") then
+      throw (IO.userError s!"expected RuntimeM pending call mismatch error, got: {pendingErr}")
+
+    registerPromiseA.cancel
+    registerPromiseA.release
+    unitPromiseA.cancel
+    unitPromiseA.release
+    pendingA.release
+    runtimeA.releaseListener listenerA
+    serverA.release
+    runtimeA.releaseTarget bootstrapA
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeMScopedResources : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
