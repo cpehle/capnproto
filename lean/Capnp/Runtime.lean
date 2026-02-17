@@ -1724,7 +1724,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
       let base := wordOff * 8
       let mut out := ba
       for i in [0:8] do
-        let b := UInt8.ofNat (((shr64 w (8 * i)) &&& 0xff).toNat)
+        let b := (shr64 w (8 * i)).toUInt8
         out := setByteU out (base + i) b
       return out)
 
@@ -1732,20 +1732,18 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   modifySegment seg (fun ba =>
     Id.run do
       let mut out := ba
-      let n := v.toNat
-      out := setByteU out byteOff (UInt8.ofNat (n &&& 0xff))
-      out := setByteU out (byteOff + 1) (UInt8.ofNat ((n >>> 8) &&& 0xff))
+      out := setByteU out byteOff v.toUInt8
+      out := setByteU out (byteOff + 1) ((v >>> 8).toUInt8)
       return out)
 
 @[inline] def writeUInt32LE (seg : Nat) (byteOff : Nat) (v : UInt32) : BuilderM Unit :=
   modifySegment seg (fun ba =>
     Id.run do
       let mut out := ba
-      let n := v.toNat
-      out := setByteU out byteOff (UInt8.ofNat (n &&& 0xff))
-      out := setByteU out (byteOff + 1) (UInt8.ofNat ((n >>> 8) &&& 0xff))
-      out := setByteU out (byteOff + 2) (UInt8.ofNat ((n >>> 16) &&& 0xff))
-      out := setByteU out (byteOff + 3) (UInt8.ofNat ((n >>> 24) &&& 0xff))
+      out := setByteU out byteOff v.toUInt8
+      out := setByteU out (byteOff + 1) ((v >>> 8).toUInt8)
+      out := setByteU out (byteOff + 2) ((v >>> 16).toUInt8)
+      out := setByteU out (byteOff + 3) ((v >>> 24).toUInt8)
       return out)
 
 @[inline] def writeUInt64LE (seg : Nat) (byteOff : Nat) (v : UInt64) : BuilderM Unit :=
@@ -1753,7 +1751,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
     Id.run do
       let mut out := ba
       for i in [0:8] do
-        let b := UInt8.ofNat (((shr64 v (8 * i)) &&& 0xff).toNat)
+        let b := (shr64 v (8 * i)).toUInt8
         out := setByteU out (byteOff + i) b
       return out)
 
@@ -1761,7 +1759,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   let byteOff := bitOff / 8
   let bit := bitOff % 8
   let b ← getByteB seg byteOff
-  let mask := UInt8.ofNat ((shl64 (UInt64.ofNat 1) bit).toNat)
+  let mask := (shl64 (1 : UInt64) bit).toUInt8
   let newb := if value then (b ||| mask) else (b &&& (~~~mask))
   writeByte seg byteOff newb
 
