@@ -333,6 +333,43 @@ def testKjAsyncTaskSetOpsOnRpcRuntimeHandle : IO Unit := do
     rpcRuntime.shutdown
 
 @[test]
+def testKjAsyncPipeFdOpsOnRpcRuntimeHandle : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let rpcRuntime ← Capnp.Rpc.Runtime.init
+    let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+    try
+      let (a, b) ← runtime.newTwoWayPipe
+      let (c, d) ← runtime.newCapabilityPipe
+
+      let aFd? ← a.dupFd?
+      let bFd? ← b.dupFd?
+      let cFd? ← c.dupFd?
+      let dFd? ← d.dupFd?
+
+      match (aFd?, bFd?, cFd?, dFd?) with
+      | (some aFd, some bFd, some cFd, some dFd) =>
+          let aT ← rpcRuntime.newTransportFromFd aFd
+          let bT ← rpcRuntime.newTransportFromFd bFd
+          let cT ← rpcRuntime.newTransportFromFd cFd
+          let dT ← rpcRuntime.newTransportFromFd dFd
+          rpcRuntime.releaseTransport aT
+          rpcRuntime.releaseTransport bT
+          rpcRuntime.releaseTransport cT
+          rpcRuntime.releaseTransport dT
+      | _ =>
+          throw (IO.userError
+            "expected rpc-runtime-backed Capnp.KjAsync pipe connections to expose fds")
+
+      a.release
+      b.release
+      c.release
+      d.release
+    finally
+      rpcRuntime.shutdown
+
+@[test]
 def testKjAsyncNetworkRoundtrip : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket test skipped on Windows"
