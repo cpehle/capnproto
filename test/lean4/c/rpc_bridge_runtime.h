@@ -112,6 +112,15 @@ struct RegisterPairCompletion {
   uint32_t second = 0;
 };
 
+struct KjPromiseIdCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  uint32_t promiseId = 0;
+};
+
 class RuntimeLoop;
 
 // Shared runtime id generator used by both the RPC and KjAsync test runtimes to avoid collisions
@@ -135,6 +144,35 @@ void promiseCapabilityRejectInline(RuntimeLoop& runtime, uint32_t fulfillerId,
                                    uint8_t exceptionTypeTag, std::string message,
                                    std::vector<uint8_t> detailBytes);
 void promiseCapabilityReleaseInline(RuntimeLoop& runtime, uint32_t fulfillerId);
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncSleepNanosStart(
+    RuntimeLoop& runtime, uint64_t delayNanos);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseAwait(RuntimeLoop& runtime,
+                                                           uint32_t promiseId);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseCancel(RuntimeLoop& runtime,
+                                                            uint32_t promiseId);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseRelease(RuntimeLoop& runtime,
+                                                             uint32_t promiseId);
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseThenStart(
+    RuntimeLoop& runtime, uint32_t firstPromiseId, uint32_t secondPromiseId);
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseCatchStart(
+    RuntimeLoop& runtime, uint32_t promiseId, uint32_t fallbackPromiseId);
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseAllStart(
+    RuntimeLoop& runtime, std::vector<uint32_t> promiseIds);
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseRaceStart(
+    RuntimeLoop& runtime, std::vector<uint32_t> promiseIds);
+
+uint32_t kjAsyncSleepNanosStartInline(RuntimeLoop& runtime, uint64_t delayNanos);
+void kjAsyncPromiseCancelInline(RuntimeLoop& runtime, uint32_t promiseId);
+void kjAsyncPromiseReleaseInline(RuntimeLoop& runtime, uint32_t promiseId);
+uint32_t kjAsyncPromiseThenStartInline(RuntimeLoop& runtime, uint32_t firstPromiseId,
+                                       uint32_t secondPromiseId);
+uint32_t kjAsyncPromiseCatchStartInline(RuntimeLoop& runtime, uint32_t promiseId,
+                                        uint32_t fallbackPromiseId);
+uint32_t kjAsyncPromiseAllStartInline(RuntimeLoop& runtime,
+                                      std::vector<uint32_t> promiseIds);
+uint32_t kjAsyncPromiseRaceStartInline(RuntimeLoop& runtime,
+                                       std::vector<uint32_t> promiseIds);
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,

@@ -2288,6 +2288,27 @@ def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit 
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      let kjRuntime : Capnp.KjAsync.Runtime := { handle := runtime.handle }
+      let first ← kjRuntime.sleepMillisStart (UInt32.ofNat 1)
+      let second ← kjRuntime.sleepMillisStart (UInt32.ofNat 1)
+      let seq ← kjRuntime.promiseThenStart first second
+      seq.release
+      pure (Capnp.Rpc.Advanced.forward sink method req))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

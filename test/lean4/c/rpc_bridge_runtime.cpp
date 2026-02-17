@@ -722,6 +722,28 @@ void completeRegisterPairFailure(const std::shared_ptr<RegisterPairCompletion>& 
   completion->cv.notify_one();
 }
 
+void completeKjPromiseIdSuccess(const std::shared_ptr<KjPromiseIdCompletion>& completion,
+                                uint32_t promiseId) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->promiseId = promiseId;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeKjPromiseIdFailure(const std::shared_ptr<KjPromiseIdCompletion>& completion,
+                                std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
 class LoopbackCapabilityServer final : public capnp::Capability::Server {
  public:
   DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
@@ -2264,6 +2286,124 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncSleepNanosStart(uint64_t delayNanos) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncSleepNanosStart{delayNanos, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseAwait(uint32_t promiseId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseAwait{promiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseCancel(uint32_t promiseId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseCancel{promiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseRelease(uint32_t promiseId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseRelease{promiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseThenStart(
+      uint32_t firstPromiseId, uint32_t secondPromiseId) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseThenStart{
+          firstPromiseId, secondPromiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseCatchStart(
+      uint32_t promiseId, uint32_t fallbackPromiseId) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseCatchStart{
+          promiseId, fallbackPromiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseAllStart(
+      std::vector<uint32_t> promiseIds) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseAllStart{std::move(promiseIds), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseRaceStart(
+      std::vector<uint32_t> promiseIds) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncPromiseRaceStart{std::move(promiseIds), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueuePump() {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -2555,6 +2695,38 @@ class RuntimeLoop {
 
   void promiseCapabilityReleaseInline(uint32_t fulfillerId) {
     promiseCapabilityRelease(fulfillerId);
+  }
+
+  uint32_t kjAsyncSleepNanosStartInline(uint64_t delayNanos) {
+    auto* ioProvider = ioProvider_;
+    if (ioProvider == nullptr) {
+      throw std::runtime_error("RPC runtime is not ready for KJ async sleep");
+    }
+    return kjAsyncSleepNanosStart(*ioProvider, delayNanos);
+  }
+
+  void kjAsyncPromiseCancelInline(uint32_t promiseId) {
+    cancelKjAsyncPromise(promiseId);
+  }
+
+  void kjAsyncPromiseReleaseInline(uint32_t promiseId) {
+    releaseKjAsyncPromise(promiseId);
+  }
+
+  uint32_t kjAsyncPromiseThenStartInline(uint32_t firstPromiseId, uint32_t secondPromiseId) {
+    return kjAsyncPromiseThenStart(firstPromiseId, secondPromiseId);
+  }
+
+  uint32_t kjAsyncPromiseCatchStartInline(uint32_t promiseId, uint32_t fallbackPromiseId) {
+    return kjAsyncPromiseCatchStart(promiseId, fallbackPromiseId);
+  }
+
+  uint32_t kjAsyncPromiseAllStartInline(std::vector<uint32_t> promiseIds) {
+    return kjAsyncPromiseAllStart(std::move(promiseIds));
+  }
+
+  uint32_t kjAsyncPromiseRaceStartInline(std::vector<uint32_t> promiseIds) {
+    return kjAsyncPromiseRaceStart(std::move(promiseIds));
   }
 
   void notifyWorker() {
@@ -2979,6 +3151,48 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedKjAsyncSleepNanosStart {
+    uint64_t delayNanos;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseAwait {
+    uint32_t promiseId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseCancel {
+    uint32_t promiseId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseRelease {
+    uint32_t promiseId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseThenStart {
+    uint32_t firstPromiseId;
+    uint32_t secondPromiseId;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseCatchStart {
+    uint32_t promiseId;
+    uint32_t fallbackPromiseId;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseAllStart {
+    std::vector<uint32_t> promiseIds;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
+  struct QueuedKjAsyncPromiseRaceStart {
+    std::vector<uint32_t> promiseIds;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
   struct QueuedPump {
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -3105,7 +3319,11 @@ class RuntimeLoop {
                    QueuedPendingCallCount, QueuedAwaitRegisterPromise,
                    QueuedCancelRegisterPromise, QueuedReleaseRegisterPromise,
                    QueuedAwaitUnitPromise, QueuedCancelUnitPromise,
-                   QueuedReleaseUnitPromise, QueuedPump,
+                   QueuedReleaseUnitPromise, QueuedKjAsyncSleepNanosStart,
+                   QueuedKjAsyncPromiseAwait, QueuedKjAsyncPromiseCancel,
+                   QueuedKjAsyncPromiseRelease, QueuedKjAsyncPromiseThenStart,
+                   QueuedKjAsyncPromiseCatchStart, QueuedKjAsyncPromiseAllStart,
+                   QueuedKjAsyncPromiseRaceStart, QueuedPump,
                    QueuedMultiVatNewClient, QueuedMultiVatNewServer,
                    QueuedMultiVatNewServerWithBootstrapFactory, QueuedMultiVatReleasePeer,
                    QueuedMultiVatBootstrap, QueuedMultiVatBootstrapPeer,
@@ -4064,6 +4282,109 @@ class RuntimeLoop {
     }
     unitPromises_.emplace(promiseId, std::move(promise));
     return promiseId;
+  }
+
+  uint32_t addKjAsyncPromise(PendingUnitPromise&& promise) {
+    uint32_t promiseId = nextKjAsyncPromiseId_++;
+    while (kjAsyncPromises_.find(promiseId) != kjAsyncPromises_.end()) {
+      promiseId = nextKjAsyncPromiseId_++;
+    }
+    kjAsyncPromises_.emplace(promiseId, std::move(promise));
+    return promiseId;
+  }
+
+  uint32_t kjAsyncSleepNanosStart(kj::AsyncIoProvider& ioProvider, uint64_t delayNanos) {
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise =
+        canceler->wrap(ioProvider.getTimer().afterDelay(delayNanos * kj::NANOSECONDS));
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  PendingUnitPromise takeKjAsyncPromise(uint32_t promiseId) {
+    auto it = kjAsyncPromises_.find(promiseId);
+    if (it == kjAsyncPromises_.end()) {
+      throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
+    }
+    auto pending = kj::mv(it->second);
+    kjAsyncPromises_.erase(it);
+    pending.canceler->release();
+    return pending;
+  }
+
+  void awaitKjAsyncPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
+    auto pending = takeKjAsyncPromise(promiseId);
+    kj::mv(pending.promise).wait(waitScope);
+  }
+
+  void cancelKjAsyncPromise(uint32_t promiseId) {
+    auto it = kjAsyncPromises_.find(promiseId);
+    if (it == kjAsyncPromises_.end()) {
+      throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
+    }
+    it->second.canceler->cancel("Capnp.KjAsync promise canceled from Lean");
+  }
+
+  void releaseKjAsyncPromise(uint32_t promiseId) {
+    auto it = kjAsyncPromises_.find(promiseId);
+    if (it == kjAsyncPromises_.end()) {
+      throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
+    }
+    kjAsyncPromises_.erase(it);
+  }
+
+  uint32_t kjAsyncPromiseThenStart(uint32_t firstPromiseId, uint32_t secondPromiseId) {
+    auto firstPending = takeKjAsyncPromise(firstPromiseId);
+    auto secondPending = takeKjAsyncPromise(secondPromiseId);
+
+    auto canceler = kj::heap<kj::Canceler>();
+    auto second = kj::mv(secondPending.promise);
+    auto promise = canceler->wrap(kj::mv(firstPending.promise).then(
+        [second = kj::mv(second)]() mutable { return kj::mv(second); }));
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t kjAsyncPromiseCatchStart(uint32_t promiseId, uint32_t fallbackPromiseId) {
+    auto firstPending = takeKjAsyncPromise(promiseId);
+    auto fallbackPending = takeKjAsyncPromise(fallbackPromiseId);
+
+    auto canceler = kj::heap<kj::Canceler>();
+    auto fallback = kj::mv(fallbackPending.promise);
+    auto recovered = kj::mv(firstPending.promise).then(
+        []() -> kj::Promise<void> { return kj::READY_NOW; },
+        [fallback = kj::mv(fallback)](kj::Exception&&) mutable -> kj::Promise<void> {
+          return kj::mv(fallback);
+        });
+    auto promise = canceler->wrap(kj::mv(recovered));
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t kjAsyncPromiseAllStart(std::vector<uint32_t> promiseIds) {
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(promiseIds.size());
+    for (auto promiseId : promiseIds) {
+      auto pending = takeKjAsyncPromise(promiseId);
+      promises.add(kj::mv(pending.promise));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(kj::joinPromises(promises.finish()));
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t kjAsyncPromiseRaceStart(std::vector<uint32_t> promiseIds) {
+    if (promiseIds.empty()) {
+      throw std::runtime_error("promiseRaceStart requires at least one promise id");
+    }
+
+    auto firstPending = takeKjAsyncPromise(promiseIds[0]);
+    auto raced = kj::mv(firstPending.promise);
+
+    for (size_t i = 1; i < promiseIds.size(); ++i) {
+      auto pending = takeKjAsyncPromise(promiseIds[i]);
+      raced = kj::mv(raced).exclusiveJoin(kj::mv(pending.promise));
+    }
+
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(kj::mv(raced));
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   uint32_t addPromiseCapabilityFulfiller(PendingPromiseCapability&& promise) {
@@ -5493,6 +5814,8 @@ class RuntimeLoop {
 #else
       eventPort_.store(&io.unixEventPort, std::memory_order_release);
 #endif
+      ioProvider_ = io.provider;
+      waitScope_ = &io.waitScope;
       {
         std::lock_guard<std::mutex> lock(startupMutex_);
         startupComplete_ = true;
@@ -6532,6 +6855,120 @@ class RuntimeLoop {
                 promise.completion,
                 "unknown exception in capnp_lean_rpc_runtime_unit_promise_release");
           }
+        } else if (std::holds_alternative<QueuedKjAsyncSleepNanosStart>(op)) {
+          auto promise = std::get<QueuedKjAsyncSleepNanosStart>(std::move(op));
+          try {
+            auto promiseId = kjAsyncSleepNanosStart(*io.provider, promise.delayNanos);
+            completeKjPromiseIdSuccess(promise.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(promise.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_sleep_nanos_start");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseAwait>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseAwait>(std::move(op));
+          try {
+            awaitKjAsyncPromise(io.waitScope, promise.promiseId);
+            completeUnitSuccess(promise.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(promise.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_await");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseCancel>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseCancel>(std::move(op));
+          try {
+            cancelKjAsyncPromise(promise.promiseId);
+            completeUnitSuccess(promise.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(promise.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_cancel");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseRelease>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseRelease>(std::move(op));
+          try {
+            releaseKjAsyncPromise(promise.promiseId);
+            completeUnitSuccess(promise.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(promise.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_release");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseThenStart>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseThenStart>(std::move(op));
+          try {
+            auto promiseId =
+                kjAsyncPromiseThenStart(promise.firstPromiseId, promise.secondPromiseId);
+            completeKjPromiseIdSuccess(promise.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(promise.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_then_start");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseCatchStart>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseCatchStart>(std::move(op));
+          try {
+            auto promiseId =
+                kjAsyncPromiseCatchStart(promise.promiseId, promise.fallbackPromiseId);
+            completeKjPromiseIdSuccess(promise.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(promise.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_catch_start");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseAllStart>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseAllStart>(std::move(op));
+          try {
+            auto promiseId = kjAsyncPromiseAllStart(std::move(promise.promiseIds));
+            completeKjPromiseIdSuccess(promise.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(promise.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_all_start");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncPromiseRaceStart>(op)) {
+          auto promise = std::get<QueuedKjAsyncPromiseRaceStart>(std::move(op));
+          try {
+            auto promiseId = kjAsyncPromiseRaceStart(std::move(promise.promiseIds));
+            completeKjPromiseIdSuccess(promise.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(promise.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(promise.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                promise.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_promise_race_start");
+          }
         } else if (std::holds_alternative<QueuedMultiVatNewClient>(op)) {
           auto request = std::get<QueuedMultiVatNewClient>(std::move(op));
           try {
@@ -6796,6 +7233,7 @@ class RuntimeLoop {
       pendingDeferredCancelRequests_ = 0;
       registerPromises_.clear();
       unitPromises_.clear();
+      kjAsyncPromises_.clear();
       promiseCapabilityFulfillers_.clear();
       clients_.clear();
       servers_.clear();
@@ -6805,15 +7243,27 @@ class RuntimeLoop {
       genericBootstrapFactories_.clear();
       clearTraceEncoderHandler();
       traceEncoderEnabled_ = false;
+      ioProvider_ = nullptr;
+      waitScope_ = nullptr;
+      eventPort_.store(nullptr, std::memory_order_release);
 
       failPendingCalls("Capnp.Rpc runtime shut down");
     } catch (const kj::Exception& e) {
+      ioProvider_ = nullptr;
+      waitScope_ = nullptr;
+      eventPort_.store(nullptr, std::memory_order_release);
       reportStartupFailure(describeKjException(e));
       failPendingCalls(describeKjException(e));
     } catch (const std::exception& e) {
+      ioProvider_ = nullptr;
+      waitScope_ = nullptr;
+      eventPort_.store(nullptr, std::memory_order_release);
       reportStartupFailure(e.what());
       failPendingCalls(e.what());
     } catch (...) {
+      ioProvider_ = nullptr;
+      waitScope_ = nullptr;
+      eventPort_.store(nullptr, std::memory_order_release);
       reportStartupFailure("unknown exception while starting Capnp.Rpc runtime");
       failPendingCalls("unknown exception while starting Capnp.Rpc runtime");
     }
@@ -6991,6 +7441,22 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedCancelUnitPromise>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleaseUnitPromise>(op)) {
         completeUnitFailure(std::get<QueuedReleaseUnitPromise>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncSleepNanosStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncSleepNanosStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseAwait>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncPromiseAwait>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseCancel>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncPromiseCancel>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseRelease>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncPromiseRelease>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseThenStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseThenStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseCatchStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseCatchStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseAllStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseAllStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncPromiseRaceStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseRaceStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatNewClient>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatNewClient>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatNewServer>(op)) {
@@ -7044,6 +7510,8 @@ class RuntimeLoop {
   std::mutex queueMutex_;
   std::condition_variable queueCv_;
   std::atomic<kj::EventPort*> eventPort_{nullptr};
+  kj::AsyncIoProvider* ioProvider_ = nullptr;
+  kj::WaitScope* waitScope_ = nullptr;
   bool stopping_ = false;
   std::deque<QueuedOperation> queue_;
 
@@ -7062,6 +7530,7 @@ class RuntimeLoop {
   uint64_t pendingDeferredCancelRequests_ = 0;
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
+  std::unordered_map<uint32_t, PendingUnitPromise> kjAsyncPromises_;
   std::unordered_map<uint32_t, PendingPromiseCapability> promiseCapabilityFulfillers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
@@ -7082,6 +7551,7 @@ class RuntimeLoop {
   uint32_t nextPendingCallId_ = 1;
   uint32_t nextRegisterPromiseId_ = 1;
   uint32_t nextUnitPromiseId_ = 1;
+  uint32_t nextKjAsyncPromiseId_ = 1;
   uint32_t nextPromiseCapabilityFulfillerId_ = 1;
 };
 
@@ -7167,6 +7637,38 @@ void promiseCapabilityRejectInline(RuntimeLoop& runtime, uint32_t fulfillerId,
 
 void promiseCapabilityReleaseInline(RuntimeLoop& runtime, uint32_t fulfillerId) {
   runtime.promiseCapabilityReleaseInline(fulfillerId);
+}
+
+uint32_t kjAsyncSleepNanosStartInline(RuntimeLoop& runtime, uint64_t delayNanos) {
+  return runtime.kjAsyncSleepNanosStartInline(delayNanos);
+}
+
+void kjAsyncPromiseCancelInline(RuntimeLoop& runtime, uint32_t promiseId) {
+  runtime.kjAsyncPromiseCancelInline(promiseId);
+}
+
+void kjAsyncPromiseReleaseInline(RuntimeLoop& runtime, uint32_t promiseId) {
+  runtime.kjAsyncPromiseReleaseInline(promiseId);
+}
+
+uint32_t kjAsyncPromiseThenStartInline(RuntimeLoop& runtime, uint32_t firstPromiseId,
+                                       uint32_t secondPromiseId) {
+  return runtime.kjAsyncPromiseThenStartInline(firstPromiseId, secondPromiseId);
+}
+
+uint32_t kjAsyncPromiseCatchStartInline(RuntimeLoop& runtime, uint32_t promiseId,
+                                        uint32_t fallbackPromiseId) {
+  return runtime.kjAsyncPromiseCatchStartInline(promiseId, fallbackPromiseId);
+}
+
+uint32_t kjAsyncPromiseAllStartInline(RuntimeLoop& runtime,
+                                      std::vector<uint32_t> promiseIds) {
+  return runtime.kjAsyncPromiseAllStartInline(std::move(promiseIds));
+}
+
+uint32_t kjAsyncPromiseRaceStartInline(RuntimeLoop& runtime,
+                                       std::vector<uint32_t> promiseIds) {
+  return runtime.kjAsyncPromiseRaceStartInline(std::move(promiseIds));
 }
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
@@ -7527,6 +8029,46 @@ std::shared_ptr<UnitCompletion> enqueueCancelUnitPromise(RuntimeLoop& runtime, u
 std::shared_ptr<UnitCompletion> enqueueReleaseUnitPromise(RuntimeLoop& runtime,
                                                           uint32_t promiseId) {
   return runtime.enqueueReleaseUnitPromise(promiseId);
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncSleepNanosStart(
+    RuntimeLoop& runtime, uint64_t delayNanos) {
+  return runtime.enqueueKjAsyncSleepNanosStart(delayNanos);
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseAwait(RuntimeLoop& runtime,
+                                                           uint32_t promiseId) {
+  return runtime.enqueueKjAsyncPromiseAwait(promiseId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseCancel(RuntimeLoop& runtime,
+                                                            uint32_t promiseId) {
+  return runtime.enqueueKjAsyncPromiseCancel(promiseId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncPromiseRelease(RuntimeLoop& runtime,
+                                                             uint32_t promiseId) {
+  return runtime.enqueueKjAsyncPromiseRelease(promiseId);
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseThenStart(
+    RuntimeLoop& runtime, uint32_t firstPromiseId, uint32_t secondPromiseId) {
+  return runtime.enqueueKjAsyncPromiseThenStart(firstPromiseId, secondPromiseId);
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseCatchStart(
+    RuntimeLoop& runtime, uint32_t promiseId, uint32_t fallbackPromiseId) {
+  return runtime.enqueueKjAsyncPromiseCatchStart(promiseId, fallbackPromiseId);
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseAllStart(
+    RuntimeLoop& runtime, std::vector<uint32_t> promiseIds) {
+  return runtime.enqueueKjAsyncPromiseAllStart(std::move(promiseIds));
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseRaceStart(
+    RuntimeLoop& runtime, std::vector<uint32_t> promiseIds) {
+  return runtime.enqueueKjAsyncPromiseRaceStart(std::move(promiseIds));
 }
 
 std::shared_ptr<UnitCompletion> enqueuePump(RuntimeLoop& runtime) { return runtime.enqueuePump(); }

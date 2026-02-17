@@ -1,5 +1,6 @@
 import LeanTest
 import Capnp.KjAsync
+import Capnp.Rpc
 
 open LeanTest
 
@@ -252,6 +253,39 @@ def testKjAsyncRuntimeMRunWithNewRuntime : IO Unit := do
     Capnp.KjAsync.RuntimeM.sleepMillis (UInt32.ofNat 5)
     pure alive
   assertEqual alive true
+
+@[test]
+def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
+  let rpcRuntime ← Capnp.Rpc.Runtime.init
+  let runtime : Capnp.KjAsync.Runtime := { handle := rpcRuntime.handle }
+  try
+    assertEqual (← runtime.isAlive) true
+
+    let p0 ← runtime.sleepMillisStart (UInt32.ofNat 5)
+    p0.await
+
+    let p1 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p2 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let seq ← runtime.promiseThenStart p1 p2
+    seq.await
+
+    let p3 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p4 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let all ← runtime.promiseAllStart #[p3, p4]
+    all.await
+
+    let slow ← runtime.sleepMillisStart (UInt32.ofNat 250)
+    let fast ← runtime.sleepMillisStart (UInt32.ofNat 5)
+    let race ← runtime.promiseRaceStart #[slow, fast]
+    race.await
+
+    let fail ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    fail.cancel
+    let fallback ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let recovered ← runtime.promiseCatchStart fail fallback
+    recovered.await
+  finally
+    rpcRuntime.shutdown
 
 @[test]
 def testKjAsyncNetworkRoundtrip : IO Unit := do
