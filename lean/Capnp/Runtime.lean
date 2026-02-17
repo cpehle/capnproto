@@ -758,7 +758,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
     let mut acc : UInt64 := 0
     for i in [0:8] do
       let b := readByte msg seg (base + i)
-      acc := acc ||| shl64 (UInt64.ofNat b.toNat) (8 * i)
+      acc := acc ||| shl64 b.toUInt64 (8 * i)
     return acc
 
 @[inline] def segmentWordCount (msg : Message) (seg : Nat) : Nat :=
@@ -776,7 +776,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
         let mut acc : UInt64 := 0
         for i in [0:8] do
           let b := bytes.get! i
-          acc := acc ||| shl64 (UInt64.ofNat b.toNat) (8 * i)
+          acc := acc ||| shl64 b.toUInt64 (8 * i)
         return acc
       Except.ok acc
     else
