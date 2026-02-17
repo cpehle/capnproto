@@ -713,26 +713,19 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
     throw (IO.userError
       s!"{resource} belongs to a different Capnp.KjAsync runtime")
 
-@[inline] private def ensureAllSameRuntime (runtime : Runtime) (owners : Array Runtime)
-    (resource : String) : IO Unit := do
-  for owner in owners do
-    ensureSameRuntime runtime owner resource
-
-@[inline] private def encodeUInt32Array (values : Array UInt32) : ByteArray :=
-  Id.run do
-    let mut out := ByteArray.emptyWithCapacity (values.size * 4)
-    for value in values do
-      out := out.push value.toUInt8
-      out := out.push ((value >>> 8).toUInt8)
-      out := out.push ((value >>> 16).toUInt8)
-      out := out.push ((value >>> 24).toUInt8)
-    pure out
-
 @[inline] private def appendUInt32Le (bytes : ByteArray) (value : UInt32) : ByteArray :=
   bytes.push value.toUInt8
     |>.push ((value >>> 8).toUInt8)
     |>.push ((value >>> 16).toUInt8)
     |>.push ((value >>> 24).toUInt8)
+
+@[inline] private def encodePromiseHandlesForRuntime (runtime : Runtime)
+    (promises : Array PromiseRef) : IO ByteArray := do
+  let mut out := ByteArray.emptyWithCapacity (promises.size * 4)
+  for promise in promises do
+    ensureSameRuntime runtime promise.runtime "PromiseRef"
+    out := appendUInt32Le out promise.handle
+  pure out
 
 @[inline] private def appendBytes (dst src : ByteArray) : ByteArray :=
   Id.run do
@@ -1107,20 +1100,18 @@ namespace Runtime
 
 @[inline] def promiseAllStart (runtime : Runtime) (promises : Array PromiseRef) :
     IO PromiseRef := do
-  ensureAllSameRuntime runtime (promises.map (·.runtime)) "PromiseRef"
+  let encoded ← encodePromiseHandlesForRuntime runtime promises
   return {
     runtime := runtime
-    handle := (← ffiRuntimePromiseAllStartImpl runtime.handle
-      (encodeUInt32Array (promises.map (·.handle))))
+    handle := (← ffiRuntimePromiseAllStartImpl runtime.handle encoded)
   }
 
 @[inline] def promiseRaceStart (runtime : Runtime) (promises : Array PromiseRef) :
     IO PromiseRef := do
-  ensureAllSameRuntime runtime (promises.map (·.runtime)) "PromiseRef"
+  let encoded ← encodePromiseHandlesForRuntime runtime promises
   return {
     runtime := runtime
-    handle := (← ffiRuntimePromiseRaceStartImpl runtime.handle
-      (encodeUInt32Array (promises.map (·.handle))))
+    handle := (← ffiRuntimePromiseRaceStartImpl runtime.handle encoded)
   }
 
 @[inline] def taskSetNew (runtime : Runtime) : IO TaskSetRef := do
