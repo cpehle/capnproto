@@ -1595,7 +1595,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
 @[inline] def readCapability (p : AnyPointer) : Capability :=
   let w := readWord p.msg p.seg p.word
   if (w &&& 0x3) == 3 then
-    UInt32.ofNat (((shr64 w 2) &&& 0x3fffffff).toNat)
+    ((shr64 w 2) &&& 0x3fffffff).toUInt32
   else
     0
 
@@ -1604,7 +1604,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   if w == 0 then
     return 0
   if (w &&& 0x3) == 3 then
-    return UInt32.ofNat (((shr64 w 2) &&& 0x3fffffff).toNat)
+    return ((shr64 w 2) &&& 0x3fffffff).toUInt32
   throw "capability pointer kind mismatch"
 
 @[inline] def readAnyPointerChecked (p : AnyPointer) : Except String AnyPointer := do
