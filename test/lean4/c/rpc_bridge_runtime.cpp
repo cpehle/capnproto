@@ -3300,9 +3300,8 @@ class RuntimeLoop {
           }
         } else {
           cleanupRequestCaps(cleanupState, responseCapIds);
-          setContextResultsFromPayload(context, action.payloadBytes.data(),
-                                       action.payloadBytes.size(), action.payloadCaps.data(),
-                                       action.payloadCaps.size());
+          setContextResultsFromPayloadWithCapIds(context, action.payloadBytes.data(),
+                                                 action.payloadBytes.size(), responseCapIds);
         }
         return {kj::READY_NOW, action.isStreaming, action.allowCancellation};
       }
@@ -3530,10 +3529,10 @@ class RuntimeLoop {
       }
     }
 
-    void setContextResultsFromPayload(
+    void setContextResultsFromPayloadWithCapIds(
         capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
         const uint8_t* responseBytesData, size_t responseBytesSize,
-        const uint8_t* responseCapsData, size_t responseCapsSize) {
+        const std::vector<uint32_t>& responseCapIds) {
       kj::ArrayPtr<const kj::byte> responseBytes(
           reinterpret_cast<const kj::byte*>(responseBytesData), responseBytesSize);
       kj::ArrayInputStream input(responseBytes);
@@ -3542,7 +3541,6 @@ class RuntimeLoop {
       capnp::InputStreamMessageReader reader(input, options);
       auto responseRoot = reader.getRoot<capnp::AnyPointer>();
 
-      auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
       if (responseCapIds.empty()) {
         context.getResults().setAs<capnp::AnyPointer>(responseRoot);
       } else {
@@ -3565,6 +3563,15 @@ class RuntimeLoop {
         capnp::ReaderCapabilityTable responseCapTable(capTableBuilder.finish());
         context.getResults().setAs<capnp::AnyPointer>(responseCapTable.imbue(responseRoot));
       }
+    }
+
+    void setContextResultsFromPayload(
+        capnp::CallContext<capnp::AnyPointer, capnp::AnyPointer>& context,
+        const uint8_t* responseBytesData, size_t responseBytesSize,
+        const uint8_t* responseCapsData, size_t responseCapsSize) {
+      auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
+      setContextResultsFromPayloadWithCapIds(context, responseBytesData, responseBytesSize,
+                                             responseCapIds);
     }
 
     void setContextResultsFromPayload(
