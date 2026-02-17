@@ -2612,6 +2612,44 @@ def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit 
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerForwardOnlyPromisePipelineHelper : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerHandlerTarget (fun _ method req => do
+      seenMethod.set method
+      pure req)
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (Capnp.Rpc.Advanced.forwardOnlyPromisePipeline sink method req))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    assertEqual response.capTable.caps.size 0
+    let method := (← seenMethod.get)
+    assertEqual method.interfaceId Echo.interfaceId
+    assertEqual method.methodId Echo.fooMethodId
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerTailCallAlias : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (Capnp.Rpc.Advanced.tailCall sink method req))
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

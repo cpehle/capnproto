@@ -286,6 +286,16 @@ abbrev RawTraceEncoder := String -> IO String
     (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
   { opts with sendResultsTo := .caller }
 
+@[inline] def AdvancedForwardOptions.setSendResultsToYourself
+    (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
+  { opts with sendResultsTo := .yourself }
+
+@[inline] def AdvancedForwardOptions.toCallerNoPromisePipelining : AdvancedForwardOptions :=
+  AdvancedForwardOptions.toCaller AdvancedCallHints.withNoPromisePipelining
+
+@[inline] def AdvancedForwardOptions.toCallerOnlyPromisePipeline : AdvancedForwardOptions :=
+  AdvancedForwardOptions.toCaller AdvancedCallHints.withOnlyPromisePipeline
+
 namespace Advanced
 
 @[inline] def respond (payload : Payload) : AdvancedHandlerResult :=
@@ -305,7 +315,23 @@ namespace Advanced
     (callHints : AdvancedCallHints := {}) : AdvancedHandlerResult :=
   .forwardCall target method payload (AdvancedForwardOptions.toCaller callHints)
 
+@[inline] def forwardNoPromisePipelining (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .forwardCall target method payload (AdvancedForwardOptions.setNoPromisePipelining {})
+
+@[inline] def forwardToCallerNoPromisePipelining (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .forwardCall target method payload AdvancedForwardOptions.toCallerNoPromisePipelining
+
+@[inline] def forwardOnlyPromisePipeline (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .forwardCall target method payload AdvancedForwardOptions.toCallerOnlyPromisePipeline
+
 @[inline] def tailForward (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  .tailCall target method payload
+
+@[inline] def tailCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
   .tailCall target method payload
 
