@@ -382,6 +382,38 @@ def testRpcRuntimeMRunKjAsyncBridge : IO Unit := do
     rpcRuntime.shutdown
 
 @[test]
+def testRpcRuntimeRunKjAsyncBridgeHelpers : IO Unit := do
+  let rpcRuntime ← Capnp.Rpc.Runtime.init
+  try
+    let alive ← rpcRuntime.runKjAsync do
+      Capnp.KjAsync.RuntimeM.isAlive
+    assertEqual alive true
+
+    let sameHandle ← rpcRuntime.withKjAsyncRuntime fun runtime => do
+      runtime.sleepMillis (UInt32.ofNat 1)
+      pure (runtime.handle == rpcRuntime.handle)
+    assertEqual sameHandle true
+    assertEqual (← rpcRuntime.isAlive) true
+  finally
+    rpcRuntime.shutdown
+
+@[test]
+def testRpcRuntimeMWithKjAsyncRuntimeHelpers : IO Unit := do
+  let rpcRuntime ← Capnp.Rpc.Runtime.init
+  try
+    let (sameHandle, alive) ← Capnp.Rpc.RuntimeM.run rpcRuntime do
+      let runtime ← Capnp.Rpc.RuntimeM.kjAsyncRuntime
+      let sameHandle := runtime.handle == rpcRuntime.handle
+      let alive ← Capnp.Rpc.RuntimeM.withKjAsyncRuntime fun borrowedRuntime => do
+        borrowedRuntime.sleepMillis (UInt32.ofNat 1)
+        borrowedRuntime.isAlive
+      pure (sameHandle, alive)
+    assertEqual sameHandle true
+    assertEqual alive true
+  finally
+    rpcRuntime.shutdown
+
+@[test]
 def testKjAsyncNetworkRoundtrip : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket test skipped on Windows"
