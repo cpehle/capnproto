@@ -239,11 +239,11 @@ instance : Inhabited SegmentView := ⟨emptySegmentView⟩
   x >>> (UInt32.ofNat n)
 
 @[inline] def readUInt32LE (bytes : ByteArray) (byteOff : Nat) : UInt32 :=
-  let b0 := UInt64.ofNat (readByteArray bytes byteOff).toNat
-  let b1 := UInt64.ofNat (readByteArray bytes (byteOff + 1)).toNat
-  let b2 := UInt64.ofNat (readByteArray bytes (byteOff + 2)).toNat
-  let b3 := UInt64.ofNat (readByteArray bytes (byteOff + 3)).toNat
-  UInt32.ofNat ((b0 + shl64 b1 8 + shl64 b2 16 + shl64 b3 24).toNat)
+  let b0 := (readByteArray bytes byteOff).toUInt32
+  let b1 := ((readByteArray bytes (byteOff + 1)).toUInt32) <<< 8
+  let b2 := ((readByteArray bytes (byteOff + 2)).toUInt32) <<< 16
+  let b3 := ((readByteArray bytes (byteOff + 3)).toUInt32) <<< 24
+  b0 ||| b1 ||| b2 ||| b3
 
 def readMessage (bytes : ByteArray) : Message :=
   if bytes.size < 4 then
@@ -304,11 +304,10 @@ def readMessageChecked (opts : ReaderOptions) (bytes : ByteArray) : Except Strin
 @[inline] def appendUInt32LE (ba : ByteArray) (v : UInt32) : ByteArray :=
   Id.run do
     let mut out := ba
-    let n := v.toNat
-    out := out.push (UInt8.ofNat (n &&& 0xff))
-    out := out.push (UInt8.ofNat ((n >>> 8) &&& 0xff))
-    out := out.push (UInt8.ofNat ((n >>> 16) &&& 0xff))
-    out := out.push (UInt8.ofNat ((n >>> 24) &&& 0xff))
+    out := out.push v.toUInt8
+    out := out.push ((v >>> 8).toUInt8)
+    out := out.push ((v >>> 16).toUInt8)
+    out := out.push ((v >>> 24).toUInt8)
     return out
 
 @[inline] def appendByteArray (ba : ByteArray) (src : ByteArray) : ByteArray :=
@@ -947,7 +946,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   let byteOff := bitOff / 8
   let bit := bitOff % 8
   let b := readByte msg seg byteOff
-  let v := (shr64 (UInt64.ofNat b.toNat) bit) &&& 0x1
+  let v := (shr64 b.toUInt64 bit) &&& 0x1
   v == 1
 
 @[inline] def getBool (r : StructReader) (bitOff : Nat) : Bool :=
@@ -958,22 +957,22 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   if mask then !v else v
 
 @[inline] def readUInt16 (msg : Message) (seg : Nat) (byteOff : Nat) : UInt16 :=
-  let b0 := UInt64.ofNat (readByte msg seg byteOff).toNat
-  let b1 := UInt64.ofNat (readByte msg seg (byteOff + 1)).toNat
-  UInt16.ofNat ((b0 + shl64 b1 8).toNat)
+  let b0 := (readByte msg seg byteOff).toUInt16
+  let b1 := ((readByte msg seg (byteOff + 1)).toUInt16) <<< 8
+  b0 ||| b1
 
 @[inline] def readUInt32 (msg : Message) (seg : Nat) (byteOff : Nat) : UInt32 :=
-  let b0 := UInt64.ofNat (readByte msg seg byteOff).toNat
-  let b1 := UInt64.ofNat (readByte msg seg (byteOff + 1)).toNat
-  let b2 := UInt64.ofNat (readByte msg seg (byteOff + 2)).toNat
-  let b3 := UInt64.ofNat (readByte msg seg (byteOff + 3)).toNat
-  UInt32.ofNat ((b0 + shl64 b1 8 + shl64 b2 16 + shl64 b3 24).toNat)
+  let b0 := (readByte msg seg byteOff).toUInt32
+  let b1 := ((readByte msg seg (byteOff + 1)).toUInt32) <<< 8
+  let b2 := ((readByte msg seg (byteOff + 2)).toUInt32) <<< 16
+  let b3 := ((readByte msg seg (byteOff + 3)).toUInt32) <<< 24
+  b0 ||| b1 ||| b2 ||| b3
 
 @[inline] def readUInt64 (msg : Message) (seg : Nat) (byteOff : Nat) : UInt64 :=
   Id.run do
     let mut acc : UInt64 := 0
     for i in [0:8] do
-      let b := UInt64.ofNat (readByte msg seg (byteOff + i)).toNat
+      let b := (readByte msg seg (byteOff + i)).toUInt64
       acc := acc ||| shl64 b (8 * i)
     return acc
 
