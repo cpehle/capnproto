@@ -757,13 +757,13 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 @[inline] private def encodeHeaders (headers : Array HttpHeader) : ByteArray :=
   Id.run do
     let mut out := ByteArray.emptyWithCapacity 16
-    out := appendUInt32Le out (UInt32.ofNat headers.size)
+    out := appendUInt32Le out headers.size.toUInt32
     for header in headers do
       let nameBytes := header.name.toUTF8
       let valueBytes := header.value.toUTF8
-      out := appendUInt32Le out (UInt32.ofNat nameBytes.size)
+      out := appendUInt32Le out nameBytes.size.toUInt32
       out := appendBytes out nameBytes
-      out := appendUInt32Le out (UInt32.ofNat valueBytes.size)
+      out := appendUInt32Le out valueBytes.size.toUInt32
       out := appendBytes out valueBytes
     pure out
 
@@ -772,7 +772,8 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
     | throw (IO.userError "invalid header list payload")
   let mut offset := offset0
   let mut headers : Array HttpHeader := #[]
-  for _ in [0:count.toNat] do
+  let mut remaining := count
+  while remaining != 0 do
     let some (nameLen, nextOffset) := decodeUInt32Le? bytes offset
       | throw (IO.userError "invalid header list payload")
     let nameLenNat := nameLen.toNat
@@ -784,6 +785,7 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
     let value ← decodeUtf8At bytes nextOffset2 valueLenNat
     offset := nextOffset2 + valueLenNat
     headers := headers.push { name := name, value := value }
+    remaining := remaining - 1
   if offset == bytes.size then
     pure headers
   else
@@ -829,7 +831,7 @@ inductive HttpMethod where
   else if tag == 7 then
     return .trace
   else
-    throw (IO.userError s!"unknown HTTP method tag: {tag.toNat}")
+    throw (IO.userError s!"unknown HTTP method tag: {tag}")
 
 @[inline] private def decodeWebSocketMessage
     (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : ByteArray) :
@@ -841,7 +843,7 @@ inductive HttpMethod where
   else if tag == 2 then
     return .close closeCode.toUInt16 text
   else
-    throw (IO.userError s!"unknown websocket message tag: {tag.toNat}")
+    throw (IO.userError s!"unknown websocket message tag: {tag}")
 
 structure HttpServerRequest where
   requestId : UInt32
