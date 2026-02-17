@@ -109,6 +109,14 @@ struct LeanByteArrayRef {
   lean_object* bytes_ = nullptr;
 };
 
+inline LeanByteArrayRef retainByteArrayForQueue(b_lean_obj_arg bytes) {
+  auto* bytesObj = const_cast<lean_object*>(bytes);
+  if (bytesObj != nullptr) {
+    lean_mark_mt(bytesObj);
+  }
+  return LeanByteArrayRef(bytesObj);
+}
+
 // Deferred Task structures
 struct DeferredLeanTask {
   explicit DeferredLeanTask(lean_object* task): task(task) {}

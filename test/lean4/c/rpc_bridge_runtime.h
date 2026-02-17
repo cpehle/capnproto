@@ -85,10 +85,10 @@ std::pair<bool, std::string> kjAsyncTaskSetTakeLastErrorInline(RuntimeLoop& runt
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps);
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
 std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps);
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
 std::shared_ptr<RawCallCompletion> enqueueAwaitPendingCall(RuntimeLoop& runtime,
                                                            uint32_t pendingCallId);
 std::shared_ptr<UnitCompletion> enqueueReleasePendingCall(RuntimeLoop& runtime,
@@ -97,7 +97,7 @@ std::shared_ptr<RegisterTargetCompletion> enqueueGetPipelinedCap(
     RuntimeLoop& runtime, uint32_t pendingCallId, std::vector<uint16_t> pointerPath);
 std::shared_ptr<UnitCompletion> enqueueStreamingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps);
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
 std::shared_ptr<Int64Completion> enqueueTargetGetFd(RuntimeLoop& runtime, uint32_t target);
 std::shared_ptr<UnitCompletion> enqueueTargetWhenResolved(RuntimeLoop& runtime, uint32_t target);
 std::shared_ptr<RegisterTargetCompletion> enqueueTargetWhenResolvedStart(RuntimeLoop& runtime,
@@ -119,7 +119,7 @@ std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(RuntimeLoop& runt
                                                                uint32_t fulfillerId,
                                                                uint8_t exceptionTypeTag,
                                                                std::string message,
-                                                               std::vector<uint8_t> detailBytes);
+                                                               LeanByteArrayRef detailBytes);
 std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityRelease(RuntimeLoop& runtime,
                                                                 uint32_t fulfillerId);
 
@@ -203,12 +203,12 @@ std::shared_ptr<RegisterTargetCompletion> enqueueRegisterFdTarget(RuntimeLoop& r
 
 std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
     RuntimeLoop& runtime, uint32_t serverId, uint32_t listenerId, std::string address,
-    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
     std::vector<uint32_t> requestCaps);
 std::shared_ptr<RawCallCompletion> enqueueCppCallPipelinedWithAccept(
     RuntimeLoop& runtime, uint32_t serverId, uint32_t listenerId, std::string address,
-    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
-    std::vector<uint32_t> requestCaps, std::vector<uint8_t> pipelinedRequest,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
+    std::vector<uint32_t> requestCaps, LeanByteArrayRef pipelinedRequest,
     std::vector<uint32_t> pipelinedRequestCaps);
 
 std::shared_ptr<RegisterTargetCompletion> enqueueAwaitRegisterPromise(RuntimeLoop& runtime,
@@ -250,11 +250,11 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatSetRestorer(RuntimeLoop& runtime,
                                                            b_lean_obj_arg restorer);
 std::shared_ptr<UnitCompletion> enqueueMultiVatClearRestorer(RuntimeLoop& runtime, uint32_t peerId);
 std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& runtime, uint32_t hostPeerId,
-                                                                std::vector<uint8_t> objectId,
+                                                                LeanByteArrayRef objectId,
                                                                 uint32_t targetId);
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
     RuntimeLoop& runtime, uint32_t sourcePeerId, std::string host, bool unique,
-    std::vector<uint8_t> objectId);
+    LeanByteArrayRef objectId);
 
 RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
                              uint16_t methodId, const std::vector<uint8_t>& requestBytes,

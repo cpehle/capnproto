@@ -1,6 +1,5 @@
 #include "rpc_bridge_runtime.h"
 
-#include <cstring>
 #include <limits>
 #include <stdexcept>
 
@@ -31,6 +30,7 @@ using rpc::newPromiseCapabilityInline;
 using rpc::promiseCapabilityFulfillInline;
 using rpc::promiseCapabilityRejectInline;
 using rpc::promiseCapabilityReleaseInline;
+using rpc::retainByteArrayForQueue;
 using rpc::shutdown;
 using rpc::unregisterRuntime;
 
@@ -89,15 +89,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_on_runtime(
   }
 
   try {
-    const auto size = lean_sarray_size(request);
-    const auto* reqData = lean_sarray_cptr(const_cast<lean_object*>(request));
-    std::vector<uint8_t> requestCopy(size);
-    if (size != 0) {
-      std::memcpy(requestCopy.data(), reqData, size);
-    }
-
-    auto completion =
-        rpc::enqueueRawCall(*runtime, target, interfaceId, methodId, std::move(requestCopy), {});
+    auto completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
+                                          retainByteArrayForQueue(request), {});
 
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -132,19 +125,14 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
         "runtime=" + std::to_string(runtimeId) + " target=" + std::to_string(target) +
             " interfaceId=" + std::to_string(interfaceId) + " methodId=" +
             std::to_string(methodId));
-    const auto requestSize = lean_sarray_size(request);
-    const auto* requestData = lean_sarray_cptr(const_cast<lean_object*>(request));
-    std::vector<uint8_t> requestCopy(requestSize);
-    if (requestSize != 0) {
-      std::memcpy(requestCopy.data(), requestData, requestSize);
-    }
 
     const auto requestCapsSize = lean_sarray_size(requestCaps);
     const auto* requestCapsData = lean_sarray_cptr(const_cast<lean_object*>(requestCaps));
     auto requestCapIds = decodeCapTable(requestCapsData, requestCapsSize);
 
-    auto completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId, std::move(requestCopy),
-                                              std::move(requestCapIds));
+    auto completion =
+        rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
+                            retainByteArrayForQueue(request), std::move(requestCapIds));
     debugLog("ffi.rawcall_with_caps.enqueued", "waiting");
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -182,19 +170,13 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
   }
 
   try {
-    const auto requestSize = lean_sarray_size(request);
-    const auto* requestData = lean_sarray_cptr(const_cast<lean_object*>(request));
-    std::vector<uint8_t> requestCopy(requestSize);
-    if (requestSize != 0) {
-      std::memcpy(requestCopy.data(), requestData, requestSize);
-    }
-
     const auto requestCapsSize = lean_sarray_size(requestCaps);
     const auto* requestCapsData = lean_sarray_cptr(const_cast<lean_object*>(requestCaps));
     auto requestCapIds = decodeCapTable(requestCapsData, requestCapsSize);
 
-    auto completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId, std::move(requestCopy),
-                                              std::move(requestCapIds));
+    auto completion =
+        rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
+                            retainByteArrayForQueue(request), std::move(requestCapIds));
     lean_object* outcomeObj = nullptr;
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -223,10 +205,10 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_caps(
   }
 
   try {
-    auto requestBytes = copyByteArray(request);
     auto requestCapIds = decodeCapTable(requestCaps);
-    auto completion = rpc::enqueueStartPendingCall(*runtime, 
-        target, interfaceId, methodId, std::move(requestBytes), std::move(requestCapIds));
+    auto completion =
+        rpc::enqueueStartPendingCall(*runtime, target, interfaceId, methodId,
+                                     retainByteArrayForQueue(request), std::move(requestCapIds));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -559,10 +541,10 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_streaming_call_with_c
   }
 
   try {
-    auto requestBytes = copyByteArray(request);
     auto requestCapIds = decodeCapTable(requestCaps);
-    auto completion = rpc::enqueueStreamingCall(*runtime, 
-        target, interfaceId, methodId, std::move(requestBytes), std::move(requestCapIds));
+    auto completion =
+        rpc::enqueueStreamingCall(*runtime, target, interfaceId, methodId,
+                                  retainByteArrayForQueue(request), std::move(requestCapIds));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -940,8 +922,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_promise_capability_re
 
   try {
     std::string messageCopy = lean_string_cstr(message);
-    auto detailBytes = copyByteArray(detail);
     if (rpc::isWorkerThread(*runtime)) {
+      auto detailBytes = copyByteArray(detail);
       promiseCapabilityRejectInline(*runtime, fulfillerId, exceptionTypeTag, std::move(messageCopy),
                                     std::move(detailBytes));
       lean_obj_res ok;
@@ -949,7 +931,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_promise_capability_re
       return ok;
     }
     auto completion = rpc::enqueuePromiseCapabilityReject(
-        *runtime, fulfillerId, exceptionTypeTag, std::move(messageCopy), std::move(detailBytes));
+        *runtime, fulfillerId, exceptionTypeTag, std::move(messageCopy),
+        retainByteArrayForQueue(detail));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -2577,8 +2560,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_publish_stur
     return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
   }
   try {
-    auto completion =
-        rpc::enqueueMultiVatPublishSturdyRef(*runtime, hostPeerId, copyByteArray(objectId), targetId);
+    auto completion = rpc::enqueueMultiVatPublishSturdyRef(
+        *runtime, hostPeerId, retainByteArrayForQueue(objectId), targetId);
     std::unique_lock<std::mutex> lock(completion->mutex);
     completion->cv.wait(lock, [&completion]() { return completion->done; });
     if (!completion->ok) {
@@ -2605,8 +2588,9 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_restore_stur
     return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
   }
   try {
-    auto completion = rpc::enqueueMultiVatRestoreSturdyRef(*runtime, 
-        sourcePeerId, std::string(lean_string_cstr(host)), unique != 0, copyByteArray(objectId));
+    auto completion = rpc::enqueueMultiVatRestoreSturdyRef(
+        *runtime, sourcePeerId, std::string(lean_string_cstr(host)), unique != 0,
+        retainByteArrayForQueue(objectId));
     std::unique_lock<std::mutex> lock(completion->mutex);
     completion->cv.wait(lock, [&completion]() { return completion->done; });
     if (!completion->ok) {
@@ -2723,11 +2707,10 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_with_accept(
 
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
-    auto requestBytes = copyByteArray(request);
     auto requestCapIds = decodeCapTable(requestCaps);
-    auto completion = rpc::enqueueCppCallWithAccept(*runtime, 
-        serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
-        std::move(requestBytes), std::move(requestCapIds));
+    auto completion = rpc::enqueueCppCallWithAccept(
+        *runtime, serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
+        retainByteArrayForQueue(request), std::move(requestCapIds));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -2757,14 +2740,12 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_cpp_call_pipelined_wi
 
   try {
     auto addressCopy = std::string(lean_string_cstr(address));
-    auto requestBytes = copyByteArray(request);
     auto requestCapIds = decodeCapTable(requestCaps);
-    auto pipelinedRequestBytes = copyByteArray(pipelinedRequest);
     auto pipelinedRequestCapIds = decodeCapTable(pipelinedRequestCaps);
-    auto completion = rpc::enqueueCppCallPipelinedWithAccept(*runtime, 
-        serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
-        std::move(requestBytes), std::move(requestCapIds), std::move(pipelinedRequestBytes),
-        std::move(pipelinedRequestCapIds));
+    auto completion = rpc::enqueueCppCallPipelinedWithAccept(
+        *runtime, serverId, listenerId, std::move(addressCopy), portHint, interfaceId, methodId,
+        retainByteArrayForQueue(request), std::move(requestCapIds),
+        retainByteArrayForQueue(pipelinedRequest), std::move(pipelinedRequestCapIds));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });

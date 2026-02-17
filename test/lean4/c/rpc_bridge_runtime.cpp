@@ -394,7 +394,7 @@ class RuntimeLoop {
   ~RuntimeLoop() { shutdown(); }
 
   std::shared_ptr<RawCallCompletion> enqueueRawCall(
-      uint32_t target, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
     auto completion = std::make_shared<RawCallCompletion>();
     {
@@ -411,7 +411,7 @@ class RuntimeLoop {
   }
 
   std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
-      uint32_t target, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
     {
@@ -472,7 +472,7 @@ class RuntimeLoop {
   }
 
   std::shared_ptr<UnitCompletion> enqueueStreamingCall(
-      uint32_t target, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -578,7 +578,7 @@ class RuntimeLoop {
 
   std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
       uint32_t serverId, uint32_t listenerId, std::string address, uint32_t portHint,
-      uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+      uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
     auto completion = std::make_shared<RawCallCompletion>();
     {
@@ -597,8 +597,8 @@ class RuntimeLoop {
 
   std::shared_ptr<RawCallCompletion> enqueueCppCallPipelinedWithAccept(
       uint32_t serverId, uint32_t listenerId, std::string address, uint32_t portHint,
-      uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
-      std::vector<uint32_t> requestCaps, std::vector<uint8_t> pipelinedRequest,
+      uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
+      std::vector<uint32_t> requestCaps, LeanByteArrayRef pipelinedRequest,
       std::vector<uint32_t> pipelinedRequestCaps) {
     auto completion = std::make_shared<RawCallCompletion>();
     {
@@ -804,7 +804,7 @@ class RuntimeLoop {
   std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(uint32_t fulfillerId,
                                                                  uint8_t exceptionTypeTag,
                                                                  std::string message,
-                                                                 std::vector<uint8_t> detailBytes) {
+                                                                 LeanByteArrayRef detailBytes) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1909,7 +1909,7 @@ class RuntimeLoop {
   }
 
   std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(
-      uint32_t hostPeerId, std::vector<uint8_t> objectId, uint32_t targetId) {
+      uint32_t hostPeerId, LeanByteArrayRef objectId, uint32_t targetId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1925,7 +1925,7 @@ class RuntimeLoop {
   }
 
   std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
-      uint32_t sourcePeerId, std::string host, bool unique, std::vector<uint8_t> objectId) {
+      uint32_t sourcePeerId, std::string host, bool unique, LeanByteArrayRef objectId) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1967,7 +1967,8 @@ class RuntimeLoop {
   void promiseCapabilityRejectInline(uint32_t fulfillerId, uint8_t exceptionTypeTag,
                                      std::string message,
                                      std::vector<uint8_t> detailBytes) {
-    promiseCapabilityReject(fulfillerId, exceptionTypeTag, message, detailBytes);
+    promiseCapabilityReject(fulfillerId, exceptionTypeTag, message, detailBytes.data(),
+                            detailBytes.size());
   }
 
   void promiseCapabilityReleaseInline(uint32_t fulfillerId) {
@@ -2066,7 +2067,7 @@ class RuntimeLoop {
     uint32_t target;
     uint64_t interfaceId;
     uint16_t methodId;
-    std::vector<uint8_t> request;
+    LeanByteArrayRef request;
     std::vector<uint32_t> requestCaps;
     std::shared_ptr<RawCallCompletion> completion;
   };
@@ -2075,7 +2076,7 @@ class RuntimeLoop {
     uint32_t target;
     uint64_t interfaceId;
     uint16_t methodId;
-    std::vector<uint8_t> request;
+    LeanByteArrayRef request;
     std::vector<uint32_t> requestCaps;
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
@@ -2100,7 +2101,7 @@ class RuntimeLoop {
     uint32_t target;
     uint64_t interfaceId;
     uint16_t methodId;
-    std::vector<uint8_t> request;
+    LeanByteArrayRef request;
     std::vector<uint32_t> requestCaps;
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -2140,7 +2141,7 @@ class RuntimeLoop {
     uint32_t portHint;
     uint64_t interfaceId;
     uint16_t methodId;
-    std::vector<uint8_t> request;
+    LeanByteArrayRef request;
     std::vector<uint32_t> requestCaps;
     std::shared_ptr<RawCallCompletion> completion;
   };
@@ -2152,9 +2153,9 @@ class RuntimeLoop {
     uint32_t portHint;
     uint64_t interfaceId;
     uint16_t methodId;
-    std::vector<uint8_t> request;
+    LeanByteArrayRef request;
     std::vector<uint32_t> requestCaps;
-    std::vector<uint8_t> pipelinedRequest;
+    LeanByteArrayRef pipelinedRequest;
     std::vector<uint32_t> pipelinedRequestCaps;
     std::shared_ptr<RawCallCompletion> completion;
   };
@@ -2222,7 +2223,7 @@ class RuntimeLoop {
     uint32_t fulfillerId;
     uint8_t exceptionTypeTag;
     std::string message;
-    std::vector<uint8_t> detailBytes;
+    LeanByteArrayRef detailBytes;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -2614,7 +2615,7 @@ class RuntimeLoop {
 
   struct QueuedMultiVatPublishSturdyRef {
     uint32_t hostPeerId;
-    std::vector<uint8_t> objectId;
+    LeanByteArrayRef objectId;
     uint32_t targetId;
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -2623,7 +2624,7 @@ class RuntimeLoop {
     uint32_t sourcePeerId;
     std::string host;
     bool unique;
-    std::vector<uint8_t> objectId;
+    LeanByteArrayRef objectId;
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
@@ -3900,8 +3901,11 @@ class RuntimeLoop {
     return requireMultiVatPeer(idIt->second);
   }
 
-  static std::string sturdyObjectKey(const std::vector<uint8_t>& objectId) {
-    return std::string(reinterpret_cast<const char*>(objectId.data()), objectId.size());
+  static std::string sturdyObjectKey(const uint8_t* objectIdData, size_t objectIdSize) {
+    if (objectIdSize == 0) {
+      return std::string();
+    }
+    return std::string(reinterpret_cast<const char*>(objectIdData), objectIdSize);
   }
 
   uint32_t newMultiVatClient(const std::string& name) {
@@ -4007,26 +4011,25 @@ class RuntimeLoop {
     }
   }
 
-  void multiVatPublishSturdyRef(uint32_t hostPeerId, const std::vector<uint8_t>& objectId,
-                                uint32_t targetId) {
+  void multiVatPublishSturdyRef(uint32_t hostPeerId, const uint8_t* objectIdData,
+                                size_t objectIdSize, uint32_t targetId) {
     requireMultiVatPeer(hostPeerId);
     auto targetIt = targets_.find(targetId);
     if (targetIt == targets_.end()) {
       throw std::runtime_error("unknown RPC target capability id: " + std::to_string(targetId));
     }
     auto& hostRefs = sturdyRefs_[hostPeerId];
-    hostRefs.insert_or_assign(sturdyObjectKey(objectId), targetIt->second);
+    hostRefs.insert_or_assign(sturdyObjectKey(objectIdData, objectIdSize), targetIt->second);
   }
 
   uint32_t multiVatRestoreSturdyRef(uint32_t sourcePeerId, const LeanVatId& hostVatId,
-                                    const std::vector<uint8_t>& objectId) {
+                                    const uint8_t* objectIdData, size_t objectIdSize) {
     auto& source = requireMultiVatPeer(sourcePeerId);
     auto& host = requireMultiVatPeerByHost(hostVatId.host);
 
     if (host.sturdyRefRestorer != nullptr) {
       lean_inc(host.sturdyRefRestorer);
-      auto objectIdObj =
-          mkByteArrayCopy(objectId.empty() ? nullptr : objectId.data(), objectId.size());
+      auto objectIdObj = mkByteArrayCopy(objectIdData, objectIdSize);
       auto ioResult = lean_apply_4(host.sturdyRefRestorer, lean_mk_string(source.name.c_str()),
                                    lean_box(hostVatId.unique ? 1 : 0), objectIdObj, lean_box(0));
       if (lean_io_result_is_error(ioResult)) {
@@ -4043,7 +4046,7 @@ class RuntimeLoop {
     if (hostRefsIt == sturdyRefs_.end()) {
       throw std::runtime_error("no sturdy refs published for host: " + host.name);
     }
-    auto key = sturdyObjectKey(objectId);
+    auto key = sturdyObjectKey(objectIdData, objectIdSize);
     auto refIt = hostRefsIt->second.find(key);
     if (refIt == hostRefsIt->second.end()) {
       throw std::runtime_error("unknown sturdy ref object id");
@@ -4235,7 +4238,7 @@ class RuntimeLoop {
   }
 
   uint32_t startPendingCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
-                            const std::vector<uint8_t>& request,
+                            const uint8_t* requestData, size_t requestSize,
                             const std::vector<uint32_t>& requestCaps) {
     auto targetIt = targets_.find(target);
     if (targetIt == targets_.end()) {
@@ -4243,7 +4246,7 @@ class RuntimeLoop {
     }
 
     auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
-    setRequestPayload(requestBuilder, request, requestCaps);
+    setRequestPayload(requestBuilder, requestData, requestSize, requestCaps);
     auto promiseAndPipeline = requestBuilder.send();
     auto canceler = kj::heap<kj::Canceler>();
     auto pipeline = promiseAndPipeline.noop();
@@ -4299,7 +4302,7 @@ class RuntimeLoop {
   }
 
   void processStreamingCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
-                            const std::vector<uint8_t>& request,
+                            const uint8_t* requestData, size_t requestSize,
                             const std::vector<uint32_t>& requestCaps,
                             kj::WaitScope& waitScope) {
     auto targetIt = targets_.find(target);
@@ -4316,7 +4319,7 @@ class RuntimeLoop {
     StreamingClientAccess client(targetIt->second);
     auto requestBuilder =
         client.newStreamingCall<capnp::AnyPointer>(interfaceId, methodId, kj::none, {});
-    setRequestPayload(requestBuilder, request, requestCaps);
+    setRequestPayload(requestBuilder, requestData, requestSize, requestCaps);
     requestBuilder.send().wait(waitScope);
   }
 
@@ -4437,7 +4440,7 @@ class RuntimeLoop {
 
   kj::Promise<RawCallResult> processRawCall(uint32_t target, uint64_t interfaceId,
                                             uint16_t methodId,
-                                            const std::vector<uint8_t>& request,
+                                            const uint8_t* requestData, size_t requestSize,
                                             const std::vector<uint32_t>& requestCaps) {
     auto targetIt = targets_.find(target);
     if (targetIt == targets_.end()) {
@@ -4450,7 +4453,7 @@ class RuntimeLoop {
             " methodId=" + std::to_string(methodId));
 
     auto requestBuilder = targetIt->second.typelessRequest(interfaceId, methodId, kj::none, {});
-    setRequestPayload(requestBuilder, request, requestCaps);
+    setRequestPayload(requestBuilder, requestData, requestSize, requestCaps);
     return requestBuilder.send().then([this, target](capnp::Response<capnp::AnyPointer>&& response) {
       debugLog("rawcall.done", "target=" + std::to_string(target));
       return kj::evalNow([this, &response]() { return serializeResponse(response); });
@@ -4460,7 +4463,7 @@ class RuntimeLoop {
   RawCallResult processCppCallWithAccept(
       kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t serverId,
       uint32_t listenerId, const std::string& address, uint32_t portHint,
-      uint64_t interfaceId, uint16_t methodId, const std::vector<uint8_t>& request,
+      uint64_t interfaceId, uint16_t methodId, const uint8_t* requestData, size_t requestSize,
       const std::vector<uint32_t>& requestCaps) {
     auto serverIt = servers_.find(serverId);
     if (serverIt == servers_.end()) {
@@ -4497,7 +4500,7 @@ class RuntimeLoop {
       auto target = rpcSystem->bootstrap(vatId);
 
       auto requestBuilder = target.typelessRequest(interfaceId, methodId, kj::none, {});
-      setRequestPayload(requestBuilder, request, requestCaps);
+      setRequestPayload(requestBuilder, requestData, requestSize, requestCaps);
 
       auto response = requestBuilder.send().wait(waitScope);
       capnp::MallocMessageBuilder responseMessage;
@@ -4527,8 +4530,9 @@ class RuntimeLoop {
   RawCallResult processCppPipelinedCallWithAccept(
       kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t serverId,
       uint32_t listenerId, const std::string& address, uint32_t portHint,
-      uint64_t interfaceId, uint16_t methodId, const std::vector<uint8_t>& request,
-      const std::vector<uint32_t>& requestCaps, const std::vector<uint8_t>& pipelinedRequest,
+      uint64_t interfaceId, uint16_t methodId, const uint8_t* requestData, size_t requestSize,
+      const std::vector<uint32_t>& requestCaps, const uint8_t* pipelinedRequestData,
+      size_t pipelinedRequestSize,
       const std::vector<uint32_t>& pipelinedRequestCaps) {
     auto serverIt = servers_.find(serverId);
     if (serverIt == servers_.end()) {
@@ -4563,13 +4567,14 @@ class RuntimeLoop {
     auto target = rpcSystem->bootstrap(vatId);
 
     auto firstRequest = target.typelessRequest(interfaceId, methodId, kj::none, {});
-    setRequestPayload(firstRequest, request, requestCaps);
+    setRequestPayload(firstRequest, requestData, requestSize, requestCaps);
     auto firstPromise = firstRequest.send();
 
     auto pipelinedTarget = capnp::Capability::Client(firstPromise.noop().asCap());
     auto pipelinedRequestBuilder =
         pipelinedTarget.typelessRequest(interfaceId, methodId, kj::none, {});
-    setRequestPayload(pipelinedRequestBuilder, pipelinedRequest, pipelinedRequestCaps);
+    setRequestPayload(pipelinedRequestBuilder, pipelinedRequestData, pipelinedRequestSize,
+                      pipelinedRequestCaps);
     auto pipelinedResponse = pipelinedRequestBuilder.send().wait(waitScope);
     return serializeResponse(pipelinedResponse);
   }
@@ -4662,7 +4667,7 @@ class RuntimeLoop {
 
   void promiseCapabilityReject(uint32_t fulfillerId, uint8_t exceptionTypeTag,
                                const std::string& message,
-                               const std::vector<uint8_t>& detailBytes) {
+                               const uint8_t* detailBytesData, size_t detailBytesSize) {
     auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
     if (promiseIt == promiseCapabilityFulfillers_.end()) {
       throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
@@ -4670,9 +4675,9 @@ class RuntimeLoop {
     }
     auto type = decodeRemoteExceptionType(exceptionTypeTag);
     auto ex = kj::Exception(type, __FILE__, __LINE__, kj::str(message.c_str()));
-    if (!detailBytes.empty()) {
-      auto copy = kj::heapArray<kj::byte>(detailBytes.size());
-      std::memcpy(copy.begin(), detailBytes.data(), detailBytes.size());
+    if (detailBytesSize != 0) {
+      auto copy = kj::heapArray<kj::byte>(detailBytesSize);
+      std::memcpy(copy.begin(), detailBytesData, detailBytesSize);
       ex.setDetail(1, kj::mv(copy));
     }
     promiseIt->second.fulfiller->reject(kj::mv(ex));
@@ -5363,7 +5368,8 @@ class RuntimeLoop {
           auto call = std::get<QueuedRawCall>(std::move(op));
           try {
             auto promise =
-                processRawCall(call.target, call.interfaceId, call.methodId, call.request,
+                processRawCall(call.target, call.interfaceId, call.methodId, call.request.data(),
+                               call.request.size(),
                                call.requestCaps);
             scheduleRawCallCompletion(kj::mv(promise), call.completion);
           } catch (const kj::Exception& e) {
@@ -5377,7 +5383,8 @@ class RuntimeLoop {
           auto call = std::get<QueuedStartPendingCall>(std::move(op));
           try {
             auto pendingCallId =
-                startPendingCall(call.target, call.interfaceId, call.methodId, call.request,
+                startPendingCall(call.target, call.interfaceId, call.methodId, call.request.data(),
+                                 call.request.size(),
                                  call.requestCaps);
             completeRegisterSuccess(call.completion, pendingCallId);
           } catch (const kj::Exception& e) {
@@ -5434,7 +5441,9 @@ class RuntimeLoop {
         } else if (std::holds_alternative<QueuedStreamingCall>(op)) {
           auto call = std::get<QueuedStreamingCall>(std::move(op));
           try {
-            processStreamingCall(call.target, call.interfaceId, call.methodId, call.request,
+            processStreamingCall(call.target, call.interfaceId, call.methodId,
+                                 call.request.data(),
+                                 call.request.size(),
                                  call.requestCaps, io.waitScope);
             completeUnitSuccess(call.completion);
           } catch (const kj::Exception& e) {
@@ -5537,7 +5546,8 @@ class RuntimeLoop {
             auto promise = kj::evalNow([&]() {
               return processCppCallWithAccept(
                   *io.provider, io.waitScope, call.serverId, call.listenerId, call.address,
-                  call.portHint, call.interfaceId, call.methodId, call.request, call.requestCaps);
+                  call.portHint, call.interfaceId, call.methodId, call.request.data(),
+                  call.request.size(), call.requestCaps);
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
@@ -5554,8 +5564,9 @@ class RuntimeLoop {
             auto promise = kj::evalNow([&]() {
               return processCppPipelinedCallWithAccept(
                   *io.provider, io.waitScope, call.serverId, call.listenerId, call.address,
-                  call.portHint, call.interfaceId, call.methodId, call.request, call.requestCaps,
-                  call.pipelinedRequest, call.pipelinedRequestCaps);
+                  call.portHint, call.interfaceId, call.methodId, call.request.data(),
+                  call.request.size(), call.requestCaps, call.pipelinedRequest.data(),
+                  call.pipelinedRequest.size(), call.pipelinedRequestCaps);
             });
             completeSuccess(call.completion, promise.wait(io.waitScope));
           } catch (const kj::Exception& e) {
@@ -5736,7 +5747,8 @@ class RuntimeLoop {
           auto request = std::get<QueuedPromiseCapabilityReject>(std::move(op));
           try {
             promiseCapabilityReject(request.fulfillerId, request.exceptionTypeTag,
-                                   request.message, request.detailBytes);
+                                    request.message, request.detailBytes.data(),
+                                    request.detailBytes.size());
             completeUnitSuccess(request.completion);
           } catch (const kj::Exception& e) {
             completeUnitFailure(request.completion, describeKjException(e));
@@ -6765,7 +6777,8 @@ class RuntimeLoop {
         } else if (std::holds_alternative<QueuedMultiVatPublishSturdyRef>(op)) {
           auto request = std::get<QueuedMultiVatPublishSturdyRef>(std::move(op));
           try {
-            multiVatPublishSturdyRef(request.hostPeerId, request.objectId, request.targetId);
+            multiVatPublishSturdyRef(request.hostPeerId, request.objectId.data(),
+                                     request.objectId.size(), request.targetId);
             completeUnitSuccess(request.completion);
           } catch (const kj::Exception& e) {
             completeUnitFailure(request.completion, describeKjException(e));
@@ -6780,7 +6793,8 @@ class RuntimeLoop {
           auto request = std::get<QueuedMultiVatRestoreSturdyRef>(std::move(op));
           try {
             auto target = multiVatRestoreSturdyRef(
-                request.sourcePeerId, LeanVatId{request.host, request.unique}, request.objectId);
+                request.sourcePeerId, LeanVatId{request.host, request.unique},
+                request.objectId.data(), request.objectId.size());
             completeRegisterSuccess(request.completion, target);
           } catch (const kj::Exception& e) {
             completeRegisterFailure(request.completion, describeKjException(e));
@@ -7322,14 +7336,14 @@ std::pair<bool, std::string> kjAsyncTaskSetTakeLastErrorInline(RuntimeLoop& runt
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps) {
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps) {
   return runtime.enqueueRawCall(target, interfaceId, methodId, std::move(request),
                                 std::move(requestCaps));
 }
 
 std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps) {
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps) {
   return runtime.enqueueStartPendingCall(target, interfaceId, methodId, std::move(request),
                                          std::move(requestCaps));
 }
@@ -7351,7 +7365,7 @@ std::shared_ptr<RegisterTargetCompletion> enqueueGetPipelinedCap(
 
 std::shared_ptr<UnitCompletion> enqueueStreamingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
-    std::vector<uint8_t> request, std::vector<uint32_t> requestCaps) {
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps) {
   return runtime.enqueueStreamingCall(target, interfaceId, methodId, std::move(request),
                                       std::move(requestCaps));
 }
@@ -7410,7 +7424,7 @@ std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(RuntimeLoop& runt
                                                                uint32_t fulfillerId,
                                                                uint8_t exceptionTypeTag,
                                                                std::string message,
-                                                               std::vector<uint8_t> detailBytes) {
+                                                               LeanByteArrayRef detailBytes) {
   return runtime.enqueuePromiseCapabilityReject(fulfillerId, exceptionTypeTag, std::move(message),
                                                 std::move(detailBytes));
 }
@@ -7634,7 +7648,7 @@ std::shared_ptr<RegisterTargetCompletion> enqueueRegisterFdTarget(RuntimeLoop& r
 
 std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
     RuntimeLoop& runtime, uint32_t serverId, uint32_t listenerId, std::string address,
-    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
     std::vector<uint32_t> requestCaps) {
   return runtime.enqueueCppCallWithAccept(serverId, listenerId, std::move(address), portHint,
                                           interfaceId, methodId, std::move(request),
@@ -7643,8 +7657,8 @@ std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
 
 std::shared_ptr<RawCallCompletion> enqueueCppCallPipelinedWithAccept(
     RuntimeLoop& runtime, uint32_t serverId, uint32_t listenerId, std::string address,
-    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, std::vector<uint8_t> request,
-    std::vector<uint32_t> requestCaps, std::vector<uint8_t> pipelinedRequest,
+    uint32_t portHint, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
+    std::vector<uint32_t> requestCaps, LeanByteArrayRef pipelinedRequest,
     std::vector<uint32_t> pipelinedRequestCaps) {
   return runtime.enqueueCppCallPipelinedWithAccept(
       serverId, listenerId, std::move(address), portHint, interfaceId, methodId,
@@ -7834,14 +7848,14 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatClearRestorer(RuntimeLoop& runtim
 
 std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& runtime,
                                                                 uint32_t hostPeerId,
-                                                                std::vector<uint8_t> objectId,
+                                                                LeanByteArrayRef objectId,
                                                                 uint32_t targetId) {
   return runtime.enqueueMultiVatPublishSturdyRef(hostPeerId, std::move(objectId), targetId);
 }
 
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
     RuntimeLoop& runtime, uint32_t sourcePeerId, std::string host, bool unique,
-    std::vector<uint8_t> objectId) {
+    LeanByteArrayRef objectId) {
   return runtime.enqueueMultiVatRestoreSturdyRef(sourcePeerId, std::move(host), unique,
                                                  std::move(objectId));
 }
