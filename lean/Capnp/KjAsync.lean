@@ -49,6 +49,12 @@ structure DatagramPort where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure DatagramPeer where
+  port : DatagramPort
+  remoteAddress : String
+  remotePort : UInt32
+  deriving Inhabited, BEq, Repr
+
 structure DatagramReceivePromiseRef where
   runtime : Runtime
   handle : UInt32
@@ -1249,6 +1255,14 @@ namespace Runtime
   return {
     runtime := runtime
     handle := (← ffiRuntimeDatagramSendStartImpl runtime.handle port.handle address portHint bytes)
+  }
+
+@[inline] def datagramPeerBind (runtime : Runtime) (localAddress remoteAddress : String)
+    (remotePort : UInt32) (localPortHint : UInt32 := 0) : IO DatagramPeer := do
+  pure {
+    port := (← runtime.datagramBind localAddress localPortHint)
+    remoteAddress := remoteAddress
+    remotePort := remotePort
   }
 
 @[inline] def uint32PromiseAwait (runtime : Runtime) (promise : UInt32PromiseRef) : IO UInt32 := do
@@ -2467,6 +2481,34 @@ namespace DatagramPort
 
 end DatagramPort
 
+namespace DatagramPeer
+
+@[inline] def send (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32 :=
+  peer.port.send peer.remoteAddress bytes peer.remotePort
+
+@[inline] def sendStart (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32PromiseRef :=
+  peer.port.sendStart peer.remoteAddress bytes peer.remotePort
+
+@[inline] def sendAwait (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32 := do
+  peer.port.sendAwait peer.remoteAddress bytes peer.remotePort
+
+@[inline] def receive (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) :=
+  peer.port.receive maxBytes
+
+@[inline] def receiveStart (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef :=
+  peer.port.receiveStart maxBytes
+
+@[inline] def receiveMany (peer : DatagramPeer) (count : UInt32)
+    (maxBytes : UInt32 := 0x2000) : IO (Array (String × ByteArray)) :=
+  peer.port.receiveMany count maxBytes
+
+@[inline] def release (peer : DatagramPeer) : IO Unit :=
+  peer.port.release
+
+end DatagramPeer
+
 namespace DatagramReceivePromiseRef
 
 @[inline] def await (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) :=
@@ -2943,6 +2985,36 @@ namespace RuntimeM
 @[inline] def datagramSendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
   port.sendAwait address bytes portHint
+
+@[inline] def datagramPeerBind (localAddress remoteAddress : String) (remotePort : UInt32)
+    (localPortHint : UInt32 := 0) : RuntimeM DatagramPeer := do
+  Runtime.datagramPeerBind (← runtime) localAddress remoteAddress remotePort localPortHint
+
+@[inline] def datagramPeerSend (peer : DatagramPeer) (bytes : ByteArray) : RuntimeM UInt32 := do
+  peer.send bytes
+
+@[inline] def datagramPeerSendStart (peer : DatagramPeer)
+    (bytes : ByteArray) : RuntimeM UInt32PromiseRef := do
+  peer.sendStart bytes
+
+@[inline] def datagramPeerSendAwait (peer : DatagramPeer) (bytes : ByteArray) :
+    RuntimeM UInt32 := do
+  peer.sendAwait bytes
+
+@[inline] def datagramPeerReceive (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
+  peer.receive maxBytes
+
+@[inline] def datagramPeerReceiveStart (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
+  peer.receiveStart maxBytes
+
+@[inline] def datagramPeerReceiveMany (peer : DatagramPeer) (count : UInt32)
+    (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
+  peer.receiveMany count maxBytes
+
+@[inline] def datagramPeerRelease (peer : DatagramPeer) : RuntimeM Unit := do
+  peer.release
 
 @[inline] def awaitUInt32 (promise : UInt32PromiseRef) : RuntimeM UInt32 := do
   promise.await

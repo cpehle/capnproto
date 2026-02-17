@@ -910,6 +910,51 @@ def testKjAsyncDatagramSendAwaitAndReceiveManyHelpers : IO Unit := do
     receiverRuntime.shutdown
 
 @[test]
+def testKjAsyncDatagramPeerRoundtripConveniences : IO Unit := do
+  let leftRuntime ← Capnp.KjAsync.Runtime.init
+  let rightRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let leftSeedPeer ← leftRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
+    let rightSeedPeer ← rightRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
+    let leftPortNumber ← leftSeedPeer.port.getPort
+    let rightPortNumber ← rightSeedPeer.port.getPort
+    let leftPeer : Capnp.KjAsync.DatagramPeer := { leftSeedPeer with remotePort := rightPortNumber }
+    let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
+    let payloadA := mkPayload
+    let payloadB := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 7))
+    try
+      assertEqual leftPeer.remoteAddress "127.0.0.1"
+      assertEqual leftPeer.remotePort rightPortNumber
+      assertEqual rightPeer.remoteAddress "127.0.0.1"
+      assertEqual rightPeer.remotePort leftPortNumber
+
+      let receiveAtRight ← IO.asTask do
+        rightPeer.receive (UInt32.ofNat 1024)
+      let sentForward ← leftPeer.sendAwait payloadA
+      assertEqual sentForward (UInt32.ofNat payloadA.size)
+      match (← IO.wait receiveAtRight) with
+      | .ok (_source, bytes) =>
+        assertEqual bytes payloadA
+      | .error err =>
+        throw (IO.userError s!"datagram peer forward receive task failed: {err}")
+
+      let receiveAtLeft ← IO.asTask do
+        leftPeer.receive (UInt32.ofNat 1024)
+      let sentBack ← rightPeer.sendAwait payloadB
+      assertEqual sentBack (UInt32.ofNat payloadB.size)
+      match (← IO.wait receiveAtLeft) with
+      | .ok (_source, bytes) =>
+        assertEqual bytes payloadB
+      | .error err =>
+        throw (IO.userError s!"datagram peer reverse receive task failed: {err}")
+    finally
+      leftPeer.release
+      rightPeer.release
+  finally
+    leftRuntime.shutdown
+    rightRuntime.shutdown
+
+@[test]
 def testKjAsyncWebSocketPipeAsyncSendReceive : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
