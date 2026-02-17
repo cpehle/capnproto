@@ -678,6 +678,44 @@ def testRuntimeServerBootstrapFactoryLifecycle : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeServerBootstrapFactoryFailure : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let server ← runtime.newServerWithBootstrapFactory (fun _ => do
+      throw (IO.userError "expected bootstrap factory failure"))
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let target ← client.bootstrap
+    let errMsg ← try
+      let _ ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      pure ""
+    catch err =>
+      pure (toString err)
+    if !(errMsg.containsSubstr "Lean bootstrap factory returned IO error") then
+      throw (IO.userError s!"missing bootstrap factory error text: {errMsg}")
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeServerDrain : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
