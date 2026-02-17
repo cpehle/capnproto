@@ -1480,6 +1480,13 @@ namespace RuntimePendingCallRef
 @[inline] def await (pendingCall : RuntimePendingCallRef) : IO Payload :=
   Runtime.pendingCallAwait pendingCall
 
+@[inline] def awaitOutcome (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome :=
+  Runtime.pendingCallAwaitOutcome pendingCall
+
+@[inline] def awaitResult (pendingCall : RuntimePendingCallRef) :
+    IO (Except RemoteException Payload) :=
+  Runtime.pendingCallAwaitResult pendingCall
+
 @[inline] def release (pendingCall : RuntimePendingCallRef) : IO Unit :=
   Runtime.pendingCallRelease pendingCall
 
@@ -1943,6 +1950,14 @@ namespace RuntimeM
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
   Capnp.Rpc.call (← backend) target method payload
 
+@[inline] def callOutcome (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RawCallOutcome := do
+  Runtime.callOutcome (← runtime) target method payload
+
+@[inline] def callResult (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM (Except RemoteException Payload) := do
+  Runtime.callResult (← runtime) target method payload
+
 @[inline] def startCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
   Runtime.startCall (← runtime) target method payload
@@ -1950,6 +1965,16 @@ namespace RuntimeM
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallAwait pendingCall
+
+@[inline] def pendingCallAwaitOutcome (pendingCall : RuntimePendingCallRef) :
+    RuntimeM RawCallOutcome := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  Runtime.pendingCallAwaitOutcome pendingCall
+
+@[inline] def pendingCallAwaitResult (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Except RemoteException Payload) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  Runtime.pendingCallAwaitResult pendingCall
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Unit := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"

@@ -958,6 +958,54 @@ def testRuntimeResourceCounts : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeMCallAndPendingResultHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.registerAdvancedHandlerTarget (fun _ _ _ => do
+        pure (.throwRemote "runtimem call failed" "runtimem-detail".toUTF8))
+
+    let callRes ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.callResult target Echo.fooMethod payload
+    match callRes with
+    | .ok _ =>
+        throw (IO.userError "expected RuntimeM.callResult to return a remote exception")
+    | .error ex =>
+        assertEqual ex.type .failed
+        if !(ex.description.containsSubstr "runtimem call failed") then
+          throw (IO.userError s!"missing RuntimeM.callResult exception text: {ex.description}")
+        assertEqual ex.detail "runtimem-detail".toUTF8
+
+    let pendingRes ← Capnp.Rpc.RuntimeM.run runtime do
+      let pending ← Capnp.Rpc.RuntimeM.startCall target Echo.fooMethod payload
+      Capnp.Rpc.RuntimeM.pendingCallAwaitResult pending
+    match pendingRes with
+    | .ok _ =>
+        throw (IO.userError "expected RuntimeM.pendingCallAwaitResult to return a remote exception")
+    | .error ex =>
+        assertEqual ex.type .failed
+        if !(ex.description.containsSubstr "runtimem call failed") then
+          throw (IO.userError s!"missing RuntimeM.pendingCallAwaitResult exception text: {ex.description}")
+        assertEqual ex.detail "runtimem-detail".toUTF8
+
+    let pendingOutcome ← Capnp.Rpc.RuntimeM.run runtime do
+      let pending ← Capnp.Rpc.RuntimeM.startCall target Echo.fooMethod payload
+      Capnp.Rpc.RuntimeM.pendingCallAwaitOutcome pending
+    match pendingOutcome with
+    | .ok _ _ =>
+        throw (IO.userError "expected RuntimeM.pendingCallAwaitOutcome to report an exception")
+    | .error ex =>
+        assertEqual ex.type .failed
+        if !(ex.description.containsSubstr "runtimem call failed") then
+          throw (IO.userError s!"missing RuntimeM.pendingCallAwaitOutcome exception text: {ex.description}")
+        assertEqual ex.detail "runtimem-detail".toUTF8
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeClientReleaseErrors : IO Unit := do
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
