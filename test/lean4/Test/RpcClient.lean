@@ -2309,6 +2309,35 @@ def testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let seenError ← IO.mkRef ""
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      let kjRuntime : Capnp.KjAsync.Runtime := { handle := runtime.handle }
+      let promise ← kjRuntime.sleepMillisStart (UInt32.ofNat 1)
+      let errMsg ←
+        try
+          promise.await
+          pure ""
+        catch err =>
+          pure (toString err)
+      promise.release
+      seenError.set errMsg
+      pure (Capnp.Rpc.Advanced.forward sink method req))
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM forwarder payload
+    let errMsg ← seenError.get
+    if !(errMsg.containsSubstr "not allowed from the Capnp.Rpc worker thread") then
+      throw (IO.userError s!"missing worker-thread await rejection text: {errMsg}")
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
