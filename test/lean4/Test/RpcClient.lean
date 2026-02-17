@@ -2476,6 +2476,130 @@ def testRuntimeAdvancedHandlerForwardCallOnlyPromisePipelineRequiresCaller : IO 
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerSetPipelineValidationCleansRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let invalid ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      let pipeline := mkCapabilityPayload sink
+      pure (Capnp.Rpc.Advanced.setPipeline pipeline
+        (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond req))))
+    let loopback ← runtime.registerLoopbackTarget invalid
+    let baselineTargets := (← runtime.targetCount)
+
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback (mkCapabilityPayload sink)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "setPipeline is only valid with defer") then
+      throw (IO.userError s!"missing setPipeline validation error text: {errMsg}")
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    runtime.releaseTarget loopback
+    runtime.releaseTarget invalid
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerUnknownForwardTargetCleansRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let unknownTarget : Capnp.Rpc.Client := UInt32.ofNat 424242
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (Capnp.Rpc.Advanced.forward unknownTarget method req))
+    let loopback ← runtime.registerLoopbackTarget forwarder
+    let baselineTargets := (← runtime.targetCount)
+
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback (mkCapabilityPayload sink)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "unknown RPC async-call target capability id from Lean handler") then
+      throw (IO.userError s!"missing forward-target validation error text: {errMsg}")
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    runtime.releaseTarget loopback
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerUnknownTailTargetCleansRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let unknownTarget : Capnp.Rpc.Client := UInt32.ofNat 424243
+    let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      pure (Capnp.Rpc.Advanced.tailForward unknownTarget method req))
+    let loopback ← runtime.registerLoopbackTarget forwarder
+    let baselineTargets := (← runtime.targetCount)
+
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback (mkCapabilityPayload sink)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "unknown RPC tail-call target capability id from Lean advanced handler") then
+      throw (IO.userError s!"missing tail-target validation error text: {errMsg}")
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    runtime.releaseTarget loopback
+    runtime.releaseTarget forwarder
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit := do
   let canceled ← IO.mkRef false
   let entered ← IO.mkRef false

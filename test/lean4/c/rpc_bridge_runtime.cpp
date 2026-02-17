@@ -3295,10 +3295,16 @@ class RuntimeLoop {
 
       if (action.hasPipeline) {
         if (action.kind != LeanAdvancedHandlerAction::Kind::AWAIT_TASK) {
+          cleanupRequestCaps(cleanupState, {});
           throw std::runtime_error(
               "Lean RPC advanced handler: setPipeline is only valid with defer");
         }
-        setContextPipelineFromPayload(context, action.pipelineBytes, action.pipelineCaps);
+        try {
+          setContextPipelineFromPayload(context, action.pipelineBytes, action.pipelineCaps);
+        } catch (...) {
+          cleanupRequestCaps(cleanupState, {});
+          throw;
+        }
       }
 
       if (action.kind == LeanAdvancedHandlerAction::Kind::RETURN_PAYLOAD) {
@@ -3320,6 +3326,7 @@ class RuntimeLoop {
       if (action.kind == LeanAdvancedHandlerAction::Kind::ASYNC_CALL) {
         auto targetIt = runtime_.targets_.find(action.target);
         if (targetIt == runtime_.targets_.end()) {
+          cleanupRequestCaps(cleanupState, {});
           throw std::runtime_error(
               "unknown RPC async-call target capability id from Lean handler: " +
               std::to_string(action.target));
@@ -3357,6 +3364,7 @@ class RuntimeLoop {
       if (action.kind == LeanAdvancedHandlerAction::Kind::TAIL_CALL) {
         auto targetIt = runtime_.targets_.find(action.target);
         if (targetIt == runtime_.targets_.end()) {
+          cleanupRequestCaps(cleanupState, {});
           throw std::runtime_error(
               "unknown RPC tail-call target capability id from Lean advanced handler: " +
               std::to_string(action.target));
