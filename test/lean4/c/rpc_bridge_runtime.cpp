@@ -1567,6 +1567,120 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueKjAsyncTaskSetNew() {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetNew{completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetRelease(uint32_t taskSetId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetRelease{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetAddPromise(
+      uint32_t taskSetId, uint32_t promiseId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetAddPromise{taskSetId, promiseId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetClear(uint32_t taskSetId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetClear{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<BoolCompletion> enqueueKjAsyncTaskSetIsEmpty(uint32_t taskSetId) {
+    auto completion = std::make_shared<BoolCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeBoolFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetIsEmpty{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncTaskSetOnEmptyStart(uint32_t taskSetId) {
+    auto completion = std::make_shared<KjPromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeKjPromiseIdFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetOnEmptyStart{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueKjAsyncTaskSetErrorCount(uint32_t taskSetId) {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetErrorCount{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<OptionalStringCompletion> enqueueKjAsyncTaskSetTakeLastError(
+      uint32_t taskSetId) {
+    auto completion = std::make_shared<OptionalStringCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeOptionalStringFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedKjAsyncTaskSetTakeLastError{taskSetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueuePump() {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -1890,6 +2004,30 @@ class RuntimeLoop {
 
   uint32_t kjAsyncPromiseRaceStartInline(std::vector<uint32_t> promiseIds) {
     return kjAsyncPromiseRaceStart(std::move(promiseIds));
+  }
+
+  uint32_t kjAsyncTaskSetNewInline() { return kjAsyncTaskSetNew(); }
+
+  void kjAsyncTaskSetReleaseInline(uint32_t taskSetId) { kjAsyncTaskSetRelease(taskSetId); }
+
+  void kjAsyncTaskSetAddPromiseInline(uint32_t taskSetId, uint32_t promiseId) {
+    kjAsyncTaskSetAddPromise(taskSetId, promiseId);
+  }
+
+  void kjAsyncTaskSetClearInline(uint32_t taskSetId) { kjAsyncTaskSetClear(taskSetId); }
+
+  bool kjAsyncTaskSetIsEmptyInline(uint32_t taskSetId) { return kjAsyncTaskSetIsEmpty(taskSetId); }
+
+  uint32_t kjAsyncTaskSetOnEmptyStartInline(uint32_t taskSetId) {
+    return kjAsyncTaskSetOnEmptyStart(taskSetId);
+  }
+
+  uint32_t kjAsyncTaskSetErrorCountInline(uint32_t taskSetId) {
+    return kjAsyncTaskSetErrorCount(taskSetId);
+  }
+
+  kj::Maybe<std::string> kjAsyncTaskSetTakeLastErrorInline(uint32_t taskSetId) {
+    return kjAsyncTaskSetTakeLastError(taskSetId);
   }
 
   void notifyWorker() {
@@ -2356,6 +2494,46 @@ class RuntimeLoop {
     std::shared_ptr<KjPromiseIdCompletion> completion;
   };
 
+  struct QueuedKjAsyncTaskSetNew {
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetRelease {
+    uint32_t taskSetId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetAddPromise {
+    uint32_t taskSetId;
+    uint32_t promiseId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetClear {
+    uint32_t taskSetId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetIsEmpty {
+    uint32_t taskSetId;
+    std::shared_ptr<BoolCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetOnEmptyStart {
+    uint32_t taskSetId;
+    std::shared_ptr<KjPromiseIdCompletion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetErrorCount {
+    uint32_t taskSetId;
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedKjAsyncTaskSetTakeLastError {
+    uint32_t taskSetId;
+    std::shared_ptr<OptionalStringCompletion> completion;
+  };
+
   struct QueuedPump {
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -2486,7 +2664,11 @@ class RuntimeLoop {
                    QueuedKjAsyncPromiseAwait, QueuedKjAsyncPromiseCancel,
                    QueuedKjAsyncPromiseRelease, QueuedKjAsyncPromiseThenStart,
                    QueuedKjAsyncPromiseCatchStart, QueuedKjAsyncPromiseAllStart,
-                   QueuedKjAsyncPromiseRaceStart, QueuedPump,
+                   QueuedKjAsyncPromiseRaceStart, QueuedKjAsyncTaskSetNew,
+                   QueuedKjAsyncTaskSetRelease, QueuedKjAsyncTaskSetAddPromise,
+                   QueuedKjAsyncTaskSetClear, QueuedKjAsyncTaskSetIsEmpty,
+                   QueuedKjAsyncTaskSetOnEmptyStart, QueuedKjAsyncTaskSetErrorCount,
+                   QueuedKjAsyncTaskSetTakeLastError, QueuedPump,
                    QueuedMultiVatNewClient, QueuedMultiVatNewServer,
                    QueuedMultiVatNewServerWithBootstrapFactory, QueuedMultiVatReleasePeer,
                    QueuedMultiVatBootstrap, QueuedMultiVatBootstrapPeer,
@@ -2654,6 +2836,30 @@ class RuntimeLoop {
 
     kj::Promise<void> promise;
     kj::Own<kj::Canceler> canceler;
+  };
+
+  struct RuntimeKjAsyncTaskSet {
+    class ErrorHandler final : public kj::TaskSet::ErrorHandler {
+     public:
+      explicit ErrorHandler(RuntimeKjAsyncTaskSet& state) : state_(state) {}
+
+      void taskFailed(kj::Exception&& exception) override {
+        std::lock_guard<std::mutex> lock(state_.mutex);
+        ++state_.errorCount;
+        state_.lastError = describeKjException(exception);
+      }
+
+     private:
+      RuntimeKjAsyncTaskSet& state_;
+    };
+
+    RuntimeKjAsyncTaskSet() : errorHandler(*this), tasks(errorHandler) {}
+
+    std::mutex mutex;
+    uint32_t errorCount = 0;
+    std::string lastError;
+    ErrorHandler errorHandler;
+    kj::TaskSet tasks;
   };
 
   struct PendingPromiseCapability {
@@ -3548,6 +3754,83 @@ class RuntimeLoop {
     auto canceler = kj::heap<kj::Canceler>();
     auto promise = canceler->wrap(kj::mv(raced));
     return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t addKjAsyncTaskSet(kj::Own<RuntimeKjAsyncTaskSet>&& taskSet) {
+    uint32_t taskSetId = nextKjAsyncTaskSetId_++;
+    while (kjAsyncTaskSets_.find(taskSetId) != kjAsyncTaskSets_.end()) {
+      taskSetId = nextKjAsyncTaskSetId_++;
+    }
+    kjAsyncTaskSets_.emplace(taskSetId, kj::mv(taskSet));
+    return taskSetId;
+  }
+
+  uint32_t kjAsyncTaskSetNew() { return addKjAsyncTaskSet(kj::heap<RuntimeKjAsyncTaskSet>()); }
+
+  void kjAsyncTaskSetRelease(uint32_t taskSetId) {
+    auto erased = kjAsyncTaskSets_.erase(taskSetId);
+    if (erased == 0) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+  }
+
+  void kjAsyncTaskSetAddPromise(uint32_t taskSetId, uint32_t promiseId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+
+    auto pending = takeKjAsyncPromise(promiseId);
+    taskSetIt->second->tasks.add(kj::mv(pending.promise));
+  }
+
+  void kjAsyncTaskSetClear(uint32_t taskSetId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+    taskSetIt->second->tasks.clear();
+  }
+
+  bool kjAsyncTaskSetIsEmpty(uint32_t taskSetId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+    return taskSetIt->second->tasks.isEmpty();
+  }
+
+  uint32_t kjAsyncTaskSetOnEmptyStart(uint32_t taskSetId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(taskSetIt->second->tasks.onEmpty());
+    return addKjAsyncPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t kjAsyncTaskSetErrorCount(uint32_t taskSetId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+    std::lock_guard<std::mutex> lock(taskSetIt->second->mutex);
+    return taskSetIt->second->errorCount;
+  }
+
+  kj::Maybe<std::string> kjAsyncTaskSetTakeLastError(uint32_t taskSetId) {
+    auto taskSetIt = kjAsyncTaskSets_.find(taskSetId);
+    if (taskSetIt == kjAsyncTaskSets_.end()) {
+      throw std::runtime_error("unknown KJ async task set id: " + std::to_string(taskSetId));
+    }
+    std::lock_guard<std::mutex> lock(taskSetIt->second->mutex);
+    if (taskSetIt->second->lastError.empty()) {
+      return kj::none;
+    }
+    auto out = taskSetIt->second->lastError;
+    taskSetIt->second->lastError.clear();
+    return out;
   }
 
   uint32_t addPromiseCapabilityFulfiller(PendingPromiseCapability&& promise) {
@@ -6132,6 +6415,116 @@ class RuntimeLoop {
                 promise.completion,
                 "unknown exception in capnp_lean_kj_async_runtime_promise_race_start");
           }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetNew>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetNew>(std::move(op));
+          try {
+            auto taskSetId = kjAsyncTaskSetNew();
+            completeRegisterSuccess(request.completion, taskSetId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_new");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetRelease>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetRelease>(std::move(op));
+          try {
+            kjAsyncTaskSetRelease(request.taskSetId);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_release");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetAddPromise>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetAddPromise>(std::move(op));
+          try {
+            kjAsyncTaskSetAddPromise(request.taskSetId, request.promiseId);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_add_promise");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetClear>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetClear>(std::move(op));
+          try {
+            kjAsyncTaskSetClear(request.taskSetId);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_clear");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetIsEmpty>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetIsEmpty>(std::move(op));
+          try {
+            completeBoolSuccess(request.completion, kjAsyncTaskSetIsEmpty(request.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeBoolFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeBoolFailure(request.completion, e.what());
+          } catch (...) {
+            completeBoolFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_is_empty");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetOnEmptyStart>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetOnEmptyStart>(std::move(op));
+          try {
+            auto promiseId = kjAsyncTaskSetOnEmptyStart(request.taskSetId);
+            completeKjPromiseIdSuccess(request.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeKjPromiseIdFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeKjPromiseIdFailure(request.completion, e.what());
+          } catch (...) {
+            completeKjPromiseIdFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_on_empty_start");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetErrorCount>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetErrorCount>(std::move(op));
+          try {
+            completeUInt64Success(request.completion, kjAsyncTaskSetErrorCount(request.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_error_count");
+          }
+        } else if (std::holds_alternative<QueuedKjAsyncTaskSetTakeLastError>(op)) {
+          auto request = std::get<QueuedKjAsyncTaskSetTakeLastError>(std::move(op));
+          try {
+            completeOptionalStringSuccess(
+                request.completion, kjAsyncTaskSetTakeLastError(request.taskSetId));
+          } catch (const kj::Exception& e) {
+            completeOptionalStringFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeOptionalStringFailure(request.completion, e.what());
+          } catch (...) {
+            completeOptionalStringFailure(
+                request.completion,
+                "unknown exception in capnp_lean_kj_async_runtime_task_set_take_last_error");
+          }
         } else if (std::holds_alternative<QueuedMultiVatNewClient>(op)) {
           auto request = std::get<QueuedMultiVatNewClient>(std::move(op));
           try {
@@ -6397,6 +6790,7 @@ class RuntimeLoop {
       registerPromises_.clear();
       unitPromises_.clear();
       kjAsyncPromises_.clear();
+      kjAsyncTaskSets_.clear();
       promiseCapabilityFulfillers_.clear();
       clients_.clear();
       servers_.clear();
@@ -6620,6 +7014,23 @@ class RuntimeLoop {
         completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseAllStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedKjAsyncPromiseRaceStart>(op)) {
         completeKjPromiseIdFailure(std::get<QueuedKjAsyncPromiseRaceStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetNew>(op)) {
+        completeRegisterFailure(std::get<QueuedKjAsyncTaskSetNew>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetRelease>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncTaskSetRelease>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetAddPromise>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncTaskSetAddPromise>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetClear>(op)) {
+        completeUnitFailure(std::get<QueuedKjAsyncTaskSetClear>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetIsEmpty>(op)) {
+        completeBoolFailure(std::get<QueuedKjAsyncTaskSetIsEmpty>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetOnEmptyStart>(op)) {
+        completeKjPromiseIdFailure(std::get<QueuedKjAsyncTaskSetOnEmptyStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetErrorCount>(op)) {
+        completeUInt64Failure(std::get<QueuedKjAsyncTaskSetErrorCount>(op).completion, message);
+      } else if (std::holds_alternative<QueuedKjAsyncTaskSetTakeLastError>(op)) {
+        completeOptionalStringFailure(
+            std::get<QueuedKjAsyncTaskSetTakeLastError>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatNewClient>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatNewClient>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatNewServer>(op)) {
@@ -6694,6 +7105,7 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> kjAsyncPromises_;
+  std::unordered_map<uint32_t, kj::Own<RuntimeKjAsyncTaskSet>> kjAsyncTaskSets_;
   std::unordered_map<uint32_t, PendingPromiseCapability> promiseCapabilityFulfillers_;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
@@ -6715,6 +7127,7 @@ class RuntimeLoop {
   uint32_t nextRegisterPromiseId_ = 1;
   uint32_t nextUnitPromiseId_ = 1;
   uint32_t nextKjAsyncPromiseId_ = 1;
+  uint32_t nextKjAsyncTaskSetId_ = 1;
   uint32_t nextPromiseCapabilityFulfillerId_ = 1;
 };
 
@@ -6831,6 +7244,44 @@ uint32_t kjAsyncPromiseAllStartInline(RuntimeLoop& runtime,
 uint32_t kjAsyncPromiseRaceStartInline(RuntimeLoop& runtime,
                                        std::vector<uint32_t> promiseIds) {
   return runtime.kjAsyncPromiseRaceStartInline(std::move(promiseIds));
+}
+
+uint32_t kjAsyncTaskSetNewInline(RuntimeLoop& runtime) {
+  return runtime.kjAsyncTaskSetNewInline();
+}
+
+void kjAsyncTaskSetReleaseInline(RuntimeLoop& runtime, uint32_t taskSetId) {
+  runtime.kjAsyncTaskSetReleaseInline(taskSetId);
+}
+
+void kjAsyncTaskSetAddPromiseInline(RuntimeLoop& runtime, uint32_t taskSetId,
+                                    uint32_t promiseId) {
+  runtime.kjAsyncTaskSetAddPromiseInline(taskSetId, promiseId);
+}
+
+void kjAsyncTaskSetClearInline(RuntimeLoop& runtime, uint32_t taskSetId) {
+  runtime.kjAsyncTaskSetClearInline(taskSetId);
+}
+
+bool kjAsyncTaskSetIsEmptyInline(RuntimeLoop& runtime, uint32_t taskSetId) {
+  return runtime.kjAsyncTaskSetIsEmptyInline(taskSetId);
+}
+
+uint32_t kjAsyncTaskSetOnEmptyStartInline(RuntimeLoop& runtime, uint32_t taskSetId) {
+  return runtime.kjAsyncTaskSetOnEmptyStartInline(taskSetId);
+}
+
+uint32_t kjAsyncTaskSetErrorCountInline(RuntimeLoop& runtime, uint32_t taskSetId) {
+  return runtime.kjAsyncTaskSetErrorCountInline(taskSetId);
+}
+
+std::pair<bool, std::string> kjAsyncTaskSetTakeLastErrorInline(RuntimeLoop& runtime,
+                                                                uint32_t taskSetId) {
+  auto maybeValue = runtime.kjAsyncTaskSetTakeLastErrorInline(taskSetId);
+  KJ_IF_SOME(value, maybeValue) {
+    return {true, value};
+  }
+  return {false, std::string()};
 }
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
@@ -7231,6 +7682,46 @@ std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseAllStart(
 std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseRaceStart(
     RuntimeLoop& runtime, std::vector<uint32_t> promiseIds) {
   return runtime.enqueueKjAsyncPromiseRaceStart(std::move(promiseIds));
+}
+
+std::shared_ptr<RegisterTargetCompletion> enqueueKjAsyncTaskSetNew(RuntimeLoop& runtime) {
+  return runtime.enqueueKjAsyncTaskSetNew();
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetRelease(RuntimeLoop& runtime,
+                                                             uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetRelease(taskSetId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetAddPromise(RuntimeLoop& runtime,
+                                                                uint32_t taskSetId,
+                                                                uint32_t promiseId) {
+  return runtime.enqueueKjAsyncTaskSetAddPromise(taskSetId, promiseId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetClear(RuntimeLoop& runtime,
+                                                           uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetClear(taskSetId);
+}
+
+std::shared_ptr<BoolCompletion> enqueueKjAsyncTaskSetIsEmpty(RuntimeLoop& runtime,
+                                                             uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetIsEmpty(taskSetId);
+}
+
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncTaskSetOnEmptyStart(RuntimeLoop& runtime,
+                                                                          uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetOnEmptyStart(taskSetId);
+}
+
+std::shared_ptr<UInt64Completion> enqueueKjAsyncTaskSetErrorCount(RuntimeLoop& runtime,
+                                                                  uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetErrorCount(taskSetId);
+}
+
+std::shared_ptr<OptionalStringCompletion> enqueueKjAsyncTaskSetTakeLastError(
+    RuntimeLoop& runtime, uint32_t taskSetId) {
+  return runtime.enqueueKjAsyncTaskSetTakeLastError(taskSetId);
 }
 
 std::shared_ptr<UnitCompletion> enqueuePump(RuntimeLoop& runtime) { return runtime.enqueuePump(); }

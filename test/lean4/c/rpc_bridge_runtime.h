@@ -44,6 +44,22 @@ std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseAllStart(
     RuntimeLoop& runtime, std::vector<uint32_t> promiseIds);
 std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncPromiseRaceStart(
     RuntimeLoop& runtime, std::vector<uint32_t> promiseIds);
+std::shared_ptr<RegisterTargetCompletion> enqueueKjAsyncTaskSetNew(RuntimeLoop& runtime);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetRelease(RuntimeLoop& runtime,
+                                                             uint32_t taskSetId);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetAddPromise(RuntimeLoop& runtime,
+                                                                uint32_t taskSetId,
+                                                                uint32_t promiseId);
+std::shared_ptr<UnitCompletion> enqueueKjAsyncTaskSetClear(RuntimeLoop& runtime,
+                                                           uint32_t taskSetId);
+std::shared_ptr<BoolCompletion> enqueueKjAsyncTaskSetIsEmpty(RuntimeLoop& runtime,
+                                                             uint32_t taskSetId);
+std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncTaskSetOnEmptyStart(RuntimeLoop& runtime,
+                                                                          uint32_t taskSetId);
+std::shared_ptr<UInt64Completion> enqueueKjAsyncTaskSetErrorCount(RuntimeLoop& runtime,
+                                                                  uint32_t taskSetId);
+std::shared_ptr<OptionalStringCompletion> enqueueKjAsyncTaskSetTakeLastError(
+    RuntimeLoop& runtime, uint32_t taskSetId);
 
 uint32_t kjAsyncSleepNanosStartInline(RuntimeLoop& runtime, uint64_t delayNanos);
 void kjAsyncPromiseCancelInline(RuntimeLoop& runtime, uint32_t promiseId);
@@ -56,6 +72,16 @@ uint32_t kjAsyncPromiseAllStartInline(RuntimeLoop& runtime,
                                       std::vector<uint32_t> promiseIds);
 uint32_t kjAsyncPromiseRaceStartInline(RuntimeLoop& runtime,
                                        std::vector<uint32_t> promiseIds);
+uint32_t kjAsyncTaskSetNewInline(RuntimeLoop& runtime);
+void kjAsyncTaskSetReleaseInline(RuntimeLoop& runtime, uint32_t taskSetId);
+void kjAsyncTaskSetAddPromiseInline(RuntimeLoop& runtime, uint32_t taskSetId,
+                                    uint32_t promiseId);
+void kjAsyncTaskSetClearInline(RuntimeLoop& runtime, uint32_t taskSetId);
+bool kjAsyncTaskSetIsEmptyInline(RuntimeLoop& runtime, uint32_t taskSetId);
+uint32_t kjAsyncTaskSetOnEmptyStartInline(RuntimeLoop& runtime, uint32_t taskSetId);
+uint32_t kjAsyncTaskSetErrorCountInline(RuntimeLoop& runtime, uint32_t taskSetId);
+std::pair<bool, std::string> kjAsyncTaskSetTakeLastErrorInline(RuntimeLoop& runtime,
+                                                                uint32_t taskSetId);
 
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,

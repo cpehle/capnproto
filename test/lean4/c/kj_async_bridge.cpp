@@ -8178,21 +8178,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_promise_race_sta
 }
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_new(uint64_t runtimeId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetNew();
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetNew();
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
       }
-      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
     }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        auto taskSetId = capnp_lean_rpc::kjAsyncTaskSetNewInline(*rpcRuntime);
+        return lean_io_result_mk_ok(lean_box_uint32(taskSetId));
+      }
+      auto completion = capnp_lean_rpc::enqueueKjAsyncTaskSetNew(*rpcRuntime);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+      }
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8204,23 +8219,38 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_new(uin
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_release(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetRelease(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetRelease(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
       }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
     }
-    lean_obj_res ok;
-    mkIoOkUnit(ok);
-    return ok;
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        capnp_lean_rpc::kjAsyncTaskSetReleaseInline(*rpcRuntime, taskSetId);
+      } else {
+        auto completion = capnp_lean_rpc::enqueueKjAsyncTaskSetRelease(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8232,23 +8262,39 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_release
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_add_promise(
     uint64_t runtimeId, uint32_t taskSetId, uint32_t promiseId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetAddPromise(taskSetId, promiseId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetAddPromise(taskSetId, promiseId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
       }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
     }
-    lean_obj_res ok;
-    mkIoOkUnit(ok);
-    return ok;
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        capnp_lean_rpc::kjAsyncTaskSetAddPromiseInline(*rpcRuntime, taskSetId, promiseId);
+      } else {
+        auto completion =
+            capnp_lean_rpc::enqueueKjAsyncTaskSetAddPromise(*rpcRuntime, taskSetId, promiseId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8261,23 +8307,38 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_add_pro
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_clear(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetClear(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetClear(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
       }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
     }
-    lean_obj_res ok;
-    mkIoOkUnit(ok);
-    return ok;
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        capnp_lean_rpc::kjAsyncTaskSetClearInline(*rpcRuntime, taskSetId);
+      } else {
+        auto completion = capnp_lean_rpc::enqueueKjAsyncTaskSetClear(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+      }
+      lean_obj_res ok;
+      mkIoOkUnit(ok);
+      return ok;
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8289,21 +8350,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_clear(
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_is_empty(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetIsEmpty(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetIsEmpty(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box(completion->value ? 1 : 0));
       }
-      return lean_io_result_mk_ok(lean_box(completion->value ? 1 : 0));
     }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      bool isEmpty;
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        isEmpty = capnp_lean_rpc::kjAsyncTaskSetIsEmptyInline(*rpcRuntime, taskSetId);
+      } else {
+        auto completion = capnp_lean_rpc::enqueueKjAsyncTaskSetIsEmpty(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        isEmpty = completion->value;
+      }
+      return lean_io_result_mk_ok(lean_box(isEmpty ? 1 : 0));
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8315,21 +8391,37 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_is_empt
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_on_empty_start(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetOnEmptyStart(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetOnEmptyStart(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
       }
-      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
     }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      uint32_t promiseId;
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        promiseId = capnp_lean_rpc::kjAsyncTaskSetOnEmptyStartInline(*rpcRuntime, taskSetId);
+      } else {
+        auto completion =
+            capnp_lean_rpc::enqueueKjAsyncTaskSetOnEmptyStart(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        promiseId = completion->promiseId;
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(promiseId));
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8342,21 +8434,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_on_empt
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_error_count(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetErrorCount(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetErrorCount(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->value));
       }
-      return lean_io_result_mk_ok(lean_box_uint32(completion->value));
     }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      uint32_t value;
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        value = capnp_lean_rpc::kjAsyncTaskSetErrorCountInline(*rpcRuntime, taskSetId);
+      } else {
+        auto completion = capnp_lean_rpc::enqueueKjAsyncTaskSetErrorCount(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        value = static_cast<uint32_t>(completion->value);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(value));
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
@@ -8369,24 +8476,47 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_error_c
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_task_set_take_last_error(
     uint64_t runtimeId, uint32_t taskSetId) {
-  auto runtime = getKjAsyncRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
-  }
-
   try {
-    auto completion = runtime->enqueueTaskSetTakeLastError(taskSetId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueTaskSetTakeLastError(taskSetId);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        auto pair = lean_alloc_ctor(0, 2, 0);
+        lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
+        lean_ctor_set(pair, 1, lean_mk_string(completion->value.c_str()));
+        return lean_io_result_mk_ok(pair);
+      }
+    }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      bool hasValue = false;
+      std::string value;
+      if (capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        auto result = capnp_lean_rpc::kjAsyncTaskSetTakeLastErrorInline(*rpcRuntime, taskSetId);
+        hasValue = result.first;
+        value = std::move(result.second);
+      } else {
+        auto completion =
+            capnp_lean_rpc::enqueueKjAsyncTaskSetTakeLastError(*rpcRuntime, taskSetId);
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        hasValue = completion->hasValue;
+        value = completion->value;
       }
       auto pair = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
-      lean_ctor_set(pair, 1, lean_mk_string(completion->value.c_str()));
+      lean_ctor_set(pair, 0, lean_box(hasValue ? 1 : 0));
+      lean_ctor_set(pair, 1, lean_mk_string(value.c_str()));
       return lean_io_result_mk_ok(pair);
     }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {

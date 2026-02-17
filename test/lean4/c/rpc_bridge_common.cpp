@@ -276,6 +276,55 @@ void completeUInt64Failure(const std::shared_ptr<UInt64Completion>& completion,
   completion->cv.notify_one();
 }
 
+void completeBoolSuccess(const std::shared_ptr<BoolCompletion>& completion, bool value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = value;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeBoolFailure(const std::shared_ptr<BoolCompletion>& completion,
+                         std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalStringSuccess(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   kj::Maybe<std::string> value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    KJ_IF_SOME(v, value) {
+      completion->hasValue = true;
+      completion->value = v;
+    } else {
+      completion->hasValue = false;
+      completion->value.clear();
+    }
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeOptionalStringFailure(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
 void completeInt64Success(const std::shared_ptr<Int64Completion>& completion, int64_t value) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);

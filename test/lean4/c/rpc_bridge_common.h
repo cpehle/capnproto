@@ -153,6 +153,25 @@ struct UInt64Completion {
   uint64_t value = 0;
 };
 
+struct BoolCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  bool value = false;
+};
+
+struct OptionalStringCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  bool hasValue = false;
+  std::string value;
+};
+
 struct Int64Completion {
   std::mutex mutex;
   std::condition_variable cv;
@@ -196,6 +215,12 @@ void completeUnitSuccess(const std::shared_ptr<UnitCompletion>& completion);
 void completeUnitFailure(const std::shared_ptr<UnitCompletion>& completion, std::string message);
 void completeUInt64Success(const std::shared_ptr<UInt64Completion>& completion, uint64_t value);
 void completeUInt64Failure(const std::shared_ptr<UInt64Completion>& completion, std::string message);
+void completeBoolSuccess(const std::shared_ptr<BoolCompletion>& completion, bool value);
+void completeBoolFailure(const std::shared_ptr<BoolCompletion>& completion, std::string message);
+void completeOptionalStringSuccess(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   kj::Maybe<std::string> value);
+void completeOptionalStringFailure(const std::shared_ptr<OptionalStringCompletion>& completion,
+                                   std::string message);
 void completeInt64Success(const std::shared_ptr<Int64Completion>& completion, int64_t value);
 void completeInt64Failure(const std::shared_ptr<Int64Completion>& completion, std::string message);
 void completeRegisterPairSuccess(const std::shared_ptr<RegisterPairCompletion>& completion, uint32_t first, uint32_t second);
