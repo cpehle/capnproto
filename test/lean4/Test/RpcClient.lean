@@ -3315,6 +3315,120 @@ def testRuntimeVatNetworkBootstrapPeer : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeVatNetworkSturdyRefLifecycleHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let seenCaller ← IO.mkRef ({ host := "", unique := false } : Capnp.Rpc.VatId)
+  let seenObjectId ← IO.mkRef ByteArray.empty
+  try
+    let network := runtime.vatNetwork
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← network.newClient "alice-network-sturdy"
+    let bob ← network.newServer "bob-network-sturdy" bootstrap
+
+    let restoredObjectId := ByteArray.mk #[9, 8, 7, 6]
+    network.setRestorer bob (fun caller objectId => do
+      seenCaller.set caller
+      seenObjectId.set objectId
+      pure bootstrap)
+    let restoredViaRestorer ← network.restoreSturdyRef alice {
+      vat := { host := "bob-network-sturdy", unique := false }
+      objectId := restoredObjectId
+    }
+    let response1 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM restoredViaRestorer payload
+    assertEqual response1.capTable.caps.size 0
+    let caller := (← seenCaller.get)
+    assertEqual caller.host "alice-network-sturdy"
+    assertEqual caller.unique false
+    assertEqual ((← seenObjectId.get) == restoredObjectId) true
+    runtime.releaseTarget restoredViaRestorer
+
+    network.clearRestorer bob
+    let publishedObjectId := ByteArray.mk #[1, 2, 3, 4]
+    network.publishSturdyRef bob publishedObjectId bootstrap
+    let restoredViaPublish ← network.restoreSturdyRef alice {
+      vat := { host := "bob-network-sturdy", unique := false }
+      objectId := publishedObjectId
+    }
+    let response2 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM restoredViaPublish payload
+    assertEqual response2.capTable.caps.size 0
+    runtime.releaseTarget restoredViaPublish
+
+    network.releasePeer alice
+    network.releasePeer bob
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeVatNetworkPeerRuntimeMismatchForSturdyRefOps : IO Unit := do
+  let runtimeA ← Capnp.Rpc.Runtime.init
+  let runtimeB ← Capnp.Rpc.Runtime.init
+  try
+    let networkA := runtimeA.vatNetwork
+    let networkB := runtimeB.vatNetwork
+    let bootstrapA ← runtimeA.registerEchoTarget
+    let bootstrapB ← runtimeB.registerEchoTarget
+    let aliceA ← networkA.newClient "alice-network-mismatch-a"
+    let bobB ← networkB.newServer "bob-network-mismatch-b" bootstrapB
+
+    let setRestorerErr ←
+      try
+        networkA.setRestorer bobB (fun _ _ => pure bootstrapA)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(setRestorerErr.containsSubstr "VatNetwork.setRestorer: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network setRestorer mismatch error, got: {setRestorerErr}")
+
+    let clearRestorerErr ←
+      try
+        networkA.clearRestorer bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(clearRestorerErr.containsSubstr "VatNetwork.clearRestorer: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network clearRestorer mismatch error, got: {clearRestorerErr}")
+
+    let publishErr ←
+      try
+        networkA.publishSturdyRef bobB ByteArray.empty bootstrapA
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(publishErr.containsSubstr "VatNetwork.publishSturdyRef: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network publishSturdyRef mismatch error, got: {publishErr}")
+
+    let restoreErr ←
+      try
+        let _ ← networkA.restoreSturdyRef bobB
+          { vat := { host := "bob-network-mismatch-b", unique := false }, objectId := ByteArray.empty }
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(restoreErr.containsSubstr "VatNetwork.restoreSturdyRef: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network restoreSturdyRef mismatch error, got: {restoreErr}")
+
+    let releaseErr ←
+      try
+        networkA.releasePeer bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(releaseErr.containsSubstr "VatNetwork.releasePeer: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network releasePeer mismatch error, got: {releaseErr}")
+
+    networkA.releasePeer aliceA
+    networkB.releasePeer bobB
+    runtimeA.releaseTarget bootstrapA
+    runtimeB.releaseTarget bootstrapB
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+
+@[test]
 def testRuntimeMultiVatThirdPartyTokenStats : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

@@ -1439,6 +1439,13 @@ end RuntimeVatPeerRef
 
 namespace VatNetwork
 
+@[inline] private def ensurePeerRuntime
+    (network : VatNetwork) (peer : RuntimeVatPeerRef) (op : String) : IO Unit :=
+  if peer.runtime == network.runtime then
+    pure ()
+  else
+    throw (IO.userError s!"VatNetwork.{op}: peer belongs to a different runtime")
+
 @[inline] def newClient (network : VatNetwork) (name : String) : IO RuntimeVatPeerRef :=
   Runtime.newMultiVatClient network.runtime name
 
@@ -1454,6 +1461,25 @@ namespace VatNetwork
     (targetPeer : RuntimeVatPeerRef) (unique : Bool := false) : IO Client :=
   Runtime.multiVatBootstrapPeer network.runtime sourcePeer targetPeer unique
 
+@[inline] def setRestorer (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client) : IO Unit := do
+  ensurePeerRuntime network peer "setRestorer"
+  Runtime.multiVatSetRestorer peer restorer
+
+@[inline] def clearRestorer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network peer "clearRestorer"
+  Runtime.multiVatClearRestorer peer
+
+@[inline] def publishSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client) : IO Unit := do
+  ensurePeerRuntime network peer "publishSturdyRef"
+  Runtime.multiVatPublishSturdyRef peer objectId target
+
+@[inline] def restoreSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (sturdyRef : SturdyRef) : IO Client := do
+  ensurePeerRuntime network peer "restoreSturdyRef"
+  Runtime.multiVatRestoreSturdyRef peer sturdyRef
+
 @[inline] def setForwardingEnabled (network : VatNetwork) (enabled : Bool) : IO Unit :=
   Runtime.multiVatSetForwardingEnabled network.runtime enabled
 
@@ -1467,11 +1493,9 @@ namespace VatNetwork
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool :=
   Runtime.multiVatHasConnection network.runtime fromPeer toPeer
 
-@[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit :=
-  if peer.runtime == network.runtime then
-    Runtime.releaseMultiVatPeer peer
-  else
-    throw (IO.userError "VatNetwork.releasePeer: peer belongs to a different runtime")
+@[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network peer "releasePeer"
+  Runtime.releaseMultiVatPeer peer
 
 end VatNetwork
 
