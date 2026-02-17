@@ -2970,6 +2970,11 @@ class RuntimeLoop {
                                    lean_box(static_cast<size_t>(methodId)), requestObj,
                                    requestCapsObj, lean_box(0));
       if (lean_io_result_is_error(ioResult)) {
+        for (auto capId : requestCapIds) {
+          if (capId != 0) {
+            runtime_.dropTargetIfPresent(capId);
+          }
+        }
         lean_dec(ioResult);
         throw std::runtime_error("Lean RPC handler returned IO error");
       }

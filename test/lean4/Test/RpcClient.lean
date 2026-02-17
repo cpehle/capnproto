@@ -1458,6 +1458,46 @@ def testRuntimeRegisterHandlerTargetNetwork : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeHandlerIoErrorCleansRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let broken ← runtime.registerHandlerTarget (fun _ _ _ => do
+      throw (IO.userError "expected handler failure"))
+    let loopback ← runtime.registerLoopbackTarget broken
+    let baselineTargets := (← runtime.targetCount)
+
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback (mkCapabilityPayload sink)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "Lean RPC handler returned IO error") then
+      throw (IO.userError s!"missing handler IO error text: {errMsg}")
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    runtime.releaseTarget loopback
+    runtime.releaseTarget broken
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testInteropCppClientCallsLeanServer : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
