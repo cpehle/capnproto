@@ -737,10 +737,10 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 @[inline] private def decodeUInt32Le? (bytes : ByteArray) (offset : Nat) :
     Option (UInt32 × Nat) :=
   if offset + 3 < bytes.size then
-    let b0 := UInt32.ofNat (bytes.get! offset).toNat
-    let b1 := (UInt32.ofNat (bytes.get! (offset + 1)).toNat) <<< 8
-    let b2 := (UInt32.ofNat (bytes.get! (offset + 2)).toNat) <<< 16
-    let b3 := (UInt32.ofNat (bytes.get! (offset + 3)).toNat) <<< 24
+    let b0 := (bytes.get! offset).toUInt32
+    let b1 := ((bytes.get! (offset + 1)).toUInt32) <<< 8
+    let b2 := ((bytes.get! (offset + 2)).toUInt32) <<< 16
+    let b3 := ((bytes.get! (offset + 3)).toUInt32) <<< 24
     some (b0 ||| b1 ||| b2 ||| b3, offset + 4)
   else
     none
