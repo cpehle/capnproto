@@ -758,9 +758,8 @@ namespace PipelinePath
 @[inline] def toBytes (ops : Array UInt16) : ByteArray := Id.run do
   let mut out := ByteArray.emptyWithCapacity (ops.size * 2)
   for op in ops do
-    let n := op.toNat
-    out := out.push (UInt8.ofNat (n &&& 0xff))
-    out := out.push (UInt8.ofNat ((n >>> 8) &&& 0xff))
+    out := out.push op.toUInt8
+    out := out.push (op >>> 8).toUInt8
   return out
 
 end PipelinePath
@@ -774,7 +773,7 @@ namespace CapTable
   return out
 
 @[inline] def ofBytes (bytes : ByteArray) : Capnp.CapTable := Id.run do
-  let mut caps : Array Capnp.Capability := #[]
+  let mut caps : Array Capnp.Capability := Array.emptyWithCapacity (bytes.size / 4)
   let mut i := 0
   while i + 4 ≤ bytes.size do
     caps := caps.push (Capnp.readUInt32LE bytes i)
