@@ -1939,6 +1939,52 @@ namespace PromiseRef
 @[inline] def awaitAndRelease (promise : PromiseRef) : IO Unit := do
   promise.await
 
+@[inline] def thenStart (first second : PromiseRef) : IO PromiseRef := do
+  first.runtime.promiseThenStart first second
+
+@[inline] def catchStart (promise fallback : PromiseRef) : IO PromiseRef := do
+  promise.runtime.promiseCatchStart promise fallback
+
+@[inline] def allStart (first : PromiseRef) (rest : Array PromiseRef := #[]) :
+    IO PromiseRef := do
+  first.runtime.promiseAllStart (#[first] ++ rest)
+
+@[inline] def raceStart (first : PromiseRef) (rest : Array PromiseRef := #[]) :
+    IO PromiseRef := do
+  first.runtime.promiseRaceStart (#[first] ++ rest)
+
+@[inline] def «then» (first second : PromiseRef) : IO PromiseRef := do
+  first.thenStart second
+
+@[inline] def «catch» (promise fallback : PromiseRef) : IO PromiseRef := do
+  promise.catchStart fallback
+
+@[inline] def all (first : PromiseRef) (rest : Array PromiseRef := #[]) : IO PromiseRef := do
+  first.allStart rest
+
+@[inline] def race (first : PromiseRef) (rest : Array PromiseRef := #[]) : IO PromiseRef := do
+  first.raceStart rest
+
+@[inline] def thenAwait (first second : PromiseRef) : IO Unit := do
+  let chained ← first.thenStart second
+  chained.await
+
+@[inline] def catchAwait (promise fallback : PromiseRef) : IO Unit := do
+  let recovered ← promise.catchStart fallback
+  recovered.await
+
+@[inline] def allAwait (first : PromiseRef) (rest : Array PromiseRef := #[]) : IO Unit := do
+  let allPromise ← first.allStart rest
+  allPromise.await
+
+@[inline] def raceAwait (first : PromiseRef) (rest : Array PromiseRef := #[]) : IO Unit := do
+  let raced ← first.raceStart rest
+  raced.await
+
+@[inline] def cancelAndRelease (promise : PromiseRef) : IO Unit := do
+  promise.cancel
+  promise.release
+
 instance : Capnp.Async.Awaitable PromiseRef Unit where
   await := PromiseRef.await
 

@@ -531,6 +531,84 @@ def testKjAsyncPromiseComposition : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncPromiseRefCombinatorSugar : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let p1 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p2 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let seq ← p1.then p2
+    seq.await
+
+    let p3 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p4 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let all ← p3.all #[p4]
+    all.await
+
+    let fail ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    fail.cancel
+    let fallback ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let recovered ← fail.catch fallback
+    recovered.await
+
+    let slow ← runtime.sleepMillisStart (UInt32.ofNat 200)
+    let fast ← runtime.sleepMillisStart (UInt32.ofNat 5)
+    let race ← slow.race #[fast]
+    let startedAt ← IO.monoNanosNow
+    race.await
+    let finishedAt ← IO.monoNanosNow
+    let elapsed := finishedAt - startedAt
+    assertTrue (elapsed < 500000000) "PromiseRef.race helper took too long"
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncPromiseRefFlowHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let p1 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p2 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    p1.thenAwait p2
+
+    let p3 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let p4 ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    p3.allAwait #[p4]
+
+    let fail ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    fail.cancel
+    let fallback ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    fail.catchAwait fallback
+
+    let pending ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    pending.cancelAndRelease
+
+    let probe ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    probe.await
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncPromiseRefCombinatorRuntimeMismatch : IO Unit := do
+  let runtimeA ← Capnp.KjAsync.Runtime.init
+  let runtimeB ← Capnp.KjAsync.Runtime.init
+  try
+    let promiseA ← runtimeA.sleepMillisStart (UInt32.ofNat 1)
+    let promiseB ← runtimeB.sleepMillisStart (UInt32.ofNat 1)
+    let mismatchErr ←
+      try
+        let combined ← promiseA.allStart #[promiseB]
+        combined.await
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (mismatchErr.contains "different Capnp.KjAsync runtime")
+      "expected PromiseRef.allStart runtime mismatch guard"
+    promiseA.release
+    promiseB.release
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+
+@[test]
 def testKjAsyncTaskSetLifecycle : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
