@@ -3204,11 +3204,18 @@ class RuntimeLoop {
         throw std::runtime_error("Lean RPC advanced handler returned IO error");
       }
 
-      auto actionObj = lean_io_result_take_value(ioResult);
-      auto action = decodeAction(actionObj);
-      lean_dec(actionObj);
-
       try {
+        auto actionObj = lean_io_result_take_value(ioResult);
+        auto action = [&]() -> LeanAdvancedHandlerAction {
+          try {
+            auto decoded = decodeAction(actionObj);
+            lean_dec(actionObj);
+            return decoded;
+          } catch (...) {
+            lean_dec(actionObj);
+            throw;
+          }
+        }();
         return dispatchDecodedAction(kj::mv(action), kj::mv(context), cleanupState);
       } catch (...) {
         cleanupRequestCaps(cleanupState, {});

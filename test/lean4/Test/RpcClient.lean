@@ -2518,6 +2518,49 @@ def testRuntimeAdvancedHandlerSetPipelineValidationCleansRequestCaps : IO Unit :
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerDuplicateSetPipelineCleansRequestCaps : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink ← runtime.registerEchoTarget
+    let invalid ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      let pipeline := mkCapabilityPayload sink
+      pure (Capnp.Rpc.Advanced.setPipeline pipeline
+        (Capnp.Rpc.Advanced.setPipeline pipeline
+          (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond req)))))
+    let loopback ← runtime.registerLoopbackTarget invalid
+    let baselineTargets := (← runtime.targetCount)
+
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM loopback (mkCapabilityPayload sink)
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "setPipeline may only be specified once") then
+      throw (IO.userError s!"missing duplicate setPipeline validation error text: {errMsg}")
+
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"request capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    runtime.releaseTarget loopback
+    runtime.releaseTarget invalid
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerUnknownForwardTargetCleansRequestCaps : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
