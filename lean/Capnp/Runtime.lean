@@ -1001,28 +1001,28 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   (getUInt64 r byteOff) ^^^ mask
 
 @[inline] def getInt8 (r : StructReader) (byteOff : Nat) : Int8 :=
-  let u := UInt64.ofNat (getUInt8 r byteOff).toNat
+  let u := (getUInt8 r byteOff).toUInt64
   Int8.ofInt (signExtend 8 u)
 
 @[inline] def getInt8Masked (r : StructReader) (byteOff : Nat) (mask : UInt8) : Int8 :=
   let v := (getUInt8 r byteOff) ^^^ mask
-  Int8.ofInt (signExtend 8 (UInt64.ofNat v.toNat))
+  Int8.ofInt (signExtend 8 v.toUInt64)
 
 @[inline] def getInt16 (r : StructReader) (byteOff : Nat) : Int16 :=
-  let u := UInt64.ofNat (getUInt16 r byteOff).toNat
+  let u := (getUInt16 r byteOff).toUInt64
   Int16.ofInt (signExtend 16 u)
 
 @[inline] def getInt16Masked (r : StructReader) (byteOff : Nat) (mask : UInt16) : Int16 :=
   let v := (getUInt16 r byteOff) ^^^ mask
-  Int16.ofInt (signExtend 16 (UInt64.ofNat v.toNat))
+  Int16.ofInt (signExtend 16 v.toUInt64)
 
 @[inline] def getInt32 (r : StructReader) (byteOff : Nat) : Int32 :=
-  let u := UInt64.ofNat (getUInt32 r byteOff).toNat
+  let u := (getUInt32 r byteOff).toUInt64
   Int32.ofInt (signExtend 32 u)
 
 @[inline] def getInt32Masked (r : StructReader) (byteOff : Nat) (mask : UInt32) : Int32 :=
   let v := (getUInt32 r byteOff) ^^^ mask
-  Int32.ofInt (signExtend 32 (UInt64.ofNat v.toNat))
+  Int32.ofInt (signExtend 32 v.toUInt64)
 
 @[inline] def getInt64 (r : StructReader) (byteOff : Nat) : Int64 :=
   let u := getUInt64 r byteOff
@@ -1230,15 +1230,15 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   | none => ListReader.empty
 
 @[inline] def readListInt8Reader (p : AnyPointer) : ListReader Int8 :=
-  ListReader.map (fun v => Int8.ofInt (signExtend 8 (UInt64.ofNat v.toNat)))
+  ListReader.map (fun v => Int8.ofInt (signExtend 8 v.toUInt64))
     (readListUInt8Reader p)
 
 @[inline] def readListInt16Reader (p : AnyPointer) : ListReader Int16 :=
-  ListReader.map (fun v => Int16.ofInt (signExtend 16 (UInt64.ofNat v.toNat)))
+  ListReader.map (fun v => Int16.ofInt (signExtend 16 v.toUInt64))
     (readListUInt16Reader p)
 
 @[inline] def readListInt32Reader (p : AnyPointer) : ListReader Int32 :=
-  ListReader.map (fun v => Int32.ofInt (signExtend 32 (UInt64.ofNat v.toNat)))
+  ListReader.map (fun v => Int32.ofInt (signExtend 32 v.toUInt64))
     (readListUInt32Reader p)
 
 @[inline] def readListInt64Reader (p : AnyPointer) : ListReader Int64 :=
@@ -1430,15 +1430,15 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
 
 @[inline] def readListInt8CheckedReader (p : AnyPointer) : Except String (ListReader Int8) := do
   let r ← readListUInt8CheckedReader p
-  return ListReader.map (fun v => Int8.ofInt (signExtend 8 (UInt64.ofNat v.toNat))) r
+  return ListReader.map (fun v => Int8.ofInt (signExtend 8 v.toUInt64)) r
 
 @[inline] def readListInt16CheckedReader (p : AnyPointer) : Except String (ListReader Int16) := do
   let r ← readListUInt16CheckedReader p
-  return ListReader.map (fun v => Int16.ofInt (signExtend 16 (UInt64.ofNat v.toNat))) r
+  return ListReader.map (fun v => Int16.ofInt (signExtend 16 v.toUInt64)) r
 
 @[inline] def readListInt32CheckedReader (p : AnyPointer) : Except String (ListReader Int32) := do
   let r ← readListUInt32CheckedReader p
-  return ListReader.map (fun v => Int32.ofInt (signExtend 32 (UInt64.ofNat v.toNat))) r
+  return ListReader.map (fun v => Int32.ofInt (signExtend 32 v.toUInt64)) r
 
 @[inline] def readListInt64CheckedReader (p : AnyPointer) : Except String (ListReader Int64) := do
   let r ← readListUInt64CheckedReader p
