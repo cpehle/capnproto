@@ -2976,10 +2976,12 @@ class RuntimeLoop {
       lean_inc(responseCapsObj);
       lean_dec(resultPair);
 
-      auto responseBytesCopy = copyByteArray(responseObj);
-      auto responseCapsCopy = copyByteArray(responseCapsObj);
-      lean_dec(responseObj);
-      lean_dec(responseCapsObj);
+      const auto responseBytesSize = lean_sarray_size(responseObj);
+      const auto* responseBytesData =
+          reinterpret_cast<const uint8_t*>(lean_sarray_cptr(responseObj));
+      const auto responseCapsSize = lean_sarray_size(responseCapsObj);
+      const auto* responseCapsData =
+          reinterpret_cast<const uint8_t*>(lean_sarray_cptr(responseCapsObj));
 
       auto cleanupRequestCaps = [&](const std::vector<uint32_t>& retainedCaps) {
         kj::HashSet<uint32_t> retained;
@@ -2998,14 +3000,14 @@ class RuntimeLoop {
 
       try {
         kj::ArrayPtr<const kj::byte> responseBytes(
-            reinterpret_cast<const kj::byte*>(responseBytesCopy.data()), responseBytesCopy.size());
+            reinterpret_cast<const kj::byte*>(responseBytesData), responseBytesSize);
         kj::ArrayInputStream input(responseBytes);
         capnp::ReaderOptions options;
         options.traversalLimitInWords = 1ull << 30;
         capnp::InputStreamMessageReader reader(input, options);
         auto responseRoot = reader.getRoot<capnp::AnyPointer>();
 
-        auto responseCapIds = decodeCapTable(responseCapsCopy.data(), responseCapsCopy.size());
+        auto responseCapIds = decodeCapTable(responseCapsData, responseCapsSize);
         cleanupRequestCaps(responseCapIds);
         if (responseCapIds.empty()) {
           context.getResults().setAs<capnp::AnyPointer>(responseRoot);
@@ -3030,9 +3032,13 @@ class RuntimeLoop {
         }
       } catch (...) {
         cleanupRequestCaps({});
+        lean_dec(responseObj);
+        lean_dec(responseCapsObj);
         throw;
       }
 
+      lean_dec(responseObj);
+      lean_dec(responseCapsObj);
       return {kj::READY_NOW, false};
     }
 
