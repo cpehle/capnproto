@@ -713,6 +713,11 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
     throw (IO.userError
       s!"{resource} belongs to a different Capnp.KjAsync runtime")
 
+@[inline] private def ensureAllSameRuntime (runtime : Runtime) (owners : Array Runtime)
+    (resource : String) : IO Unit := do
+  for owner in owners do
+    ensureSameRuntime runtime owner resource
+
 @[inline] private def encodeUInt32Array (values : Array UInt32) : ByteArray :=
   Id.run do
     let mut out := ByteArray.emptyWithCapacity (values.size * 4)
@@ -1008,13 +1013,16 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
-@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit :=
+@[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit := do
+  ensureSameRuntime runtime listener.runtime "Listener"
   ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
 
-@[inline] def releaseConnection (runtime : Runtime) (connection : Connection) : IO Unit :=
+@[inline] def releaseConnection (runtime : Runtime) (connection : Connection) : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeReleaseConnectionImpl runtime.handle connection.handle
 
 @[inline] def listenerAccept (runtime : Runtime) (listener : Listener) : IO Connection := do
+  ensureSameRuntime runtime listener.runtime "Listener"
   return {
     runtime := runtime
     handle := (← ffiRuntimeListenerAcceptImpl runtime.handle listener.handle)
@@ -1022,48 +1030,58 @@ namespace Runtime
 
 @[inline] def listenerAcceptStart (runtime : Runtime) (listener : Listener) :
     IO ConnectionPromiseRef := do
+  ensureSameRuntime runtime listener.runtime "Listener"
   return {
     runtime := runtime
     handle := (← ffiRuntimeListenerAcceptStartImpl runtime.handle listener.handle)
   }
 
 @[inline] def connectionWrite (runtime : Runtime) (connection : Connection)
-    (bytes : ByteArray) : IO Unit :=
+    (bytes : ByteArray) : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeConnectionWriteImpl runtime.handle connection.handle bytes
 
 @[inline] def connectionWriteStart (runtime : Runtime) (connection : Connection)
     (bytes : ByteArray) : IO PromiseRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectionWriteStartImpl runtime.handle connection.handle bytes)
   }
 
 @[inline] def connectionRead (runtime : Runtime) (connection : Connection)
-    (minBytes maxBytes : UInt32) : IO ByteArray :=
+    (minBytes maxBytes : UInt32) : IO ByteArray := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeConnectionReadImpl runtime.handle connection.handle minBytes maxBytes
 
 @[inline] def connectionReadStart (runtime : Runtime) (connection : Connection)
     (minBytes maxBytes : UInt32) : IO BytesPromiseRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectionReadStartImpl
       runtime.handle connection.handle minBytes maxBytes)
   }
 
-@[inline] def bytesPromiseAwait (runtime : Runtime) (promise : BytesPromiseRef) : IO ByteArray :=
+@[inline] def bytesPromiseAwait (runtime : Runtime) (promise : BytesPromiseRef) : IO ByteArray := do
+  ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
   ffiRuntimeBytesPromiseAwaitImpl runtime.handle promise.handle
 
-@[inline] def bytesPromiseCancel (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit :=
+@[inline] def bytesPromiseCancel (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
   ffiRuntimeBytesPromiseCancelImpl runtime.handle promise.handle
 
-@[inline] def bytesPromiseRelease (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit :=
+@[inline] def bytesPromiseRelease (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
   ffiRuntimeBytesPromiseReleaseImpl runtime.handle promise.handle
 
-@[inline] def connectionShutdownWrite (runtime : Runtime) (connection : Connection) : IO Unit :=
+@[inline] def connectionShutdownWrite (runtime : Runtime) (connection : Connection) : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeConnectionShutdownWriteImpl runtime.handle connection.handle
 
 @[inline] def connectionShutdownWriteStart (runtime : Runtime)
     (connection : Connection) : IO PromiseRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectionShutdownWriteStartImpl runtime.handle connection.handle)
@@ -1089,6 +1107,7 @@ namespace Runtime
 
 @[inline] def promiseAllStart (runtime : Runtime) (promises : Array PromiseRef) :
     IO PromiseRef := do
+  ensureAllSameRuntime runtime (promises.map (·.runtime)) "PromiseRef"
   return {
     runtime := runtime
     handle := (← ffiRuntimePromiseAllStartImpl runtime.handle
@@ -1097,6 +1116,7 @@ namespace Runtime
 
 @[inline] def promiseRaceStart (runtime : Runtime) (promises : Array PromiseRef) :
     IO PromiseRef := do
+  ensureAllSameRuntime runtime (promises.map (·.runtime)) "PromiseRef"
   return {
     runtime := runtime
     handle := (← ffiRuntimePromiseRaceStartImpl runtime.handle
@@ -1109,30 +1129,38 @@ namespace Runtime
     handle := (← ffiRuntimeTaskSetNewImpl runtime.handle)
   }
 
-@[inline] def taskSetRelease (runtime : Runtime) (taskSet : TaskSetRef) : IO Unit :=
+@[inline] def taskSetRelease (runtime : Runtime) (taskSet : TaskSetRef) : IO Unit := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   ffiRuntimeTaskSetReleaseImpl runtime.handle taskSet.handle
 
 @[inline] def taskSetAddPromise (runtime : Runtime) (taskSet : TaskSetRef)
-    (promise : PromiseRef) : IO Unit :=
+    (promise : PromiseRef) : IO Unit := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
+  ensureSameRuntime runtime promise.runtime "PromiseRef"
   ffiRuntimeTaskSetAddPromiseImpl runtime.handle taskSet.handle promise.handle
 
-@[inline] def taskSetClear (runtime : Runtime) (taskSet : TaskSetRef) : IO Unit :=
+@[inline] def taskSetClear (runtime : Runtime) (taskSet : TaskSetRef) : IO Unit := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   ffiRuntimeTaskSetClearImpl runtime.handle taskSet.handle
 
-@[inline] def taskSetIsEmpty (runtime : Runtime) (taskSet : TaskSetRef) : IO Bool :=
+@[inline] def taskSetIsEmpty (runtime : Runtime) (taskSet : TaskSetRef) : IO Bool := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   ffiRuntimeTaskSetIsEmptyImpl runtime.handle taskSet.handle
 
 @[inline] def taskSetOnEmptyStart (runtime : Runtime) (taskSet : TaskSetRef) : IO PromiseRef := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   return {
     runtime := runtime
     handle := (← ffiRuntimeTaskSetOnEmptyStartImpl runtime.handle taskSet.handle)
   }
 
-@[inline] def taskSetErrorCount (runtime : Runtime) (taskSet : TaskSetRef) : IO UInt32 :=
+@[inline] def taskSetErrorCount (runtime : Runtime) (taskSet : TaskSetRef) : IO UInt32 := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   ffiRuntimeTaskSetErrorCountImpl runtime.handle taskSet.handle
 
 @[inline] def taskSetTakeLastError? (runtime : Runtime) (taskSet : TaskSetRef) :
     IO (Option String) := do
+  ensureSameRuntime runtime taskSet.runtime "TaskSetRef"
   let (hasError, message) ← ffiRuntimeTaskSetTakeLastErrorImpl runtime.handle taskSet.handle
   if hasError then
     return some message
@@ -1148,16 +1176,19 @@ namespace Runtime
 
 @[inline] def connectionWhenWriteDisconnectedStart (runtime : Runtime) (connection : Connection) :
     IO PromiseRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectionWhenWriteDisconnectedStartImpl runtime.handle connection.handle)
   }
 
-@[inline] def connectionAbortRead (runtime : Runtime) (connection : Connection) : IO Unit :=
+@[inline] def connectionAbortRead (runtime : Runtime) (connection : Connection) : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeConnectionAbortReadImpl runtime.handle connection.handle
 
 @[inline] def connectionAbortWrite (runtime : Runtime) (connection : Connection)
-    (reason : String := "Capnp.KjAsync connection abortWrite") : IO Unit :=
+    (reason : String := "Capnp.KjAsync connection abortWrite") : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
   ffiRuntimeConnectionAbortWriteImpl runtime.handle connection.handle reason
 
 @[inline] def connectionDupFd? (runtime : Runtime) (connection : Connection) :
@@ -1190,53 +1221,65 @@ namespace Runtime
     handle := (← ffiRuntimeDatagramBindImpl runtime.handle address portHint)
   }
 
-@[inline] def datagramReleasePort (runtime : Runtime) (port : DatagramPort) : IO Unit :=
+@[inline] def datagramReleasePort (runtime : Runtime) (port : DatagramPort) : IO Unit := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramReleasePortImpl runtime.handle port.handle
 
-@[inline] def datagramGetPort (runtime : Runtime) (port : DatagramPort) : IO UInt32 :=
+@[inline] def datagramGetPort (runtime : Runtime) (port : DatagramPort) : IO UInt32 := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramGetPortImpl runtime.handle port.handle
 
 @[inline] def datagramSend (runtime : Runtime) (port : DatagramPort)
-    (address : String) (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 :=
+    (address : String) (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramSendImpl runtime.handle port.handle address portHint bytes
 
 @[inline] def datagramSendStart (runtime : Runtime) (port : DatagramPort)
     (address : String) (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32PromiseRef := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   return {
     runtime := runtime
     handle := (← ffiRuntimeDatagramSendStartImpl runtime.handle port.handle address portHint bytes)
   }
 
-@[inline] def uint32PromiseAwait (runtime : Runtime) (promise : UInt32PromiseRef) : IO UInt32 :=
+@[inline] def uint32PromiseAwait (runtime : Runtime) (promise : UInt32PromiseRef) : IO UInt32 := do
+  ensureSameRuntime runtime promise.runtime "UInt32PromiseRef"
   ffiRuntimeUInt32PromiseAwaitImpl runtime.handle promise.handle
 
-@[inline] def uint32PromiseCancel (runtime : Runtime) (promise : UInt32PromiseRef) : IO Unit :=
+@[inline] def uint32PromiseCancel (runtime : Runtime) (promise : UInt32PromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "UInt32PromiseRef"
   ffiRuntimeUInt32PromiseCancelImpl runtime.handle promise.handle
 
-@[inline] def uint32PromiseRelease (runtime : Runtime) (promise : UInt32PromiseRef) : IO Unit :=
+@[inline] def uint32PromiseRelease (runtime : Runtime) (promise : UInt32PromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "UInt32PromiseRef"
   ffiRuntimeUInt32PromiseReleaseImpl runtime.handle promise.handle
 
 @[inline] def datagramReceive (runtime : Runtime) (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO (String × ByteArray) :=
+    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO (String × ByteArray) := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramReceiveImpl runtime.handle port.handle maxBytes
 
 @[inline] def datagramReceiveStart (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := UInt32.ofNat 8192) : IO DatagramReceivePromiseRef := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
   return {
     runtime := runtime
     handle := (← ffiRuntimeDatagramReceiveStartImpl runtime.handle port.handle maxBytes)
   }
 
 @[inline] def datagramReceivePromiseAwait (runtime : Runtime)
-    (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) :=
+    (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
+  ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
   ffiRuntimeDatagramReceivePromiseAwaitImpl runtime.handle promise.handle
 
 @[inline] def datagramReceivePromiseCancel (runtime : Runtime)
-    (promise : DatagramReceivePromiseRef) : IO Unit :=
+    (promise : DatagramReceivePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
   ffiRuntimeDatagramReceivePromiseCancelImpl runtime.handle promise.handle
 
 @[inline] def datagramReceivePromiseRelease (runtime : Runtime)
-    (promise : DatagramReceivePromiseRef) : IO Unit :=
+    (promise : DatagramReceivePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
   ffiRuntimeDatagramReceivePromiseReleaseImpl runtime.handle promise.handle
 
 @[inline] def withDatagramPort (runtime : Runtime) (address : String)
@@ -1716,24 +1759,29 @@ namespace Runtime
 
 @[inline] def webSocketPromiseAwait (runtime : Runtime)
     (promise : WebSocketPromiseRef) : IO WebSocket := do
+  ensureSameRuntime runtime promise.runtime "WebSocketPromiseRef"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketPromiseAwaitImpl runtime.handle promise.handle)
   }
 
 @[inline] def webSocketPromiseCancel (runtime : Runtime)
-    (promise : WebSocketPromiseRef) : IO Unit :=
+    (promise : WebSocketPromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "WebSocketPromiseRef"
   ffiRuntimeWebSocketPromiseCancelImpl runtime.handle promise.handle
 
 @[inline] def webSocketPromiseRelease (runtime : Runtime)
-    (promise : WebSocketPromiseRef) : IO Unit :=
+    (promise : WebSocketPromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "WebSocketPromiseRef"
   ffiRuntimeWebSocketPromiseReleaseImpl runtime.handle promise.handle
 
-@[inline] def webSocketRelease (runtime : Runtime) (webSocket : WebSocket) : IO Unit :=
+@[inline] def webSocketRelease (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   ffiRuntimeWebSocketReleaseImpl runtime.handle webSocket.handle
 
 @[inline] def webSocketSendTextStart (runtime : Runtime) (webSocket : WebSocket) (text : String) :
     IO PromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketSendTextStartImpl runtime.handle webSocket.handle text)
@@ -1746,6 +1794,7 @@ namespace Runtime
 
 @[inline] def webSocketSendBinaryStart (runtime : Runtime) (webSocket : WebSocket)
     (bytes : ByteArray) : IO PromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketSendBinaryStartImpl runtime.handle webSocket.handle bytes)
@@ -1758,6 +1807,7 @@ namespace Runtime
 
 @[inline] def webSocketReceiveStart (runtime : Runtime) (webSocket : WebSocket) :
     IO WebSocketMessagePromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketReceiveStartImpl runtime.handle webSocket.handle)
@@ -1765,6 +1815,7 @@ namespace Runtime
 
 @[inline] def webSocketReceiveStartWithMax (runtime : Runtime) (webSocket : WebSocket)
     (maxBytes : UInt32) : IO WebSocketMessagePromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketReceiveStartWithMaxImpl runtime.handle
@@ -1773,16 +1824,19 @@ namespace Runtime
 
 @[inline] def webSocketMessagePromiseAwait (runtime : Runtime)
     (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+  ensureSameRuntime runtime promise.runtime "WebSocketMessagePromiseRef"
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketMessagePromiseAwaitImpl runtime.handle promise.handle
   decodeWebSocketMessage tag closeCode text bytes
 
 @[inline] def webSocketMessagePromiseCancel (runtime : Runtime)
-    (promise : WebSocketMessagePromiseRef) : IO Unit :=
+    (promise : WebSocketMessagePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "WebSocketMessagePromiseRef"
   ffiRuntimeWebSocketMessagePromiseCancelImpl runtime.handle promise.handle
 
 @[inline] def webSocketMessagePromiseRelease (runtime : Runtime)
-    (promise : WebSocketMessagePromiseRef) : IO Unit :=
+    (promise : WebSocketMessagePromiseRef) : IO Unit := do
+  ensureSameRuntime runtime promise.runtime "WebSocketMessagePromiseRef"
   ffiRuntimeWebSocketMessagePromiseReleaseImpl runtime.handle promise.handle
 
 @[inline] def webSocketReceive (runtime : Runtime) (webSocket : WebSocket) : IO WebSocketMessage := do
@@ -1791,12 +1845,14 @@ namespace Runtime
 
 @[inline] def webSocketReceiveWithMax (runtime : Runtime) (webSocket : WebSocket)
     (maxBytes : UInt32) : IO WebSocketMessage := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketReceiveWithMaxImpl runtime.handle webSocket.handle maxBytes
   decodeWebSocketMessage tag closeCode text bytes
 
 @[inline] def webSocketCloseStart (runtime : Runtime) (webSocket : WebSocket)
     (code : UInt16) (reason : String := "") : IO PromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
     handle := (← ffiRuntimeWebSocketCloseStartImpl
@@ -1808,10 +1864,12 @@ namespace Runtime
   let promise ← runtime.webSocketCloseStart webSocket code reason
   ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
 
-@[inline] def webSocketDisconnect (runtime : Runtime) (webSocket : WebSocket) : IO Unit :=
+@[inline] def webSocketDisconnect (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   ffiRuntimeWebSocketDisconnectImpl runtime.handle webSocket.handle
 
-@[inline] def webSocketAbort (runtime : Runtime) (webSocket : WebSocket) : IO Unit :=
+@[inline] def webSocketAbort (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
   ffiRuntimeWebSocketAbortImpl runtime.handle webSocket.handle
 
 @[inline] def newWebSocketPipe (runtime : Runtime) : IO (WebSocket × WebSocket) := do
@@ -2219,7 +2277,10 @@ namespace TaskSetRef
   ffiRuntimeTaskSetReleaseImpl taskSet.runtime.handle taskSet.handle
 
 @[inline] def addPromise (taskSet : TaskSetRef) (promise : PromiseRef) : IO Unit :=
-  ffiRuntimeTaskSetAddPromiseImpl taskSet.runtime.handle taskSet.handle promise.handle
+  if taskSet.runtime.handle != promise.runtime.handle then
+    throw (IO.userError "PromiseRef belongs to a different Capnp.KjAsync runtime")
+  else
+    ffiRuntimeTaskSetAddPromiseImpl taskSet.runtime.handle taskSet.handle promise.handle
 
 @[inline] def clear (taskSet : TaskSetRef) : IO Unit :=
   ffiRuntimeTaskSetClearImpl taskSet.runtime.handle taskSet.handle
