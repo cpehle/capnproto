@@ -1,131 +1,14 @@
 #pragma once
 
-#include <lean/lean.h>
+#include "rpc_bridge_common.h"
 
-#include <atomic>
-#include <kj/exception.h>
-
-#include <condition_variable>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace capnp_lean_rpc {
-
-inline constexpr uint32_t kRuntimeDefaultMaxFdsPerMessage = 16;
-
-inline bool debugEnabled() {
-  static bool enabled = []() {
-    const char* flag = std::getenv("CAPNP_LEAN_RPC_DEBUG");
-    return flag != nullptr && flag[0] != '\0';
-  }();
-  return enabled;
-}
-
-inline void debugLog(const char* label, const std::string& message) {
-  if (!debugEnabled()) return;
-  std::fprintf(stderr, "[capnp-lean-rpc] %s: %s\n", label, message.c_str());
-  std::fflush(stderr);
-}
-
-lean_obj_res mkByteArrayCopy(const uint8_t* data, size_t size);
-lean_obj_res mkIoUserError(const std::string& message);
-void mkIoOkUnit(lean_obj_res& out);
-
-const char* kjExceptionTypeName(kj::Exception::Type type);
-std::string describeKjException(const kj::Exception& e);
-
-std::vector<uint32_t> decodeCapTable(const uint8_t* data, size_t size);
-std::vector<uint32_t> decodeCapTable(b_lean_obj_arg bytes);
-
-std::vector<uint16_t> decodePipelineOps(const uint8_t* data, size_t size);
-std::vector<uint16_t> decodePipelineOps(b_lean_obj_arg bytes);
-
-std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes);
-
-struct RawCallResult {
-  std::vector<uint8_t> response;
-  std::vector<uint8_t> responseCaps;
-};
-
-struct RawCallCompletion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  uint8_t exceptionTypeTag = 0;  // kj::Exception::Type as uint8_t
-  std::string exceptionDescription;
-  std::string remoteTrace;
-  std::vector<uint8_t> detailBytes;
-  RawCallResult result;
-};
-
-struct RegisterTargetCompletion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  uint32_t targetId = 0;
-};
-
-struct UnitCompletion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-};
-
-struct UInt64Completion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  uint64_t value = 0;
-};
-
-struct Int64Completion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  int64_t value = 0;
-};
-
-struct RegisterPairCompletion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  uint32_t first = 0;
-  uint32_t second = 0;
-};
-
-struct KjPromiseIdCompletion {
-  std::mutex mutex;
-  std::condition_variable cv;
-  bool done = false;
-  bool ok = false;
-  std::string error;
-  uint32_t promiseId = 0;
-};
-
-class RuntimeLoop;
-
-// Shared runtime id generator used by both the RPC and KjAsync test runtimes to avoid collisions
-// when a single process creates both kinds of runtimes.
-extern std::atomic<uint64_t> gNextRuntimeId;
 
 uint64_t createRuntime(uint32_t maxFdsPerMessage);
 std::shared_ptr<RuntimeLoop> getRuntime(uint64_t runtimeId);
