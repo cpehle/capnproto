@@ -3087,6 +3087,49 @@ def testRuntimeAdvancedHandlerDeferredLateAllowCancellationRejected : IO Unit :=
     runtime.shutdown
 
 @[test]
+def testRuntimeAdvancedHandlerDeferredLateStreamingRejected : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
+      Capnp.Rpc.Advanced.defer do
+        IO.sleep (UInt32.ofNat 25)
+        pure (Capnp.Rpc.Advanced.streaming (Capnp.Rpc.Advanced.respond req)))
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM deferred payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "isStreaming must be set before defer") then
+      throw (IO.userError s!"missing deferred isStreaming ordering error text: {errMsg}")
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAdvancedHandlerDeferredTaskIoError : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      Capnp.Rpc.Advanced.defer do
+        throw (IO.userError "expected deferred task failure"))
+    let errMsg ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          Echo.callFooM deferred payload
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "Lean RPC advanced deferred handler task returned IO error") then
+      throw (IO.userError s!"missing deferred task IO error text: {errMsg}")
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerThrowRemote : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -3559,6 +3602,101 @@ def testRuntimeMultiVatSturdyRefRestoreCallback : IO Unit := do
 
     runtime.releaseTarget target
     bob.clearRestorer
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatSturdyRefRestorerFailure : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-restorer-failure"
+    let bob ← runtime.newMultiVatServer "bob-restorer-failure" bootstrap
+    bob.setRestorer (fun _ _ => do
+      throw (IO.userError "expected sturdy ref restorer failure"))
+
+    let errMsg ←
+      try
+        let restored ← alice.restoreSturdyRef {
+          vat := { host := "bob-restorer-failure", unique := false }
+          objectId := ByteArray.mk #[10, 20]
+        }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "multi-vat sturdy ref restorer returned IO error") then
+      throw (IO.userError s!"missing sturdy ref restorer error text: {errMsg}")
+
+    bob.clearRestorer
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatSturdyRefRestorerUnknownTarget : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-restorer-unknown-target"
+    let bob ← runtime.newMultiVatServer "bob-restorer-unknown-target" bootstrap
+    bob.setRestorer (fun _ _ => pure (0xFFFFFFFF : UInt32))
+
+    let errMsg ←
+      try
+        let restored ← alice.restoreSturdyRef {
+          vat := { host := "bob-restorer-unknown-target", unique := false }
+          objectId := ByteArray.mk #[1, 2, 3]
+        }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(errMsg.containsSubstr "unknown RPC target capability id") then
+      throw (IO.userError s!"missing sturdy ref unknown target error text: {errMsg}")
+
+    bob.clearRestorer
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatRestoreSturdyRefMissingObjectErrors : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-missing-sturdy"
+    let bob ← runtime.newMultiVatServer "bob-missing-sturdy" bootstrap
+    let vat : Capnp.Rpc.VatId := { host := "bob-missing-sturdy", unique := false }
+
+    let noRefsErr ←
+      try
+        let restored ← alice.restoreSturdyRef { vat := vat, objectId := ByteArray.mk #[4, 5, 6] }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(noRefsErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing no-published-sturdy-ref error text: {noRefsErr}")
+
+    bob.publishSturdyRef (ByteArray.mk #[1, 2, 3]) bootstrap
+    let unknownObjectErr ←
+      try
+        let restored ← alice.restoreSturdyRef { vat := vat, objectId := ByteArray.mk #[9, 9, 9] }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(unknownObjectErr.containsSubstr "unknown sturdy ref object id") then
+      throw (IO.userError s!"missing unknown sturdy-ref object-id error text: {unknownObjectErr}")
+
     alice.release
     bob.release
     runtime.releaseTarget bootstrap
