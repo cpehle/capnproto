@@ -77,6 +77,15 @@ def testGeneratedMethodMetadata : IO Unit := do
   assertEqual Echo.fooMethod.methodId Echo.fooMethodId
 
 @[test]
+def testTwoPartyVatSideCodec : IO Unit := do
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.ofUInt16 0) .client
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.ofUInt16 1) .server
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.ofUInt16 9) (.unknown 9)
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.toUInt16 .client) 0
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.toUInt16 .server) 1
+  assertEqual (Capnp.Rpc.TwoPartyVatSide.toUInt16 (.unknown 11)) 11
+
+@[test]
 def testDispatchRoutesGeneratedClientCall : IO Unit := do
   let hit ← IO.mkRef false
   let seenTarget ← IO.mkRef (UInt32.ofNat 0)
@@ -646,6 +655,7 @@ def testRuntimeServerBootstrapFactoryLifecycle : IO Unit := do
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
   let factoryCalls ← IO.mkRef (0 : Nat)
+  let seenUnknownSide ← IO.mkRef false
   try
     try
       IO.FS.removeFile socketPath
@@ -653,7 +663,10 @@ def testRuntimeServerBootstrapFactoryLifecycle : IO Unit := do
       pure ()
 
     let bootstrap ← runtime.registerEchoTarget
-    let server ← runtime.newServerWithBootstrapFactory (fun _ => do
+    let server ← runtime.newServerWithBootstrapFactory (fun side => do
+      match side with
+      | .unknown _ => seenUnknownSide.set true
+      | _ => pure ()
       factoryCalls.modify (fun n => n + 1)
       pure bootstrap)
     let listener ← server.listen address
@@ -665,6 +678,7 @@ def testRuntimeServerBootstrapFactoryLifecycle : IO Unit := do
       Echo.callFooM target payload
     assertEqual response.capTable.caps.size 0
     assertTrue ((← factoryCalls.get) > 0) "bootstrap factory callback was not invoked"
+    assertEqual (← seenUnknownSide.get) false
 
     client.release
     server.release

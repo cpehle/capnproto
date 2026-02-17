@@ -44,6 +44,28 @@ structure VatId where
   unique : Bool := false
   deriving Inhabited, BEq, Repr
 
+inductive TwoPartyVatSide where
+  | client
+  | server
+  | unknown (raw : UInt16)
+  deriving Inhabited, BEq, Repr
+
+@[inline] def TwoPartyVatSide.ofUInt16 : UInt16 -> TwoPartyVatSide
+  | 0 => .client
+  | 1 => .server
+  | raw => .unknown raw
+
+@[inline] def TwoPartyVatSide.toUInt16 : TwoPartyVatSide -> UInt16
+  | .client => 0
+  | .server => 1
+  | .unknown raw => raw
+
+instance : ToString TwoPartyVatSide where
+  toString
+    | .client => "client"
+    | .server => "server"
+    | .unknown raw => s!"unknown({raw})"
+
 structure SturdyRef where
   vat : VatId
   objectId : ByteArray := ByteArray.empty
@@ -1048,11 +1070,13 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return { runtime := runtime, handle := { raw := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
 
 @[inline] def newServerWithBootstrapFactory (runtime : Runtime)
-    (bootstrapFactory : UInt16 -> IO Client) : IO RuntimeServerRef := do
+    (bootstrapFactory : TwoPartyVatSide -> IO Client) : IO RuntimeServerRef := do
+  let rawFactory : RawBootstrapFactoryCall := fun sideRaw =>
+    bootstrapFactory (TwoPartyVatSide.ofUInt16 sideRaw)
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle bootstrapFactory)
+      raw := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle rawFactory)
     }
   }
 
@@ -1165,7 +1189,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     ffiRuntimeReleaseServerImpl runtime.handle server.handle.raw
 
 @[inline] def withServerWithBootstrapFactory (runtime : Runtime)
-    (bootstrapFactory : UInt16 -> IO Client)
+    (bootstrapFactory : TwoPartyVatSide -> IO Client)
     (action : RuntimeServerRef -> IO α) : IO α := do
   let server ← runtime.newServerWithBootstrapFactory bootstrapFactory
   try
@@ -1780,7 +1804,7 @@ namespace RuntimeM
   Runtime.newServer (← runtime) bootstrap
 
 @[inline] def newServerWithBootstrapFactory
-    (bootstrapFactory : UInt16 -> IO Client) : RuntimeM RuntimeServerRef := do
+    (bootstrapFactory : TwoPartyVatSide -> IO Client) : RuntimeM RuntimeServerRef := do
   Runtime.newServerWithBootstrapFactory (← runtime) bootstrapFactory
 
 @[inline] def newMultiVatClient (name : String) : RuntimeM RuntimeVatPeerRef := do
@@ -1958,7 +1982,7 @@ namespace RuntimeM
     server.release
 
 @[inline] def withServerWithBootstrapFactory
-    (bootstrapFactory : UInt16 -> IO Client)
+    (bootstrapFactory : TwoPartyVatSide -> IO Client)
     (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
   let server ← newServerWithBootstrapFactory bootstrapFactory
   try
