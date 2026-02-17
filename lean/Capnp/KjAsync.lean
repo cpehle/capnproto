@@ -802,31 +802,31 @@ inductive HttpMethod where
 
 @[inline] private def httpMethodToTag (method : HttpMethod) : UInt32 :=
   match method with
-  | .get => UInt32.ofNat 0
-  | .head => UInt32.ofNat 1
-  | .post => UInt32.ofNat 2
-  | .put => UInt32.ofNat 3
-  | .delete => UInt32.ofNat 4
-  | .patch => UInt32.ofNat 5
-  | .options => UInt32.ofNat 6
-  | .trace => UInt32.ofNat 7
+  | .get => 0
+  | .head => 1
+  | .post => 2
+  | .put => 3
+  | .delete => 4
+  | .patch => 5
+  | .options => 6
+  | .trace => 7
 
 @[inline] private def httpMethodFromTag (tag : UInt32) : IO HttpMethod := do
-  if tag == UInt32.ofNat 0 then
+  if tag == 0 then
     return .get
-  else if tag == UInt32.ofNat 1 then
+  else if tag == 1 then
     return .head
-  else if tag == UInt32.ofNat 2 then
+  else if tag == 2 then
     return .post
-  else if tag == UInt32.ofNat 3 then
+  else if tag == 3 then
     return .put
-  else if tag == UInt32.ofNat 4 then
+  else if tag == 4 then
     return .delete
-  else if tag == UInt32.ofNat 5 then
+  else if tag == 5 then
     return .patch
-  else if tag == UInt32.ofNat 6 then
+  else if tag == 6 then
     return .options
-  else if tag == UInt32.ofNat 7 then
+  else if tag == 7 then
     return .trace
   else
     throw (IO.userError s!"unknown HTTP method tag: {tag.toNat}")
@@ -834,11 +834,11 @@ inductive HttpMethod where
 @[inline] private def decodeWebSocketMessage
     (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : ByteArray) :
     IO WebSocketMessage := do
-  if tag == UInt32.ofNat 0 then
+  if tag == 0 then
     return .text text
-  else if tag == UInt32.ofNat 1 then
+  else if tag == 1 then
     return .binary bytes
-  else if tag == UInt32.ofNat 2 then
+  else if tag == 2 then
     return .close closeCode.toUInt16 text
   else
     throw (IO.userError s!"unknown websocket message tag: {tag.toNat}")
@@ -906,7 +906,7 @@ structure HttpEndpoint where
           let some (bodyHandle, offset10) := decodeUInt32Le? bytes offset9
             | throw (IO.userError "invalid HTTP server request payload")
           if offset10 == bytes.size then
-            if bodyHandle == UInt32.ofNat 0 then
+            if bodyHandle == 0 then
               pure none
             else
               pure (some { runtime := runtime, handle := bodyHandle })
@@ -915,7 +915,7 @@ structure HttpEndpoint where
       return {
         requestId := requestId
         method := (← httpMethodFromTag methodTag)
-        webSocketRequested := (webSocketTag != UInt32.ofNat 0)
+        webSocketRequested := (webSocketTag != 0)
         path := path
         headers := headers
         body := body
@@ -937,7 +937,7 @@ structure HttpEndpoint where
       let mut done := false
       while !done do
         let chunk ← ffiRuntimeHttpServerRequestBodyReadImpl requestBody.runtime.handle
-          requestBody.handle (UInt32.ofNat 1) (UInt32.ofNat 4096)
+          requestBody.handle 1 0x1000
         if chunk.size == 0 then
           done := true
         else
@@ -1246,12 +1246,12 @@ namespace Runtime
   ffiRuntimeUInt32PromiseReleaseImpl runtime.handle promise.handle
 
 @[inline] def datagramReceive (runtime : Runtime) (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO (String × ByteArray) := do
+    (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramReceiveImpl runtime.handle port.handle maxBytes
 
 @[inline] def datagramReceiveStart (runtime : Runtime) (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO DatagramReceivePromiseRef := do
+    (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
   return {
     runtime := runtime
@@ -1399,7 +1399,7 @@ namespace Runtime
     ffiRuntimeHttpRequestStartStreamingWithHeadersImpl runtime.handle (httpMethodToTag method)
       address portHint path (encodeHeaders requestHeaders)
   let requestBody? :=
-    if requestBodyHandle == (UInt32.ofNat 0) then
+    if requestBodyHandle == 0 then
       none
     else
       some { runtime := runtime, handle := requestBodyHandle }
@@ -1414,7 +1414,7 @@ namespace Runtime
     ffiRuntimeHttpRequestStartStreamingWithHeadersSecureImpl runtime.handle (httpMethodToTag method)
       address portHint path (encodeHeaders requestHeaders)
   let requestBody? :=
-    if requestBodyHandle == (UInt32.ofNat 0) then
+    if requestBodyHandle == 0 then
       none
     else
       some { runtime := runtime, handle := requestBodyHandle }
@@ -2325,11 +2325,11 @@ namespace DatagramPort
   }
 
 @[inline] def receive (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO (String × ByteArray) :=
+    (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) :=
   ffiRuntimeDatagramReceiveImpl port.runtime.handle port.handle maxBytes
 
 @[inline] def receiveStart (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : IO DatagramReceivePromiseRef := do
+    (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef := do
   return {
     runtime := port.runtime
     handle := (← ffiRuntimeDatagramReceiveStartImpl port.runtime.handle port.handle maxBytes)
@@ -2794,11 +2794,11 @@ namespace RuntimeM
   promise.release
 
 @[inline] def datagramReceive (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : RuntimeM (String × ByteArray) := do
+    (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
   port.receive maxBytes
 
 @[inline] def datagramReceiveStart (port : DatagramPort)
-    (maxBytes : UInt32 := UInt32.ofNat 8192) : RuntimeM DatagramReceivePromiseRef := do
+    (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
   Runtime.datagramReceiveStart (← runtime) port maxBytes
 
 @[inline] def awaitDatagramReceive (promise : DatagramReceivePromiseRef) :
