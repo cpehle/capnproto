@@ -859,6 +859,22 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<OptionalUInt32Completion> enqueueAwaitConnectionPromiseWithTimeout(
+      uint32_t promiseId, uint64_t timeoutNanos) {
+    auto completion = std::make_shared<OptionalUInt32Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeOptionalUInt32Failure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedAwaitConnectionPromiseWithTimeout{promiseId, timeoutNanos, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueCancelConnectionPromise(uint32_t promiseId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -2664,6 +2680,12 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<HandleCompletion> completion;
   };
 
+  struct QueuedAwaitConnectionPromiseWithTimeout {
+    uint32_t promiseId;
+    uint64_t timeoutNanos;
+    std::shared_ptr<OptionalUInt32Completion> completion;
+  };
+
   struct QueuedCancelConnectionPromise {
     uint32_t promiseId;
     std::shared_ptr<UnitCompletion> completion;
@@ -3222,7 +3244,8 @@ class KjAsyncRuntimeLoop {
                    QueuedReleasePromise, QueuedPromiseThenStart, QueuedPromiseCatchStart,
                    QueuedListen, QueuedReleaseListener, QueuedAccept,
                    QueuedAcceptStart, QueuedConnect, QueuedConnectStart,
-                   QueuedAwaitConnectionPromise, QueuedCancelConnectionPromise,
+                   QueuedAwaitConnectionPromise, QueuedAwaitConnectionPromiseWithTimeout,
+                   QueuedCancelConnectionPromise,
                    QueuedReleaseConnectionPromise, QueuedReleaseConnection,
                    QueuedConnectionWrite, QueuedConnectionWriteStart, QueuedConnectionRead,
                    QueuedConnectionReadStart, QueuedBytesPromiseAwait,
@@ -3720,6 +3743,41 @@ class KjAsyncRuntimeLoop {
     connectionPromises_.erase(it);
     auto stream = kj::mv(pending.promise).wait(waitScope);
     return addConnection(kj::mv(stream));
+  }
+
+  kj::Maybe<uint32_t> awaitConnectionPromiseWithTimeout(
+      kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t promiseId,
+      uint64_t timeoutNanos) {
+    if (timeoutNanos == 0) {
+      return kj::Maybe<uint32_t>(awaitConnectionPromise(waitScope, promiseId));
+    }
+
+    auto it = connectionPromises_.find(promiseId);
+    if (it == connectionPromises_.end()) {
+      throw std::runtime_error("unknown KJ connection promise id: " + std::to_string(promiseId));
+    }
+
+    auto pending = kj::mv(it->second);
+    connectionPromises_.erase(it);
+
+    auto timeout = ioProvider.getTimer()
+                       .afterDelay(nanosToDuration(timeoutNanos, "connection promise timeout"))
+                       .then([]() -> kj::Maybe<kj::Own<kj::AsyncIoStream>> { return kj::none; });
+
+    auto connect = kj::mv(pending.promise).then(
+        [](kj::Own<kj::AsyncIoStream>&& stream) -> kj::Maybe<kj::Own<kj::AsyncIoStream>> {
+          return kj::mv(stream);
+        });
+
+    auto raced = kj::mv(connect).exclusiveJoin(kj::mv(timeout));
+    auto result = kj::mv(raced).wait(waitScope);
+    KJ_IF_SOME(stream, result) {
+      return addConnection(kj::mv(stream));
+    }
+
+    pending.canceler->cancel(
+        "Capnp.KjAsync connection promise timed out from Lean awaitWithTimeout");
+    return kj::none;
   }
 
   void cancelConnectionPromise(uint32_t promiseId) {
@@ -5190,6 +5248,9 @@ class KjAsyncRuntimeLoop {
         completePromiseIdFailure(std::get<QueuedConnectStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedAwaitConnectionPromise>(op)) {
         completeHandleFailure(std::get<QueuedAwaitConnectionPromise>(op).completion, message);
+      } else if (std::holds_alternative<QueuedAwaitConnectionPromiseWithTimeout>(op)) {
+        completeOptionalUInt32Failure(
+            std::get<QueuedAwaitConnectionPromiseWithTimeout>(op).completion, message);
       } else if (std::holds_alternative<QueuedCancelConnectionPromise>(op)) {
         completeUnitFailure(std::get<QueuedCancelConnectionPromise>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleaseConnectionPromise>(op)) {
@@ -5597,6 +5658,21 @@ class KjAsyncRuntimeLoop {
             completeHandleFailure(
                 await.completion,
                 "unknown exception in Capnp.KjAsync connection promise await");
+          }
+        } else if (std::holds_alternative<QueuedAwaitConnectionPromiseWithTimeout>(op)) {
+          auto await = std::get<QueuedAwaitConnectionPromiseWithTimeout>(std::move(op));
+          try {
+            auto connectionId = awaitConnectionPromiseWithTimeout(
+                *io.provider, io.waitScope, await.promiseId, await.timeoutNanos);
+            completeOptionalUInt32Success(await.completion, connectionId);
+          } catch (const kj::Exception& e) {
+            completeOptionalUInt32Failure(await.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeOptionalUInt32Failure(await.completion, e.what());
+          } catch (...) {
+            completeOptionalUInt32Failure(
+                await.completion,
+                "unknown exception in Capnp.KjAsync connection promise awaitWithTimeout");
           }
         } else if (std::holds_alternative<QueuedCancelConnectionPromise>(op)) {
           auto cancel = std::get<QueuedCancelConnectionPromise>(std::move(op));
@@ -7667,6 +7743,39 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_promi
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_connection_promise_await");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_connection_promise_await_with_timeout(uint64_t runtimeId,
+                                                                  uint32_t promiseId,
+                                                                  uint64_t timeoutNanos) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion =
+        runtime->enqueueAwaitConnectionPromiseWithTimeout(promiseId, timeoutNanos);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
+      lean_ctor_set(pair, 1, lean_box_uint32(completion->value));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_connection_promise_await_with_timeout");
   }
 }
 

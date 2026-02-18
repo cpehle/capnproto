@@ -226,6 +226,10 @@ opaque ffiRuntimeConnectStartImpl (runtime : UInt64) (address : @& String) (port
 @[extern "capnp_lean_kj_async_runtime_connection_promise_await"]
 opaque ffiRuntimeConnectionPromiseAwaitImpl (runtime : UInt64) (promise : UInt32) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_connection_promise_await_with_timeout"]
+opaque ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
+    (runtime : UInt64) (promise : UInt32) (timeoutNanos : UInt64) : IO (Bool × UInt32)
+
 @[extern "capnp_lean_kj_async_runtime_connection_promise_cancel"]
 opaque ffiRuntimeConnectionPromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Unit
 
@@ -1049,6 +1053,20 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   let task ← runtime.connectAsTask address portHint
   pure (Capnp.Async.Promise.ofTask task)
 
+@[inline] def connectWithTimeoutNanos? (runtime : Runtime) (address : String)
+    (timeoutNanos : UInt64) (portHint : UInt32 := 0) : IO (Option Connection) := do
+  let pending ← runtime.connectStart address portHint
+  let (hasValue, handle) ←
+    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl runtime.handle pending.handle timeoutNanos
+  if hasValue then
+    return some { runtime := runtime, handle := handle }
+  else
+    return none
+
+@[inline] def connectWithTimeoutMillis? (runtime : Runtime) (address : String)
+    (timeoutMillis : UInt32) (portHint : UInt32 := 0) : IO (Option Connection) := do
+  runtime.connectWithTimeoutNanos? address (millisToNanos timeoutMillis) portHint
+
 @[inline] def connectWithRetry (runtime : Runtime) (address : String)
     (attempts : UInt32) (retryDelayMs : UInt32) (portHint : UInt32 := 0) : IO Connection := do
   if attempts == 0 then
@@ -1104,6 +1122,21 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     runtime := runtime
     handle := (← ffiRuntimeListenerAcceptStartImpl runtime.handle listener.handle)
   }
+
+@[inline] def listenerAcceptWithTimeoutNanos? (runtime : Runtime) (listener : Listener)
+    (timeoutNanos : UInt64) : IO (Option Connection) := do
+  ensureSameRuntime runtime listener.runtime "Listener"
+  let pending ← runtime.listenerAcceptStart listener
+  let (hasValue, handle) ←
+    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl runtime.handle pending.handle timeoutNanos
+  if hasValue then
+    return some { runtime := runtime, handle := handle }
+  else
+    return none
+
+@[inline] def listenerAcceptWithTimeoutMillis? (runtime : Runtime) (listener : Listener)
+    (timeoutMillis : UInt32) : IO (Option Connection) := do
+  runtime.listenerAcceptWithTimeoutNanos? listener (millisToNanos timeoutMillis)
 
 @[inline] def connectionWrite (runtime : Runtime) (connection : Connection)
     (bytes : ByteArray) : IO Unit := do
@@ -2242,6 +2275,21 @@ namespace Listener
     IO (Capnp.Async.Promise Connection) := do
   pure (Capnp.Async.Promise.ofTask (← listener.acceptAsTask))
 
+@[inline] def acceptWithTimeoutNanos? (listener : Listener)
+    (timeoutNanos : UInt64) : IO (Option Connection) := do
+  let pending ← listener.acceptStart
+  let (hasValue, handle) ←
+    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
+      listener.runtime.handle pending.handle timeoutNanos
+  if hasValue then
+    return some { runtime := listener.runtime, handle := handle }
+  else
+    return none
+
+@[inline] def acceptWithTimeoutMillis? (listener : Listener)
+    (timeoutMillis : UInt32) : IO (Option Connection) :=
+  listener.acceptWithTimeoutNanos? (millisToNanos timeoutMillis)
+
 @[inline] def withAccept (listener : Listener) (action : Connection -> IO α) : IO α := do
   let connection ← listener.accept
   try
@@ -2356,6 +2404,23 @@ namespace ConnectionPromiseRef
     runtime := promise.runtime
     handle := (← ffiRuntimeConnectionPromiseAwaitImpl promise.runtime.handle promise.handle)
   }
+
+@[inline] def awaitWithTimeoutNanos? (promise : ConnectionPromiseRef)
+    (timeoutNanos : UInt64) : IO (Option Connection) := do
+  let (hasValue, handle) ←
+    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
+      promise.runtime.handle promise.handle timeoutNanos
+  if hasValue then
+    return some {
+      runtime := promise.runtime
+      handle := handle
+    }
+  else
+    return none
+
+@[inline] def awaitWithTimeoutMillis? (promise : ConnectionPromiseRef)
+    (timeoutMillis : UInt32) : IO (Option Connection) :=
+  promise.awaitWithTimeoutNanos? (millisToNanos timeoutMillis)
 
 @[inline] def cancel (promise : ConnectionPromiseRef) : IO Unit :=
   ffiRuntimeConnectionPromiseCancelImpl promise.runtime.handle promise.handle
@@ -2886,6 +2951,14 @@ namespace RuntimeM
     RuntimeM (Capnp.Async.Promise Connection) := do
   Runtime.connectAsPromise (← runtime) address portHint
 
+@[inline] def connectWithTimeoutNanos? (address : String) (timeoutNanos : UInt64)
+    (portHint : UInt32 := 0) : RuntimeM (Option Connection) := do
+  Runtime.connectWithTimeoutNanos? (← runtime) address timeoutNanos portHint
+
+@[inline] def connectWithTimeoutMillis? (address : String) (timeoutMillis : UInt32)
+    (portHint : UInt32 := 0) : RuntimeM (Option Connection) := do
+  Runtime.connectWithTimeoutMillis? (← runtime) address timeoutMillis portHint
+
 @[inline] def connectWithRetry (address : String) (attempts : UInt32)
     (retryDelayMs : UInt32) (portHint : UInt32 := 0) : RuntimeM Connection := do
   Runtime.connectWithRetry (← runtime) address attempts retryDelayMs portHint
@@ -2927,6 +3000,14 @@ namespace RuntimeM
 
 @[inline] def acceptStart (listener : Listener) : RuntimeM ConnectionPromiseRef := do
   Runtime.listenerAcceptStart (← runtime) listener
+
+@[inline] def acceptWithTimeoutNanos? (listener : Listener) (timeoutNanos : UInt64) :
+    RuntimeM (Option Connection) := do
+  Runtime.listenerAcceptWithTimeoutNanos? (← runtime) listener timeoutNanos
+
+@[inline] def acceptWithTimeoutMillis? (listener : Listener) (timeoutMillis : UInt32) :
+    RuntimeM (Option Connection) := do
+  Runtime.listenerAcceptWithTimeoutMillis? (← runtime) listener timeoutMillis
 
 @[inline] def write (connection : Connection) (bytes : ByteArray) : RuntimeM Unit := do
   Runtime.connectionWrite (← runtime) connection bytes

@@ -542,6 +542,78 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncPromise : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncListenerAcceptWithTimeoutMillisExpires : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket timeout test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let listener ← runtime.listen address
+      let startedAt ← IO.monoNanosNow
+      let accepted? ← listener.acceptWithTimeoutMillis? (UInt32.ofNat 60)
+      let finishedAt ← IO.monoNanosNow
+      let elapsed := finishedAt - startedAt
+
+      assertTrue (accepted?.isNone) "acceptWithTimeoutMillis? should return none on timeout"
+      assertTrue (elapsed >= 30000000)
+        "accept timeout elapsed too quickly"
+      listener.release
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncRuntimeConnectWithTimeoutMillisSuccess : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket timeout test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let listener ← serverRuntime.listen address
+      let serverTask ← IO.asTask do
+        let serverConn ← listener.accept
+        serverConn.release
+
+      let clientConn? ←
+        clientRuntime.connectWithTimeoutMillis? address (UInt32.ofNat 250)
+      match clientConn? with
+      | some clientConn =>
+        clientConn.release
+      | none =>
+        throw (IO.userError "connectWithTimeoutMillis? unexpectedly timed out")
+
+      let serverResult ← IO.wait serverTask
+      match serverResult with
+      | .ok _ => pure ()
+      | .error err =>
+        throw (IO.userError s!"server task failed: {err}")
+
+      listener.release
+    finally
+      serverRuntime.shutdown
+      clientRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncRuntimeConnectWithRetryListenerAppears : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket retry helper test skipped on Windows"
