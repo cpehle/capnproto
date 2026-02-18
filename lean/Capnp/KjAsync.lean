@@ -1014,25 +1014,57 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
+private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
+    (remaining : UInt32) (retryDelayMs : UInt32) (portHint : UInt32)
+    (lastErr? : Option IO.Error := none) : IO Connection := do
+  if remaining == 0 then
+    match lastErr? with
+    | some err =>
+      throw err
+    | none =>
+      throw (IO.userError "Runtime.connectWithRetry exhausted attempts")
+  try
+    let pending ← runtime.connectStart address portHint
+    return {
+      runtime := runtime
+      handle := (← ffiRuntimeConnectionPromiseAwaitImpl runtime.handle pending.handle)
+    }
+  catch err =>
+    let nextRemaining := remaining - 1
+    if nextRemaining > 0 && retryDelayMs > 0 then
+      runtime.sleepMillis retryDelayMs
+    connectWithRetryLoop runtime address nextRemaining retryDelayMs portHint (some err)
+
+@[inline] def connectAsTask (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error Connection)) := do
+  let pending ← runtime.connectStart address portHint
+  IO.asTask do
+    return {
+      runtime := runtime
+      handle := (← ffiRuntimeConnectionPromiseAwaitImpl runtime.handle pending.handle)
+    }
+
+@[inline] def connectAsPromise (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise Connection) := do
+  let task ← runtime.connectAsTask address portHint
+  pure (Capnp.Async.Promise.ofTask task)
+
 @[inline] def connectWithRetry (runtime : Runtime) (address : String)
     (attempts : UInt32) (retryDelayMs : UInt32) (portHint : UInt32 := 0) : IO Connection := do
   if attempts == 0 then
     throw (IO.userError "Runtime.connectWithRetry requires attempts > 0")
-  let mut remaining := attempts.toNat
-  let mut lastErr? : Option IO.Error := none
-  while remaining > 0 do
-    try
-      return (← runtime.connect address portHint)
-    catch err =>
-      lastErr? := some err
-      remaining := remaining - 1
-      if remaining > 0 && retryDelayMs > 0 then
-        runtime.sleepMillis retryDelayMs
-  match lastErr? with
-  | some err =>
-    throw err
-  | none =>
-    throw (IO.userError "Runtime.connectWithRetry exhausted attempts")
+  connectWithRetryLoop runtime address attempts retryDelayMs portHint
+
+@[inline] def connectWithRetryAsTask (runtime : Runtime) (address : String) (attempts : UInt32)
+    (retryDelayMs : UInt32) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error Connection)) :=
+  IO.asTask (runtime.connectWithRetry address attempts retryDelayMs portHint)
+
+@[inline] def connectWithRetryAsPromise (runtime : Runtime) (address : String) (attempts : UInt32)
+    (retryDelayMs : UInt32) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise Connection) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.connectWithRetryAsTask address attempts retryDelayMs portHint))
 
 @[inline] def withListener (runtime : Runtime) (address : String)
     (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -2197,6 +2229,19 @@ namespace Listener
     handle := (← ffiRuntimeListenerAcceptStartImpl listener.runtime.handle listener.handle)
   }
 
+@[inline] def acceptAsTask (listener : Listener) :
+    IO (Task (Except IO.Error Connection)) := do
+  let pending ← listener.acceptStart
+  IO.asTask do
+    return {
+      runtime := listener.runtime
+      handle := (← ffiRuntimeConnectionPromiseAwaitImpl listener.runtime.handle pending.handle)
+    }
+
+@[inline] def acceptAsPromise (listener : Listener) :
+    IO (Capnp.Async.Promise Connection) := do
+  pure (Capnp.Async.Promise.ofTask (← listener.acceptAsTask))
+
 @[inline] def withAccept (listener : Listener) (action : Connection -> IO α) : IO α := do
   let connection ← listener.accept
   try
@@ -2333,6 +2378,10 @@ instance : Capnp.Async.Releasable ConnectionPromiseRef where
 @[inline] def awaitAsTask (promise : ConnectionPromiseRef) :
     IO (Task (Except IO.Error Connection)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def toPromise (promise : ConnectionPromiseRef) :
+    IO (Capnp.Async.Promise Connection) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
 def toIOPromise (promise : ConnectionPromiseRef) :
     IO (IO.Promise (Except String Connection)) := do
@@ -2829,9 +2878,27 @@ namespace RuntimeM
     RuntimeM ConnectionPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
 
+@[inline] def connectAsTask (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error Connection)) := do
+  Runtime.connectAsTask (← runtime) address portHint
+
+@[inline] def connectAsPromise (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise Connection) := do
+  Runtime.connectAsPromise (← runtime) address portHint
+
 @[inline] def connectWithRetry (address : String) (attempts : UInt32)
     (retryDelayMs : UInt32) (portHint : UInt32 := 0) : RuntimeM Connection := do
   Runtime.connectWithRetry (← runtime) address attempts retryDelayMs portHint
+
+@[inline] def connectWithRetryAsTask (address : String) (attempts : UInt32)
+    (retryDelayMs : UInt32) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error Connection)) := do
+  Runtime.connectWithRetryAsTask (← runtime) address attempts retryDelayMs portHint
+
+@[inline] def connectWithRetryAsPromise (address : String) (attempts : UInt32)
+    (retryDelayMs : UInt32) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise Connection) := do
+  Runtime.connectWithRetryAsPromise (← runtime) address attempts retryDelayMs portHint
 
 @[inline] def withListener (address : String) (action : Listener -> RuntimeM α)
     (portHint : UInt32 := 0) : RuntimeM α := do
