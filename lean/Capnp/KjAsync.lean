@@ -1014,6 +1014,26 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
+@[inline] def connectWithRetry (runtime : Runtime) (address : String)
+    (attempts : UInt32) (retryDelayMs : UInt32) (portHint : UInt32 := 0) : IO Connection := do
+  if attempts == 0 then
+    throw (IO.userError "Runtime.connectWithRetry requires attempts > 0")
+  let mut remaining := attempts.toNat
+  let mut lastErr? : Option IO.Error := none
+  while remaining > 0 do
+    try
+      return (← runtime.connect address portHint)
+    catch err =>
+      lastErr? := some err
+      remaining := remaining - 1
+      if remaining > 0 && retryDelayMs > 0 then
+        runtime.sleepMillis retryDelayMs
+  match lastErr? with
+  | some err =>
+    throw err
+  | none =>
+    throw (IO.userError "Runtime.connectWithRetry exhausted attempts")
+
 @[inline] def withListener (runtime : Runtime) (address : String)
     (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
   let listener ← runtime.listen address portHint
@@ -2808,6 +2828,10 @@ namespace RuntimeM
 @[inline] def connectStart (address : String) (portHint : UInt32 := 0) :
     RuntimeM ConnectionPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
+
+@[inline] def connectWithRetry (address : String) (attempts : UInt32)
+    (retryDelayMs : UInt32) (portHint : UInt32 := 0) : RuntimeM Connection := do
+  Runtime.connectWithRetry (← runtime) address attempts retryDelayMs portHint
 
 @[inline] def withListener (address : String) (action : Listener -> RuntimeM α)
     (portHint : UInt32 := 0) : RuntimeM α := do

@@ -500,6 +500,46 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncRuntimeConnectWithRetryListenerAppears : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket retry helper test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let serverTask ← IO.asTask do
+        serverRuntime.sleepMillis (UInt32.ofNat 60)
+        let listener ← serverRuntime.listen address
+        try
+          let serverConn ← listener.accept
+          serverConn.release
+        finally
+          listener.release
+
+      let clientConn ←
+        clientRuntime.connectWithRetry address (UInt32.ofNat 6) (UInt32.ofNat 20)
+      clientConn.release
+
+      let serverResult ← IO.wait serverTask
+      match serverResult with
+      | .ok _ => pure ()
+      | .error err =>
+        throw (IO.userError s!"server task failed: {err}")
+    finally
+      serverRuntime.shutdown
+      clientRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncRuntimeWithConnectionHelper : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket helper test skipped on Windows"
