@@ -2314,6 +2314,15 @@ namespace Connection
       connection.runtime.handle connection.handle bytes)
   }
 
+@[inline] def writeAsTask (connection : Connection) (bytes : ByteArray) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← connection.writeStart bytes
+  pending.awaitAsTask
+
+@[inline] def writeAsPromise (connection : Connection) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.writeAsTask bytes))
+
 @[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : IO ByteArray :=
   ffiRuntimeConnectionReadImpl connection.runtime.handle connection.handle minBytes maxBytes
 
@@ -2325,6 +2334,16 @@ namespace Connection
       connection.runtime.handle connection.handle minBytes maxBytes)
   }
 
+@[inline] def readAsTask (connection : Connection) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error ByteArray)) := do
+  let pending ← connection.readStart minBytes maxBytes
+  IO.asTask do
+    ffiRuntimeBytesPromiseAwaitImpl connection.runtime.handle pending.handle
+
+@[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.readAsTask minBytes maxBytes))
+
 @[inline] def shutdownWrite (connection : Connection) : IO Unit :=
   ffiRuntimeConnectionShutdownWriteImpl connection.runtime.handle connection.handle
 
@@ -2334,6 +2353,15 @@ namespace Connection
     handle := (← ffiRuntimeConnectionShutdownWriteStartImpl
       connection.runtime.handle connection.handle)
   }
+
+@[inline] def shutdownWriteAsTask (connection : Connection) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← connection.shutdownWriteStart
+  pending.awaitAsTask
+
+@[inline] def shutdownWriteAsPromise (connection : Connection) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.shutdownWriteAsTask))
 
 @[inline] def writeAndShutdownWrite (connection : Connection) (bytes : ByteArray) : IO Unit := do
   connection.write bytes
@@ -2380,6 +2408,15 @@ namespace Connection
     handle := (← ffiRuntimeConnectionWhenWriteDisconnectedStartImpl
       connection.runtime.handle connection.handle)
   }
+
+@[inline] def whenWriteDisconnectedAsTask (connection : Connection) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← connection.whenWriteDisconnectedStart
+  pending.awaitAsTask
+
+@[inline] def whenWriteDisconnectedAsPromise (connection : Connection) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.whenWriteDisconnectedAsTask))
 
 @[inline] def abortRead (connection : Connection) : IO Unit :=
   ffiRuntimeConnectionAbortReadImpl connection.runtime.handle connection.handle
@@ -3015,12 +3052,32 @@ namespace RuntimeM
 @[inline] def writeStart (connection : Connection) (bytes : ByteArray) : RuntimeM PromiseRef := do
   Runtime.connectionWriteStart (← runtime) connection bytes
 
+@[inline] def writeAsTask (connection : Connection) (bytes : ByteArray) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.writeAsTask bytes
+
+@[inline] def writeAsPromise (connection : Connection) (bytes : ByteArray) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.writeAsPromise bytes
+
 @[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
   Runtime.connectionRead (← runtime) connection minBytes maxBytes
 
 @[inline] def readStart (connection : Connection) (minBytes maxBytes : UInt32) :
     RuntimeM BytesPromiseRef := do
   Runtime.connectionReadStart (← runtime) connection minBytes maxBytes
+
+@[inline] def readAsTask (connection : Connection) (minBytes maxBytes : UInt32) :
+    RuntimeM (Task (Except IO.Error ByteArray)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.readAsTask minBytes maxBytes
+
+@[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
+    RuntimeM (Capnp.Async.Promise ByteArray) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.readAsPromise minBytes maxBytes
 
 @[inline] def readAll (connection : Connection) (chunkSize : UInt32 := 0x1000) :
     RuntimeM ByteArray := do
@@ -3031,6 +3088,16 @@ namespace RuntimeM
 
 @[inline] def shutdownWriteStart (connection : Connection) : RuntimeM PromiseRef := do
   Runtime.connectionShutdownWriteStart (← runtime) connection
+
+@[inline] def shutdownWriteAsTask (connection : Connection) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.shutdownWriteAsTask
+
+@[inline] def shutdownWriteAsPromise (connection : Connection) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.shutdownWriteAsPromise
 
 @[inline] def writeAndShutdownWrite (connection : Connection) (bytes : ByteArray) :
     RuntimeM Unit := do
@@ -3120,6 +3187,16 @@ namespace RuntimeM
 @[inline] def connectionWhenWriteDisconnectedStart (connection : Connection) :
     RuntimeM PromiseRef := do
   connection.whenWriteDisconnectedStart
+
+@[inline] def connectionWhenWriteDisconnectedAsTask (connection : Connection) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.whenWriteDisconnectedAsTask
+
+@[inline] def connectionWhenWriteDisconnectedAsPromise (connection : Connection) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.whenWriteDisconnectedAsPromise
 
 @[inline] def connectionAbortRead (connection : Connection) : RuntimeM Unit := do
   connection.abortRead

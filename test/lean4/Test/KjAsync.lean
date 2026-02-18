@@ -998,6 +998,37 @@ def testKjAsyncTwoWayPipeAsyncReadWritePrimitives : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newTwoWayPipe
+    let payload := mkPayload
+
+    let writeTask ← left.writeAsTask payload
+    let readTask ← right.readAsTask (UInt32.ofNat 1) (UInt32.ofNat 1024)
+
+    match (← IO.wait writeTask) with
+    | .ok _ => pure ()
+    | .error err =>
+      throw (IO.userError s!"writeAsTask failed: {err}")
+
+    let received ←
+      match (← IO.wait readTask) with
+      | .ok value => pure value
+      | .error err => throw (IO.userError s!"readAsTask failed: {err}")
+    assertEqual received payload
+
+    let shutdownPromise ← left.shutdownWriteAsPromise
+    shutdownPromise.await
+
+    let disconnectPromise ← right.whenWriteDisconnectedAsPromise
+    left.release
+    disconnectPromise.await
+    right.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncConnectionReadAllAndPipeHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
