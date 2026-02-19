@@ -386,6 +386,17 @@ lean_obj_res mkIoWebSocketMessageResult(const WebSocketMessageCompletion& comple
   return lean_io_result_mk_ok(pairOuter);
 }
 
+template <typename T>
+void completeFailureWithError(const std::shared_ptr<T>& completion, std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
 void completeUnitSuccess(const std::shared_ptr<UnitCompletion>& completion) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
@@ -396,13 +407,7 @@ void completeUnitSuccess(const std::shared_ptr<UnitCompletion>& completion) {
 }
 
 void completeUnitFailure(const std::shared_ptr<UnitCompletion>& completion, std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completePromiseIdSuccess(const std::shared_ptr<PromiseIdCompletion>& completion,
@@ -418,13 +423,7 @@ void completePromiseIdSuccess(const std::shared_ptr<PromiseIdCompletion>& comple
 
 void completePromiseIdFailure(const std::shared_ptr<PromiseIdCompletion>& completion,
                               std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeHandleSuccess(const std::shared_ptr<HandleCompletion>& completion, uint32_t handle) {
@@ -439,13 +438,7 @@ void completeHandleSuccess(const std::shared_ptr<HandleCompletion>& completion, 
 
 void completeHandleFailure(const std::shared_ptr<HandleCompletion>& completion,
                            std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeBytesSuccess(const std::shared_ptr<BytesCompletion>& completion,
@@ -460,13 +453,7 @@ void completeBytesSuccess(const std::shared_ptr<BytesCompletion>& completion,
 }
 
 void completeBytesFailure(const std::shared_ptr<BytesCompletion>& completion, std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeHandlePairSuccess(const std::shared_ptr<HandlePairCompletion>& completion,
@@ -483,13 +470,7 @@ void completeHandlePairSuccess(const std::shared_ptr<HandlePairCompletion>& comp
 
 void completeHandlePairFailure(const std::shared_ptr<HandlePairCompletion>& completion,
                                std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeBoolSuccess(const std::shared_ptr<BoolCompletion>& completion, bool value) {
@@ -503,13 +484,7 @@ void completeBoolSuccess(const std::shared_ptr<BoolCompletion>& completion, bool
 }
 
 void completeBoolFailure(const std::shared_ptr<BoolCompletion>& completion, std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeUInt32Success(const std::shared_ptr<UInt32Completion>& completion, uint32_t value) {
@@ -524,13 +499,7 @@ void completeUInt32Success(const std::shared_ptr<UInt32Completion>& completion, 
 
 void completeUInt32Failure(const std::shared_ptr<UInt32Completion>& completion,
                            std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeOptionalUInt32Success(const std::shared_ptr<OptionalUInt32Completion>& completion,
@@ -552,13 +521,7 @@ void completeOptionalUInt32Success(const std::shared_ptr<OptionalUInt32Completio
 
 void completeOptionalUInt32Failure(const std::shared_ptr<OptionalUInt32Completion>& completion,
                                    std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeOptionalStringSuccess(const std::shared_ptr<OptionalStringCompletion>& completion,
@@ -580,13 +543,7 @@ void completeOptionalStringSuccess(const std::shared_ptr<OptionalStringCompletio
 
 void completeOptionalStringFailure(const std::shared_ptr<OptionalStringCompletion>& completion,
                                    std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeDatagramReceiveSuccess(const std::shared_ptr<DatagramReceiveCompletion>& completion,
@@ -603,13 +560,7 @@ void completeDatagramReceiveSuccess(const std::shared_ptr<DatagramReceiveComplet
 
 void completeDatagramReceiveFailure(const std::shared_ptr<DatagramReceiveCompletion>& completion,
                                     std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeHttpResponseSuccess(const std::shared_ptr<HttpResponseCompletion>& completion,
@@ -631,13 +582,7 @@ void completeHttpResponseSuccess(const std::shared_ptr<HttpResponseCompletion>& 
 
 void completeHttpResponseFailure(const std::shared_ptr<HttpResponseCompletion>& completion,
                                  std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeHttpServerRequestSuccess(const std::shared_ptr<HttpServerRequestCompletion>& completion,
@@ -654,13 +599,7 @@ void completeHttpServerRequestSuccess(const std::shared_ptr<HttpServerRequestCom
 
 void completeHttpServerRequestFailure(const std::shared_ptr<HttpServerRequestCompletion>& completion,
                                       std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 void completeWebSocketMessageSuccess(const std::shared_ptr<WebSocketMessageCompletion>& completion,
@@ -680,13 +619,7 @@ void completeWebSocketMessageSuccess(const std::shared_ptr<WebSocketMessageCompl
 
 void completeWebSocketMessageFailure(const std::shared_ptr<WebSocketMessageCompletion>& completion,
                                      std::string message) {
-  {
-    std::lock_guard<std::mutex> lock(completion->mutex);
-    completion->ok = false;
-    completion->error = std::move(message);
-    completion->done = true;
-  }
-  completion->cv.notify_one();
+  completeFailureWithError(completion, std::move(message));
 }
 
 class KjAsyncRuntimeLoop {
