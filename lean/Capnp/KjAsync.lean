@@ -1338,6 +1338,9 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     handle := (← ffiRuntimeDatagramBindImpl runtime.handle address portHint)
   }
 
+@[inline] def datagramBindEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO DatagramPort :=
+  runtime.datagramBind endpoint.address endpoint.portHint
+
 @[inline] def datagramReleasePort (runtime : Runtime) (port : DatagramPort) : IO Unit := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
   ffiRuntimeDatagramReleasePortImpl runtime.handle port.handle
@@ -2127,6 +2130,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def connectStartEndpoint (runtime : Runtime) (endpoint : Endpoint) :
     IO ConnectionPromiseRef :=
   runtime.connectStart endpoint.address endpoint.portHint
+
+@[inline] def connectAsTaskEndpoint (runtime : Runtime) (endpoint : Endpoint) :
+    IO (Task (Except IO.Error Connection)) :=
+  runtime.connectAsTask endpoint.address endpoint.portHint
+
+@[inline] def connectAsPromiseEndpoint (runtime : Runtime) (endpoint : Endpoint) :
+    IO (Capnp.Async.Promise Connection) :=
+  runtime.connectAsPromise endpoint.address endpoint.portHint
 
 @[inline] def httpRequestEndpoint (runtime : Runtime) (method : HttpMethod)
     (endpoint : HttpEndpoint) (path : String) (body : ByteArray := ByteArray.empty) :
@@ -3510,6 +3521,9 @@ namespace RuntimeM
 @[inline] def datagramBind (address : String) (portHint : UInt32 := 0) : RuntimeM DatagramPort := do
   Runtime.datagramBind (← runtime) address portHint
 
+@[inline] def datagramBindEndpoint (endpoint : Endpoint) : RuntimeM DatagramPort := do
+  Runtime.datagramBindEndpoint (← runtime) endpoint
+
 @[inline] def datagramReleasePort (port : DatagramPort) : RuntimeM Unit := do
   port.release
 
@@ -4159,6 +4173,14 @@ namespace RuntimeM
 
 @[inline] def connectStartEndpoint (endpoint : Endpoint) : RuntimeM ConnectionPromiseRef := do
   Runtime.connectStartEndpoint (← runtime) endpoint
+
+@[inline] def connectAsTaskEndpoint (endpoint : Endpoint) :
+    RuntimeM (Task (Except IO.Error Connection)) := do
+  Runtime.connectAsTaskEndpoint (← runtime) endpoint
+
+@[inline] def connectAsPromiseEndpoint (endpoint : Endpoint) :
+    RuntimeM (Capnp.Async.Promise Connection) := do
+  Runtime.connectAsPromiseEndpoint (← runtime) endpoint
 
 @[inline] def httpRequestEndpoint (method : HttpMethod) (endpoint : HttpEndpoint) (path : String)
     (body : ByteArray := ByteArray.empty) : RuntimeM HttpResponse := do

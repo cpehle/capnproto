@@ -585,6 +585,95 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncPromise : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncNetworkRoundtripSingleRuntimeConnectAsTaskEndpoint : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket endpoint task test skipped on Windows"
+  else
+    let (_address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let endpoint := Capnp.KjAsync.Endpoint.unix socketPath
+      let listener ← runtime.listenEndpoint endpoint
+      let acceptPromise ← listener.acceptAsPromise
+      let connectTask ← runtime.connectAsTaskEndpoint endpoint
+      let clientConn ←
+        match (← IO.wait connectTask) with
+        | .ok connection => pure connection
+        | .error err =>
+          throw (IO.userError s!"Runtime.connectAsTaskEndpoint failed: {err}")
+      let serverConn ← acceptPromise.await
+
+      let payload := mkPayload
+      clientConn.write payload
+      clientConn.shutdownWrite
+
+      let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      assertEqual req payload
+      serverConn.write req
+      serverConn.shutdownWrite
+
+      let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+      assertEqual echoed payload
+
+      clientConn.release
+      serverConn.release
+      listener.release
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncRuntimeMConnectAsPromiseEndpointRoundtrip : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket endpoint promise test skipped on Windows"
+  else
+    let (_address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let endpoint := Capnp.KjAsync.Endpoint.unix socketPath
+      Capnp.KjAsync.RuntimeM.run runtime do
+        let listener ← Capnp.KjAsync.RuntimeM.listenEndpoint endpoint
+        let acceptPromise ← listener.acceptAsPromise
+        let connectPromise ← Capnp.KjAsync.RuntimeM.connectAsPromiseEndpoint endpoint
+        let clientConn ← connectPromise.await
+        let serverConn ← acceptPromise.await
+
+        let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 11))
+        clientConn.write payload
+        clientConn.shutdownWrite
+
+        let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        assertEqual req payload
+        serverConn.write req
+        serverConn.shutdownWrite
+
+        let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+        assertEqual echoed payload
+
+        clientConn.release
+        serverConn.release
+        listener.release
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncListenerAcceptWithTimeoutMillisExpires : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket timeout test skipped on Windows"
@@ -1150,6 +1239,39 @@ def testKjAsyncDatagramRoundtrip : IO Unit := do
       assertEqual bytes payload
     | Except.error err =>
       throw (IO.userError s!"datagram receive task failed: {err}")
+
+    senderPort.release
+    receiverPort.release
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
+
+@[test]
+def testKjAsyncRuntimeMDatagramBindEndpoint : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverEndpoint := Capnp.KjAsync.Endpoint.tcp "127.0.0.1" 0
+    let senderEndpoint := Capnp.KjAsync.Endpoint.tcp "127.0.0.1" 0
+    let receiverPort ← Capnp.KjAsync.RuntimeM.run receiverRuntime do
+      Capnp.KjAsync.RuntimeM.datagramBindEndpoint receiverEndpoint
+    let receiverPortNumber ← receiverPort.getPort
+    let senderPort ← Capnp.KjAsync.RuntimeM.run senderRuntime do
+      Capnp.KjAsync.RuntimeM.datagramBindEndpoint senderEndpoint
+    let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 21))
+
+    let receiveTask ← receiverRuntime.datagramReceiveAsTask receiverPort (UInt32.ofNat 1024)
+    let sendPromise ←
+      senderRuntime.datagramSendAsPromise senderPort "127.0.0.1" payload receiverPortNumber
+    let sentCount ← sendPromise.await
+    assertEqual sentCount (UInt32.ofNat payload.size)
+
+    let (_source, bytes) ←
+      match (← IO.wait receiveTask) with
+      | .ok datagram => pure datagram
+      | .error err =>
+        throw (IO.userError s!"RuntimeM.datagramBindEndpoint receive failed: {err}")
+    assertEqual bytes payload
 
     senderPort.release
     receiverPort.release
