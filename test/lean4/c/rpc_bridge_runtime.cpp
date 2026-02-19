@@ -1366,87 +1366,40 @@ class RuntimeLoop {
   }
 
   std::shared_ptr<RegisterTargetCompletion> enqueueAwaitRegisterPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<RegisterTargetCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
-      queue_.emplace_back(QueuedAwaitRegisterPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    return enqueueRegisterCompletion(
+        [this, promiseId](const std::shared_ptr<RegisterTargetCompletion>& completion) {
+          queue_.emplace_back(QueuedAwaitRegisterPromise{promiseId, completion});
+        });
   }
 
   std::shared_ptr<UnitCompletion> enqueueCancelRegisterPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<UnitCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
+    return enqueueUnitCompletion([this, promiseId](const std::shared_ptr<UnitCompletion>& completion) {
       queue_.emplace_back(QueuedCancelRegisterPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    });
   }
 
   std::shared_ptr<UnitCompletion> enqueueReleaseRegisterPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<UnitCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
+    return enqueueUnitCompletion([this, promiseId](const std::shared_ptr<UnitCompletion>& completion) {
       queue_.emplace_back(QueuedReleaseRegisterPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    });
   }
 
   std::shared_ptr<UnitCompletion> enqueueAwaitUnitPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<UnitCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
+    return enqueueUnitCompletion([this, promiseId](const std::shared_ptr<UnitCompletion>& completion) {
       queue_.emplace_back(QueuedAwaitUnitPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    });
   }
 
   std::shared_ptr<UnitCompletion> enqueueCancelUnitPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<UnitCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
+    return enqueueUnitCompletion([this, promiseId](const std::shared_ptr<UnitCompletion>& completion) {
       queue_.emplace_back(QueuedCancelUnitPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    });
   }
 
   std::shared_ptr<UnitCompletion> enqueueReleaseUnitPromise(uint32_t promiseId) {
-    auto completion = std::make_shared<UnitCompletion>();
-    {
-      std::lock_guard<std::mutex> lock(queueMutex_);
-      if (stopping_) {
-        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
-        return completion;
-      }
+    return enqueueUnitCompletion([this, promiseId](const std::shared_ptr<UnitCompletion>& completion) {
       queue_.emplace_back(QueuedReleaseUnitPromise{promiseId, completion});
-    }
-    notifyWorker();
-    return completion;
+    });
   }
 
   std::shared_ptr<KjPromiseIdCompletion> enqueueKjAsyncSleepNanosStart(uint64_t delayNanos) {
@@ -2061,6 +2014,40 @@ class RuntimeLoop {
       return static_cast<uint>(kRuntimeDefaultMaxFdsPerMessage);
     }
     return static_cast<uint>(maxFdsPerMessage);
+  }
+
+  template <typename CompletionType, typename OnStoppingFn, typename EnqueueFn>
+  std::shared_ptr<CompletionType> enqueueWithCompletion(OnStoppingFn&& onStopping,
+                                                        EnqueueFn&& enqueue) {
+    auto completion = std::make_shared<CompletionType>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        std::forward<OnStoppingFn>(onStopping)(completion);
+        return completion;
+      }
+      std::forward<EnqueueFn>(enqueue)(completion);
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  template <typename EnqueueFn>
+  std::shared_ptr<RegisterTargetCompletion> enqueueRegisterCompletion(EnqueueFn&& enqueue) {
+    return enqueueWithCompletion<RegisterTargetCompletion>(
+        [this](const std::shared_ptr<RegisterTargetCompletion>& completion) {
+          completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        },
+        std::forward<EnqueueFn>(enqueue));
+  }
+
+  template <typename EnqueueFn>
+  std::shared_ptr<UnitCompletion> enqueueUnitCompletion(EnqueueFn&& enqueue) {
+    return enqueueWithCompletion<UnitCompletion>(
+        [this](const std::shared_ptr<UnitCompletion>& completion) {
+          completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        },
+        std::forward<EnqueueFn>(enqueue));
   }
 
   struct QueuedRawCall {
