@@ -43,6 +43,16 @@ This keeps orchestration in KJ while still fitting Lean-side async APIs.
     let promise ← Capnp.KjAsync.RuntimeM.sleepMillisStart delayMillis
     promise.awaitAsTask
 
+/-- Promise variant of `sleepNanosAsTask`. -/
+@[inline] def sleepNanosAsPromise (runtime : Capnp.Rpc.Runtime)
+    (delayNanos : UInt64) : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.sleepNanosAsTask delayNanos))
+
+/-- Promise variant of `sleepMillisAsTask`. -/
+@[inline] def sleepMillisAsPromise (runtime : Capnp.Rpc.Runtime)
+    (delayMillis : UInt32) : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.sleepMillisAsTask delayMillis))
+
 end Runtime
 
 namespace RuntimeM
@@ -77,6 +87,18 @@ The runtime ownership remains with the outer `Capnp.Rpc.Runtime`.
     (delayMillis : UInt32) : Capnp.Rpc.RuntimeM (Task (Except IO.Error Unit)) := do
   let runtime ← Capnp.Rpc.RuntimeM.runtime
   runtime.sleepMillisAsTask delayMillis
+
+/-- RuntimeM variant of `Capnp.Rpc.Runtime.sleepNanosAsPromise`. -/
+@[inline] def sleepNanosAsPromise
+    (delayNanos : UInt64) : Capnp.Rpc.RuntimeM (Capnp.Async.Promise Unit) := do
+  let runtime ← Capnp.Rpc.RuntimeM.runtime
+  runtime.sleepNanosAsPromise delayNanos
+
+/-- RuntimeM variant of `Capnp.Rpc.Runtime.sleepMillisAsPromise`. -/
+@[inline] def sleepMillisAsPromise
+    (delayMillis : UInt32) : Capnp.Rpc.RuntimeM (Capnp.Async.Promise Unit) := do
+  let runtime ← Capnp.Rpc.RuntimeM.runtime
+  runtime.sleepMillisAsPromise delayMillis
 
 end RuntimeM
 end Rpc

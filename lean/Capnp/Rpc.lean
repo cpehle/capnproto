@@ -1595,6 +1595,10 @@ instance : Capnp.Async.Releasable RuntimePendingCallRef where
     IO (Task (Except IO.Error Payload)) :=
   Capnp.Async.awaitAsTask pendingCall
 
+@[inline] def toPromise (pendingCall : RuntimePendingCallRef) :
+    IO (Capnp.Async.Promise Payload) := do
+  pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitAsTask))
+
 def toIOPromise (pendingCall : RuntimePendingCallRef) :
     IO (IO.Promise (Except String Payload)) := do
   Capnp.Async.toIOPromise pendingCall
@@ -1646,6 +1650,10 @@ instance : Capnp.Async.Releasable RuntimeRegisterPromiseRef where
     IO (Task (Except IO.Error UInt32)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def toPromise (promise : RuntimeRegisterPromiseRef) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
 def toIOPromise (promise : RuntimeRegisterPromiseRef) :
     IO (IO.Promise (Except String UInt32)) := do
   Capnp.Async.toIOPromise promise
@@ -1678,6 +1686,10 @@ instance : Capnp.Async.Releasable RuntimeUnitPromiseRef where
 @[inline] def awaitAsTask (promise : RuntimeUnitPromiseRef) :
     IO (Task (Except IO.Error Unit)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def toPromise (promise : RuntimeUnitPromiseRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
 def toIOPromise (promise : RuntimeUnitPromiseRef) :
     IO (IO.Promise (Except String Unit)) := do
