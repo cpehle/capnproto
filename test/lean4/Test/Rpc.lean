@@ -25,6 +25,19 @@ private def buildReceiverAnswerCap : CapDescriptor.Reader :=
   CapDescriptor.read (Capnp.getRoot msg)
 
 @[test]
+def testRpcRemoteExceptionTypeCodec : IO Unit := do
+  assertEqual (Capnp.Rpc.RemoteExceptionType.ofUInt8 0) .failed
+  assertEqual (Capnp.Rpc.RemoteExceptionType.ofUInt8 1) .overloaded
+  assertEqual (Capnp.Rpc.RemoteExceptionType.ofUInt8 2) .disconnected
+  assertEqual (Capnp.Rpc.RemoteExceptionType.ofUInt8 3) .unimplemented
+  assertEqual (Capnp.Rpc.RemoteExceptionType.ofUInt8 255) .failed
+
+  assertEqual (Capnp.Rpc.RemoteExceptionType.toUInt8 .failed) (UInt8.ofNat 0)
+  assertEqual (Capnp.Rpc.RemoteExceptionType.toUInt8 .overloaded) (UInt8.ofNat 1)
+  assertEqual (Capnp.Rpc.RemoteExceptionType.toUInt8 .disconnected) (UInt8.ofNat 2)
+  assertEqual (Capnp.Rpc.RemoteExceptionType.toUInt8 .unimplemented) (UInt8.ofNat 3)
+
+@[test]
 def testRpcPayloadRoundtrip : IO Unit := do
   let (idx, table) := Capnp.capTableAdd Capnp.emptyCapTable 7
   assertEqual idx (UInt32.ofNat 0)

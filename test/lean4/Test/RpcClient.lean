@@ -932,6 +932,77 @@ def testRuntimeClientQueueMetrics : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeClientQueueMetricsPreAcceptBacklogDrains : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    let target ← client.bootstrap
+    let pending ← runtime.startCall target Echo.fooMethod payload
+
+    let rec waitForBacklog (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let pendingCount ← runtime.pendingCallCount
+      let queueCount ← client.queueCount
+      let queueSize ← client.queueSize
+      if pendingCount == (UInt64.ofNat 1) &&
+          (queueCount > (UInt64.ofNat 0) || queueSize > (UInt64.ofNat 0)) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"pre-accept backlog metrics did not materialize: pending={pendingCount}, queueCount={queueCount}, queueSize={queueSize}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForBacklog attempts
+    waitForBacklog 200
+
+    server.accept listener
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 0
+
+    let rec waitForDrain (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let pendingCount ← runtime.pendingCallCount
+      let queueCount ← client.queueCount
+      let queueSize ← client.queueSize
+      if pendingCount == (UInt64.ofNat 0) &&
+          queueCount == (UInt64.ofNat 0) &&
+          queueSize == (UInt64.ofNat 0) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"post-accept metrics did not drain: pending={pendingCount}, queueCount={queueCount}, queueSize={queueSize}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForDrain attempts
+    waitForDrain 200
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeClientSetFlowLimit : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -1062,6 +1133,60 @@ def testRuntimeResourceCounts : IO Unit := do
       IO.FS.removeFile socketPath
     catch _ =>
       pure ()
+
+@[test]
+def testRuntimePendingCallCountTracksConcurrentCalls : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let released ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let blocker ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in pending-count blocker target: {method.interfaceId}/{method.methodId}")
+      Capnp.Rpc.Advanced.defer do
+        let rec waitForRelease (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+          if (← released.get) then
+            pure (Capnp.Rpc.Advanced.respond req)
+          else
+            match attempts with
+            | 0 =>
+                throw (IO.userError "pending-count blocker did not release in time")
+            | attempts + 1 =>
+                IO.sleep (UInt32.ofNat 5)
+                waitForRelease attempts
+        waitForRelease 10_000)
+
+    let pending0 ← runtime.startCall blocker Echo.fooMethod payload
+    let pending1 ← runtime.startCall blocker Echo.fooMethod payload
+    let pending2 ← runtime.startCall blocker Echo.fooMethod payload
+
+    let rec waitForPendingCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let pendingCount ← runtime.pendingCallCount
+      if pendingCount == (UInt64.ofNat 3) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"expected three pending calls, observed {pendingCount}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForPendingCount attempts
+    waitForPendingCount 200
+
+    released.set true
+    let response0 ← pending0.await
+    let response1 ← pending1.await
+    let response2 ← pending2.await
+    assertEqual response0.capTable.caps.size 0
+    assertEqual response1.capTable.caps.size 0
+    assertEqual response2.capTable.caps.size 0
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+
+    runtime.releaseTarget blocker
+  finally
+    runtime.shutdown
 
 @[test]
 def testRuntimeMCallAndPendingResultHelpers : IO Unit := do
@@ -1256,6 +1381,58 @@ def testRuntimeClientOnDisconnectAfterServerRelease : IO Unit := do
 
     client.release
     runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeDisconnectVisibilityViaCallResult : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let target ← client.bootstrap
+
+    let warmup ← runtime.callResult target Echo.fooMethod payload
+    match warmup with
+    | .ok response =>
+        assertEqual response.capTable.caps.size 0
+    | .error ex =>
+        throw (IO.userError s!"expected warmup call to succeed, got: {ex.description}")
+
+    let disconnectPromise ← client.onDisconnectStart
+    server.release
+    disconnectPromise.await
+
+    let disconnected ← runtime.callResult target Echo.fooMethod payload
+    match disconnected with
+    | .ok _ =>
+        throw (IO.userError "expected call after disconnect to fail")
+    | .error ex =>
+        assertEqual ex.type .disconnected
+        assertTrue (!ex.description.isEmpty) "disconnect exception should include a description"
+
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+    assertEqual (← client.queueCount) (UInt64.ofNat 0)
+    assertEqual (← client.queueSize) (UInt64.ofNat 0)
+
+    runtime.releaseTarget target
+    client.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
   finally
     runtime.shutdown
     try
@@ -1886,6 +2063,28 @@ def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
+  let awaitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO α := do
+    let timeoutTask ← runtime.sleepMillisAsTask timeoutMillis
+    let wrappedTask : Task (Except IO.Error (Option α)) := Task.map
+      (fun result =>
+        match result with
+        | .ok value => .ok (some value)
+        | .error err => .error err)
+      task
+    let wrappedTimeout : Task (Except IO.Error (Option α)) := Task.map
+      (fun result =>
+        match result with
+        | .ok _ => .ok none
+        | .error err => .error err)
+      timeoutTask
+    match (← IO.waitAny [wrappedTask, wrappedTimeout]) with
+    | .ok (some value) =>
+        pure value
+    | .ok none =>
+        throw (IO.userError s!"{label}: timeout")
+    | .error err =>
+        throw (IO.userError s!"{label}: {err}")
   try
     try
       IO.FS.removeFile socketPath
@@ -1893,19 +2092,36 @@ def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
       pure ()
 
     let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeEchoOnce address Echo.fooMethod)
-    IO.sleep (UInt32.ofNat 20)
-
-    let target ← connectRuntimeTargetWithRetry runtime address
+    let mut client? : Option Capnp.Rpc.RuntimeClientRef := none
+    let mut attempts := 0
+    while client?.isNone && attempts < 50 do
+      let nextClient? ←
+        try
+          let c ← runtime.newClient address
+          pure (some c)
+        catch _ =>
+          pure none
+      client? := nextClient?
+      if client?.isNone then
+        IO.sleep (UInt32.ofNat 10)
+      attempts := attempts + 1
+    let client ←
+      match client? with
+      | some c => pure c
+      | none => throw (IO.userError "failed to connect Lean runtime client to C++ one-shot server")
+    let target ← client.bootstrap
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM target payload
     assertEqual response.capTable.caps.size 0
 
+    let disconnectPromise ← client.onDisconnectStart
     runtime.releaseTarget target
-    match serveTask.get with
-    | .ok observed =>
-        assertEqual observed.capTable.caps.size 0
-    | .error err =>
-        throw err
+    client.release
+
+    let disconnectTask ← disconnectPromise.awaitAsTask
+    awaitTaskWithin "interop one-shot disconnect" disconnectTask
+    let observed ← awaitTaskWithin "interop one-shot server completion" serveTask
+    assertEqual observed.capTable.caps.size 0
 
     let reconnectFailed ←
       try
@@ -2802,6 +3018,77 @@ def testRuntimeSetTraceEncoderOnExistingConnection : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeTraceEncoderCallResultVisibility : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let traceCalls ← IO.mkRef (0 : Nat)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let throwing ← runtime.registerAdvancedHandlerTarget (fun _ method _ => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        pure <| Capnp.Rpc.Advanced.throwRemoteWithType
+          Capnp.Rpc.RemoteExceptionType.overloaded "trace visibility test exception"
+      else
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload))
+    let server ← runtime.newServer throwing
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let target ← client.bootstrap
+
+    runtime.disableTraceEncoder
+    let disabledRes ← runtime.callResult target Echo.fooMethod payload
+    match disabledRes with
+    | .ok _ =>
+        throw (IO.userError "expected disabled trace call to fail")
+    | .error ex => do
+        assertEqual ex.type .overloaded
+        assertEqual ex.remoteTrace ""
+
+    runtime.setTraceEncoder (fun description => do
+      traceCalls.modify (fun n => n + 1)
+      pure s!"obs-trace<{description}>")
+
+    let enabledRes0 ← runtime.callResult target Echo.fooMethod payload
+    let enabledRes1 ← runtime.callResult target Echo.fooMethod payload
+    for res in #[enabledRes0, enabledRes1] do
+      match res with
+      | .ok _ =>
+          throw (IO.userError "expected enabled trace call to fail")
+      | .error ex => do
+          assertEqual ex.type .overloaded
+          if !(ex.remoteTrace.containsSubstr "obs-trace<") then
+            throw (IO.userError s!"enabled trace missing encoded marker: {ex.remoteTrace}")
+    assertEqual (← traceCalls.get) 2
+
+    runtime.disableTraceEncoder
+    let disabledAgainRes ← runtime.callResult target Echo.fooMethod payload
+    match disabledAgainRes with
+    | .ok _ =>
+        throw (IO.userError "expected disabled-again trace call to fail")
+    | .error ex => do
+        assertEqual ex.type .overloaded
+        assertEqual ex.remoteTrace ""
+    assertEqual (← traceCalls.get) 2
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget throwing
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeTargetGetFdOption : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
@@ -3362,7 +3649,7 @@ def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
     runtime.shutdown
 
 @[test]
-def testRuntimeKjAsyncSleepAsTaskHelpers : IO Unit := do
+def testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let sleepTask ← runtime.sleepMillisAsTask (UInt32.ofNat 5)
@@ -3373,6 +3660,17 @@ def testRuntimeKjAsyncSleepAsTaskHelpers : IO Unit := do
     let sleepTaskM ← Capnp.Rpc.RuntimeM.run runtime do
       Capnp.Rpc.RuntimeM.sleepNanosAsTask (UInt64.ofNat 1000000)
     match (← IO.wait sleepTaskM) with
+    | .ok () => pure ()
+    | .error err => throw err
+
+    let sleepPromise ← runtime.sleepMillisAsPromise (UInt32.ofNat 5)
+    match (← sleepPromise.awaitResult) with
+    | .ok () => pure ()
+    | .error err => throw err
+
+    let sleepPromiseM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.sleepNanosAsPromise (UInt64.ofNat 1000000)
+    match (← sleepPromiseM.awaitResult) with
     | .ok () => pure ()
     | .error err => throw err
   finally
@@ -3769,21 +4067,18 @@ def testRuntimeSharedAsyncHelpersForRegisterAndUnitPromises : IO Unit := do
       let acceptPromise ← server.acceptStart listener
       let connectPromise ← runtime.connectStart address
 
-      let connectTask ← connectPromise.awaitAsTask
+      let connectAsync ← connectPromise.toPromise
       let target ←
-        match (← IO.wait connectTask) with
+        match (← connectAsync.awaitResult) with
         | .ok connectedTarget => pure connectedTarget
         | .error err =>
-            throw (IO.userError s!"register promise awaitAsTask failed: {err}")
+            throw (IO.userError s!"register promise toPromise failed: {err}")
 
-      let acceptIoPromise ← acceptPromise.toIOPromise
-      let acceptResult? ← IO.wait acceptIoPromise.result?
-      match acceptResult? with
-      | some (.ok ()) => pure ()
-      | some (.error err) =>
-          throw (IO.userError s!"unit promise toIOPromise failed: {err}")
-      | none =>
-          throw (IO.userError "unit promise toIOPromise dropped without a result")
+      let acceptAsync ← acceptPromise.toPromise
+      match (← acceptAsync.awaitResult) with
+      | .ok () => pure ()
+      | .error err =>
+          throw (IO.userError s!"unit promise toPromise failed: {err}")
 
       let response ← Capnp.Rpc.RuntimeM.run runtime do
         Echo.callFooM target payload
@@ -3817,15 +4112,12 @@ def testRuntimePendingCallSharedAsyncHelpers : IO Unit := do
     assertEqual response.capTable.caps.size 0
 
     let pending2 ← runtime.startCall target Echo.fooMethod payload
-    let pendingIoPromise ← pending2.toIOPromise
-    let pendingIoResult? ← IO.wait pendingIoPromise.result?
-    match pendingIoResult? with
-    | some (.ok rsp) =>
+    let pendingPromise ← pending2.toPromise
+    match (← pendingPromise.awaitResult) with
+    | .ok rsp =>
         assertEqual rsp.capTable.caps.size 0
-    | some (.error err) =>
-        throw (IO.userError s!"pending call toIOPromise failed: {err}")
-    | none =>
-        throw (IO.userError "pending call toIOPromise dropped without a result")
+    | .error err =>
+        throw (IO.userError s!"pending call toPromise failed: {err}")
 
     runtime.releaseTarget target
   finally
