@@ -2692,6 +2692,58 @@ def testRuntimeParityTailCallPipelineOrdering : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeParityAdvancedDeferredSetPipelineOrdering : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let (callOrder, getNextExpected) ← registerEchoFooCallOrderTarget runtime
+    let advanced ← runtime.registerAdvancedHandlerTargetAsync (fun _ method _ => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in advanced set-pipeline parity target: {method.interfaceId}/{method.methodId}")
+      let pipelinePayload := mkCapabilityPayload callOrder
+      let deferred ← Capnp.Rpc.Advanced.defer do
+        IO.sleep (UInt32.ofNat 30)
+        pure (Capnp.Rpc.Advanced.respond pipelinePayload)
+      pure (Capnp.Rpc.Advanced.setPipeline pipelinePayload deferred))
+
+    let pending ← runtime.startCall advanced Echo.fooMethod payload
+    let pipelineCap ← pending.getPipelinedCap
+    let call0Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
+    let call1Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
+
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 1
+    let resolvedCap? := Capnp.readCapabilityFromTable response.capTable (Capnp.getRoot response.msg)
+    assertEqual resolvedCap?.isSome true
+
+    let call2Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 2))
+    let call3Pending ←
+      match resolvedCap? with
+      | some resolvedCap =>
+          runtime.startCall resolvedCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 3))
+      | none =>
+          throw (IO.userError "advanced set-pipeline parity response missing expected capability")
+
+    let call0Response ← call0Pending.await
+    let call1Response ← call1Pending.await
+    let call2Response ← call2Pending.await
+    let call3Response ← call3Pending.await
+
+    assertEqual (← readUInt64Payload call0Response) (UInt64.ofNat 0)
+    assertEqual (← readUInt64Payload call1Response) (UInt64.ofNat 1)
+    assertEqual (← readUInt64Payload call2Response) (UInt64.ofNat 2)
+    assertEqual (← readUInt64Payload call3Response) (UInt64.ofNat 3)
+    assertEqual (← getNextExpected) (UInt64.ofNat 4)
+
+    runtime.releaseCapTable response.capTable
+    runtime.releaseTarget pipelineCap
+    runtime.releaseTarget advanced
+    runtime.releaseTarget callOrder
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeParityCancelDisconnectSequencing : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -3620,6 +3672,49 @@ def testRuntimeAdvancedHandlerDeferredCancellationReleasesRequestCaps : IO Unit 
     runtime.shutdown
 
 @[test]
+def testRuntimeParityAdvancedDeferredReleaseWithoutAllowCancellation : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let entered ← IO.mkRef false
+  let completed ← IO.mkRef false
+  let sawCanceled ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  let rec waitFor (label : String) (attempts : Nat) (check : IO Bool) : IO Unit := do
+    runtime.pump
+    if (← check) then
+      pure ()
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError s!"{label}: timeout")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 10)
+          waitFor label attempts check
+  try
+    let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in deferred no-cancellation parity target: {method.interfaceId}/{method.methodId}")
+      entered.set true
+      Capnp.Rpc.Advanced.defer do
+        IO.sleep (UInt32.ofNat 30)
+        if (← IO.checkCanceled) then
+          sawCanceled.set true
+        completed.set true
+        pure (Capnp.Rpc.Advanced.respond req))
+
+    let pending ← runtime.startCall deferred Echo.fooMethod payload
+    waitFor "deferred no-cancellation handler entry" 500 entered.get
+    pending.release
+    waitFor "deferred no-cancellation completion" 500 completed.get
+
+    assertEqual (← sawCanceled.get) false
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+
+    runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAdvancedHandlerDeferredCancellationDoesNotCarryAcrossCalls : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let sawCanceled ← IO.mkRef false
@@ -4188,6 +4283,86 @@ def testRuntimeMultiVatBasicThreePartyHandoff : IO Unit := do
     assertEqual response.capTable.caps.size 0
     assertEqual (← bobCallCount.get) 1
     assertEqual (← runtime.multiVatHasConnection carol bob) true
+
+    runtime.releaseTarget bobCap
+    runtime.releaseTarget carolCap
+    alice.release
+    bob.release
+    carol.release
+    match (← heldCap.get) with
+    | some cap => runtime.releaseTarget cap
+    | none => pure ()
+    runtime.releaseTarget bobBootstrap
+    runtime.releaseTarget carolBootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatHandoffOrderingAndMissingHeldCapError : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  let heldCap ← IO.mkRef (none : Option Capnp.Rpc.Client)
+  try
+    let (bobBootstrap, getNextExpected) ← registerEchoFooCallOrderTarget runtime
+    let carolBootstrap ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        let cap? := Capnp.readCapabilityFromTable req.capTable (Capnp.getRoot req.msg)
+        match cap? with
+        | some cap =>
+            let retained ← runtime.retainTarget cap
+            match (← heldCap.get) with
+            | some previous => runtime.releaseTarget previous
+            | none => pure ()
+            heldCap.set (some retained)
+        | none =>
+            match (← heldCap.get) with
+            | some previous => runtime.releaseTarget previous
+            | none => pure ()
+            heldCap.set none
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+      else if method.interfaceId == Echo.interfaceId && method.methodId == Echo.barMethodId then
+        match (← heldCap.get) with
+        | some target =>
+            pure (Capnp.Rpc.Advanced.asyncForward target Echo.fooMethod req)
+        | none =>
+            throw (IO.userError "Carol has no held capability")
+      else
+        pure (Capnp.Rpc.Advanced.respond req))
+
+    let alice ← runtime.newMultiVatClient "alice-ordering"
+    let bob ← runtime.newMultiVatServer "bob-ordering" bobBootstrap
+    let carol ← runtime.newMultiVatServer "carol-ordering" carolBootstrap
+
+    let bobCap ← alice.bootstrap { host := "bob-ordering", unique := false }
+    let carolCap ← alice.bootstrap { host := "carol-ordering", unique := false }
+    assertEqual (← runtime.multiVatHasConnection carol bob) false
+
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM carolCap (mkCapabilityPayload bobCap)
+
+    let call0Pending ← runtime.startCall carolCap Echo.barMethod (mkUInt64Payload (UInt64.ofNat 0))
+    let call1Pending ← runtime.startCall carolCap Echo.barMethod (mkUInt64Payload (UInt64.ofNat 1))
+    let call2Pending ← runtime.startCall carolCap Echo.barMethod (mkUInt64Payload (UInt64.ofNat 2))
+
+    let call0Response ← call0Pending.await
+    let call1Response ← call1Pending.await
+    let call2Response ← call2Pending.await
+
+    assertEqual (← readUInt64Payload call0Response) (UInt64.ofNat 0)
+    assertEqual (← readUInt64Payload call1Response) (UInt64.ofNat 1)
+    assertEqual (← readUInt64Payload call2Response) (UInt64.ofNat 2)
+    assertEqual (← getNextExpected) (UInt64.ofNat 3)
+    assertEqual (← runtime.multiVatHasConnection carol bob) true
+
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM carolCap mkNullPayload
+    let missingHeldOutcome ← runtime.callResult carolCap Echo.barMethod (mkUInt64Payload (UInt64.ofNat 3))
+    match missingHeldOutcome with
+    | .ok _ =>
+        throw (IO.userError "expected missing held capability call to fail")
+    | .error ex =>
+        assertEqual ex.type .failed
+        assertTrue (!ex.description.isEmpty)
+          "missing held capability failure should include a description"
 
     runtime.releaseTarget bobCap
     runtime.releaseTarget carolCap
