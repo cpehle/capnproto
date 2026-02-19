@@ -156,6 +156,14 @@ std::vector<uint8_t> encodeHeaderPairs(
   return out;
 }
 
+const std::vector<uint8_t>& encodedEmptyHeaderPairs() {
+  static const std::vector<uint8_t> encoded = []() {
+    const std::vector<std::pair<std::string, std::string>> emptyHeaders;
+    return encodeHeaderPairs(emptyHeaders);
+  }();
+  return encoded;
+}
+
 constexpr uint32_t defaultWebSocketReceiveMaxBytes() {
   return kj::WebSocket::SUGGESTED_MAX_MESSAGE_SIZE > std::numeric_limits<uint32_t>::max()
              ? std::numeric_limits<uint32_t>::max()
@@ -364,6 +372,19 @@ struct WebSocketMessageCompletion {
   std::vector<uint8_t> bytes;
   std::string error;
 };
+
+lean_obj_res mkIoWebSocketMessageResult(const WebSocketMessageCompletion& completion) {
+  auto pairInner = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(pairInner, 0, lean_mk_string(completion.text.c_str()));
+  lean_ctor_set(pairInner, 1, mkByteArrayCopy(completion.bytes.data(), completion.bytes.size()));
+  auto pairMid = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(pairMid, 0, lean_box_uint32(completion.closeCode));
+  lean_ctor_set(pairMid, 1, pairInner);
+  auto pairOuter = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(pairOuter, 0, lean_box_uint32(completion.tag));
+  lean_ctor_set(pairOuter, 1, pairMid);
+  return lean_io_result_mk_ok(pairOuter);
+}
 
 void completeUnitSuccess(const std::shared_ptr<UnitCompletion>& completion) {
   {
@@ -9235,7 +9256,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request(
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}),
+        encodedEmptyHeaderPairs(),
         copyByteArrayToKjArray(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -9269,7 +9290,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}),
+        encodedEmptyHeaderPairs(),
         copyByteArrayToKjArray(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -9304,7 +9325,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_sta
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}),
+        encodedEmptyHeaderPairs(),
         copyByteArrayToKjArray(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -9335,7 +9356,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_response_limit(
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}),
+        encodedEmptyHeaderPairs(),
         copyByteArrayToKjArray(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
@@ -10686,7 +10707,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_connec
   try {
     auto completion = runtime->enqueueWebSocketConnect(
         std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}));
+        encodedEmptyHeaderPairs());
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10714,7 +10735,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_connec
   try {
     auto completion = runtime->enqueueWebSocketConnectStart(
         std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        encodeHeaderPairs(std::vector<std::pair<std::string, std::string>>{}));
+        encodedEmptyHeaderPairs());
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -11147,17 +11168,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_messag
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      auto pairInner = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
-      lean_ctor_set(pairInner, 1,
-                    mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
-      auto pairMid = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
-      lean_ctor_set(pairMid, 1, pairInner);
-      auto pairOuter = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
-      lean_ctor_set(pairOuter, 1, pairMid);
-      return lean_io_result_mk_ok(pairOuter);
+      return mkIoWebSocketMessageResult(*completion);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -11242,17 +11253,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      auto pairInner = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
-      lean_ctor_set(pairInner, 1,
-                    mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
-      auto pairMid = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
-      lean_ctor_set(pairMid, 1, pairInner);
-      auto pairOuter = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
-      lean_ctor_set(pairOuter, 1, pairMid);
-      return lean_io_result_mk_ok(pairOuter);
+      return mkIoWebSocketMessageResult(*completion);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -11278,17 +11279,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      auto pairInner = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
-      lean_ctor_set(pairInner, 1,
-                    mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
-      auto pairMid = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
-      lean_ctor_set(pairMid, 1, pairInner);
-      auto pairOuter = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
-      lean_ctor_set(pairOuter, 1, pairMid);
-      return lean_io_result_mk_ok(pairOuter);
+      return mkIoWebSocketMessageResult(*completion);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
