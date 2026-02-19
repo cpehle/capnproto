@@ -30,54 +30,53 @@ classes.
 -/
 private def parityCriticalTests : Array Lean.Name := #[
   -- Core release/cancel semantics.
-  `Test.Rpc.testRpcReleaseMessageRoundtrip,
-  `Test.Rpc.testRpcReturnCanceled,
-  `Test.RpcClient.testRuntimePendingCallRelease,
-  `Test.RpcClient.testRuntimeParityAdvancedDeferredReleaseWithoutAllowCancellation,
+  `testRpcReleaseMessageRoundtrip,
+  `testRpcReturnCanceled,
+  `testRuntimePendingCallRelease,
+  `testRuntimeParityAdvancedDeferredReleaseWithoutAllowCancellation,
 
   -- Ordering-sensitive resolve/disembargo/tail-call behavior.
-  `Test.RpcClient.testRuntimeParityResolvePipelineOrdering,
-  `Test.RpcClient.testRuntimeParityDisembargoNullPipelineDoesNotDisconnect,
-  `Test.RpcClient.testRuntimeParityTailCallPipelineOrdering,
-  `Test.RpcClient.testRuntimeParityAdvancedDeferredSetPipelineOrdering,
-  `Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering,
+  `testRuntimeParityResolvePipelineOrdering,
+  `testRuntimeParityDisembargoNullPipelineDoesNotDisconnect,
+  `testRuntimeParityTailCallPipelineOrdering,
+  `testRuntimeParityAdvancedDeferredSetPipelineOrdering,
+  `testRuntimeTwoHopPipelinedResolveOrdering,
 
   -- Lifecycle and disconnect visibility.
-  `Test.RpcClient.testRuntimeAsyncClientLifecyclePrimitives,
-  `Test.RpcClient.testRuntimeClientOnDisconnectAfterServerRelease,
-  `Test.RpcClient.testRuntimeDisconnectVisibilityViaCallResult,
-  `Test.RpcClient.testInteropLeanClientObservesCppDisconnectAfterOneShot,
+  `testRuntimeAsyncClientLifecyclePrimitives,
+  `testRuntimeClientOnDisconnectAfterServerRelease,
+  `testRuntimeDisconnectVisibilityViaCallResult,
+  `testInteropLeanClientObservesCppDisconnectAfterOneShot,
 
   -- Failure propagation and cancellation sequencing.
-  `Test.RpcClient.testRuntimeParityCancelDisconnectSequencing,
-  `Test.RpcClient.testInteropLeanClientCancelsPendingCallToCppDelayedServer,
-  `Test.RpcClient.testInteropLeanPendingCallOutcomeCapturesCppException,
-  `Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail,
+  `testRuntimeParityCancelDisconnectSequencing,
+  `testInteropLeanClientCancelsPendingCallToCppDelayedServer,
+  `testInteropLeanPendingCallOutcomeCapturesCppException,
+  `testInteropLeanClientReceivesCppExceptionDetail,
 
   -- Flow control and trace observability.
-  `Test.RpcClient.testRuntimeClientQueueMetrics,
-  `Test.RpcClient.testRuntimeClientQueueMetricsPreAcceptBacklogDrains,
-  `Test.RpcClient.testRuntimeClientSetFlowLimit,
-  `Test.RpcClient.testRuntimeTraceEncoderToggle,
-  `Test.RpcClient.testRuntimeSetTraceEncoderOnExistingConnection,
-  `Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility,
+  `testRuntimeClientQueueMetrics,
+  `testRuntimeClientSetFlowLimit,
+  `testRuntimeTraceEncoderToggle,
+  `testRuntimeSetTraceEncoderOnExistingConnection,
+  `testRuntimeTraceEncoderCallResultVisibility,
 
   -- Streaming and FD transfer behavior.
-  `Test.RpcClient.testRuntimeStreamingCall,
-  `Test.RpcClient.testRuntimeRegisterStreamingHandlerTarget,
-  `Test.RpcClient.testRuntimeFdPassingOverNetwork,
-  `Test.RpcClient.testRuntimeFdTargetLocalGetFd,
+  `testRuntimeStreamingCall,
+  `testRuntimeRegisterStreamingHandlerTarget,
+  `testRuntimeFdPassingOverNetwork,
+  `testRuntimeFdTargetLocalGetFd,
 
   -- RPC/KjAsync bridge-critical checks.
-  `Test.KjAsync.testKjAsyncPromiseOpsOnRpcRuntimeHandle,
-  `Test.KjAsync.testKjAsyncTaskSetOpsOnRpcRuntimeHandle,
-  `Test.KjAsync.testKjAsyncPipeFdOpsOnRpcRuntimeHandle,
-  `Test.KjAsync.testRpcRuntimeMRunKjAsyncBridge,
-  `Test.KjAsync.testRpcRuntimeRunKjAsyncBridgeHelpers,
-  `Test.KjAsync.testRpcRuntimeMWithKjAsyncRuntimeHelpers,
-  `Test.RpcClient.testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime,
-  `Test.RpcClient.testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread,
-  `Test.RpcClient.testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers
+  `testKjAsyncPromiseOpsOnRpcRuntimeHandle,
+  `testKjAsyncTaskSetOpsOnRpcRuntimeHandle,
+  `testKjAsyncPipeFdOpsOnRpcRuntimeHandle,
+  `testRpcRuntimeMRunKjAsyncBridge,
+  `testRpcRuntimeRunKjAsyncBridgeHelpers,
+  `testRpcRuntimeMWithKjAsyncRuntimeHelpers,
+  `testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime,
+  `testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread,
+  `testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers
 ]
 
 /-- Resolve deterministic parity-critical test declarations from discovered tests. -/
