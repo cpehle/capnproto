@@ -368,9 +368,10 @@ def testRpcAdvancedDeferTaskWithCancelHelper : IO Unit := do
   let cancelTask : Task (Except IO.Error Capnp.Rpc.AdvancedHandlerResult) :=
     Task.pure (.ok (Capnp.Rpc.Advanced.throwRemote "cancel-task-sentinel"))
   let reply := Capnp.Rpc.Advanced.deferTaskWithCancel waitTask cancelTask
-    { allowCancellation := true }
+    { releaseParams := true }
   match reply with
   | .control opts next => do
+      assertEqual opts.releaseParams true
       assertEqual opts.allowCancellation true
       match next with
       | .deferredWithCancel deferredTask deferredCancelTask => do
@@ -400,18 +401,23 @@ def testRpcAdvancedDeferPromiseWithCancelHelper : IO Unit := do
       (Task.pure (.ok (Capnp.Rpc.Advanced.throwRemote "cancel-promise-sentinel")))
   let reply := Capnp.Rpc.Advanced.deferPromiseWithCancel promise cancelPromise
   match reply with
-  | .deferredWithCancel deferredTask deferredCancelTask => do
-      match (← IO.wait deferredTask) with
-      | .ok (.respond payload) =>
-          assertEqual payload.capTable.caps.size 0
+  | .control opts next => do
+      assertEqual opts.allowCancellation true
+      match next with
+      | .deferredWithCancel deferredTask deferredCancelTask => do
+          match (← IO.wait deferredTask) with
+          | .ok (.respond payload) =>
+              assertEqual payload.capTable.caps.size 0
+          | _ =>
+              throw (IO.userError "deferPromiseWithCancel did not preserve deferred wait promise")
+          match (← IO.wait deferredCancelTask) with
+          | .ok (.throwRemote message detail) => do
+              assertEqual message "cancel-promise-sentinel"
+              assertEqual detail.size 0
+          | _ =>
+              throw (IO.userError "deferPromiseWithCancel did not preserve cancel promise")
       | _ =>
-          throw (IO.userError "deferPromiseWithCancel did not preserve deferred wait promise")
-      match (← IO.wait deferredCancelTask) with
-      | .ok (.throwRemote message detail) => do
-          assertEqual message "cancel-promise-sentinel"
-          assertEqual detail.size 0
-      | _ =>
-          throw (IO.userError "deferPromiseWithCancel did not preserve cancel promise")
+          throw (IO.userError "deferPromiseWithCancel control wrapper did not contain deferredWithCancel")
   | _ =>
       throw (IO.userError "deferPromiseWithCancel did not emit deferredWithCancel reply")
 
@@ -474,6 +480,28 @@ def testRpcAdvancedForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
       assertEqual options.callHints.noPromisePipelining false
   | _ =>
       throw (IO.userError "forwardToCallerOnlyPromisePipeline did not emit forwardCall result")
+
+@[test]
+def testRpcAdvancedTailCallWithControlHelper : IO Unit := do
+  let target : Capnp.Rpc.Client := UInt32.ofNat 7
+  let method : Capnp.Rpc.Method := { interfaceId := UInt64.ofNat 42, methodId := UInt16.ofNat 3 }
+  let result := Capnp.Rpc.Advanced.tailCall target method
+    (opts := { releaseParams := true, allowCancellation := true })
+  match result with
+  | .control opts next => do
+      assertEqual opts.releaseParams true
+      assertEqual opts.allowCancellation true
+      assertEqual opts.isStreaming false
+      match next with
+      | .tailCall nextTarget nextMethod payload => do
+          assertEqual nextTarget target
+          assertEqual nextMethod.interfaceId method.interfaceId
+          assertEqual nextMethod.methodId method.methodId
+          assertEqual payload.capTable.caps.size 0
+      | _ =>
+          throw (IO.userError "tailCall with opts did not preserve tailCall result")
+  | _ =>
+      throw (IO.userError "tailCall with opts did not emit control wrapper")
 
 private def testRpcAsyncHelperMethod : Capnp.Rpc.Method :=
   { interfaceId := UInt64.ofNat 1, methodId := UInt16.ofNat 0 }

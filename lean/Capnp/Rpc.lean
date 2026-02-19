@@ -224,7 +224,8 @@ inductive AdvancedHandlerReply where
     (task : Task (Except IO.Error AdvancedHandlerResult))
     (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
-  applyAdvancedHandlerReplyControl opts (.deferredWithCancel task cancelTask)
+  applyAdvancedHandlerReplyControl { opts with allowCancellation := true }
+    (.deferredWithCancel task cancelTask)
 
 @[inline] def AdvancedHandlerReply.deferPromise
     (promise : Capnp.Async.Promise AdvancedHandlerResult)
@@ -378,17 +379,10 @@ namespace Advanced
     (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
   .forwardCall target method payload AdvancedForwardOptions.toCallerOnlyPromisePipeline
 
-@[inline] def forwardOnlyPromisePipeline (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  forwardToCallerOnlyPromisePipeline target method payload
-
-@[inline] def tailForward (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  .tailCall target method payload
-
 @[inline] def tailCall (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  .tailCall target method payload
+    (payload : Payload := Capnp.emptyRpcEnvelope)
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerResult :=
+  AdvancedHandlerResult.withControl opts (.tailCall target method payload)
 
 @[inline] def throwRemote (message : String)
     (detail : ByteArray := ByteArray.empty) : AdvancedHandlerResult :=

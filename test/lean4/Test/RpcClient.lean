@@ -3315,7 +3315,7 @@ def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit 
     runtime.shutdown
 
 @[test]
-def testRuntimeAdvancedHandlerForwardOnlyPromisePipelineHelper : IO Unit := do
+def testRuntimeAdvancedHandlerForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
   let runtime ← Capnp.Rpc.Runtime.init
@@ -3324,7 +3324,7 @@ def testRuntimeAdvancedHandlerForwardOnlyPromisePipelineHelper : IO Unit := do
       seenMethod.set method
       pure req)
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
-      pure (Capnp.Rpc.Advanced.forwardOnlyPromisePipeline sink method req))
+      pure (Capnp.Rpc.Advanced.forwardToCallerOnlyPromisePipeline sink method req))
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM forwarder payload
     assertEqual response.capTable.caps.size 0
@@ -3559,7 +3559,7 @@ def testRuntimeAdvancedHandlerUnknownTailTargetCleansRequestCaps : IO Unit := do
     let sink ← runtime.registerEchoTarget
     let unknownTarget : Capnp.Rpc.Client := UInt32.ofNat 424243
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
-      pure (Capnp.Rpc.Advanced.tailForward unknownTarget method req))
+      pure (Capnp.Rpc.Advanced.tailCall unknownTarget method req))
     let loopback ← runtime.registerLoopbackTarget forwarder
     let baselineTargets := (← runtime.targetCount)
 
