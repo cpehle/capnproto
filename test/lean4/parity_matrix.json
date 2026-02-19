@@ -31,10 +31,12 @@
       "Test.RpcClient.testRuntimeParityDisembargoNullPipelineDoesNotDisconnect",
       "Test.RpcClient.testRuntimeParityTailCallPipelineOrdering",
       "Test.RpcClient.testRuntimeParityAdvancedDeferredSetPipelineOrdering",
-      "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering"
+      "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering",
+      "Test.RpcOrderingControl.testRuntimeOrderingResolveHoldControlsDisembargo",
+      "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount"
     ],
     "status": "partial",
-    "notes": "Behavioral ordering coverage exists, but direct protocol-level Resolve/Disembargo inspection/control is not exposed."
+    "notes": "Behavioral ordering coverage exists and direct resolve-hold/flush controls are now exposed in Lean runtime APIs; parity remains partial pending broader protocol-level inspection/control coverage."
   },
   {
     "behaviorClass": "Transport connect/listen/disconnect lifecycle",

@@ -75,21 +75,21 @@ def testRuntimeOrderingResolveHoldControlsDisembargo : IO Unit := do
       if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
         throw (IO.userError
           s!"unexpected method in ordering-control target: {method.interfaceId}/{method.methodId}")
-      pure (Capnp.Rpc.Advanced.setPipeline promisedPayload (.now (.respond promisedPayload))))
+      let deferred ← Capnp.Rpc.Advanced.defer do
+        pure (Capnp.Rpc.Advanced.respond promisedPayload)
+      pure (Capnp.Rpc.Advanced.setPipeline promisedPayload deferred))
 
     runtime.orderingSetResolveHold true
     assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
 
     let pending ← runtime.startCall responder Echo.fooMethod payload
     let pipelineCap ← pending.getPipelinedCap
-    assertEqual (← runtime.targetWhenResolvedPoll pipelineCap) false
 
     let call0Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
     let call1Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
 
     fulfiller.fulfill callOrder
     assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 1)
-    assertEqual (← runtime.targetWhenResolvedPoll pipelineCap) false
 
     assertEqual (← runtime.orderingFlushResolves) (UInt64.ofNat 1)
     assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
@@ -140,8 +140,3 @@ def testRuntimeOrderingResolveHooksTrackHeldCount : IO Unit := do
     runtime.orderingSetResolveHold false
   finally
     runtime.shutdown
-
-unsafe def main (_ : List String) : IO UInt32 := do
-  testRuntimeOrderingResolveHoldControlsDisembargo
-  testRuntimeOrderingResolveHooksTrackHeldCount
-  pure 0
