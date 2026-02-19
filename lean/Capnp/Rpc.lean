@@ -182,15 +182,25 @@ inductive AdvancedHandlerReply where
     (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   .now result
 
+@[inline] def AdvancedHandlerReply.deferTask
+    (task : Task (Except IO.Error AdvancedHandlerResult))
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  let deferred : AdvancedHandlerReply := .deferred task
+  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
+    .control opts deferred
+  else
+    deferred
+
+@[inline] def AdvancedHandlerReply.deferPromise
+    (promise : Capnp.Async.Promise AdvancedHandlerResult)
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferTask promise.toTask opts
+
 @[inline] def AdvancedHandlerReply.defer
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
     IO AdvancedHandlerReply := do
   let task ← IO.asTask next
-  let deferred : AdvancedHandlerReply := .deferred task
-  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
-    return .control opts deferred
-  else
-    return deferred
+  return AdvancedHandlerReply.deferTask task opts
 
 @[inline] def AdvancedHandlerResult.withControl
     (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
@@ -356,6 +366,16 @@ namespace Advanced
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
     IO AdvancedHandlerReply :=
   AdvancedHandlerReply.defer next opts
+
+@[inline] def deferTask
+    (task : Task (Except IO.Error AdvancedHandlerResult))
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferTask task opts
+
+@[inline] def deferPromise
+    (promise : Capnp.Async.Promise AdvancedHandlerResult)
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferPromise promise opts
 
 @[inline] def streamingNow (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   AdvancedHandlerReply.streaming (.now result)
@@ -860,14 +880,14 @@ end CapTable
     let request ← decodePayloadChecked requestBytes requestCaps
     handler target { interfaceId := interfaceId, methodId := methodId } request
 
-@[inline] private partial def toRawAdvancedHandlerResult
-    (result : AdvancedHandlerResult) : IO RawAdvancedHandlerResult := do
+@[inline] private def toRawAdvancedHandlerResult
+    (result : AdvancedHandlerResult) : RawAdvancedHandlerResult :=
   match result with
   | .respond response =>
-      pure (.returnPayload response.toBytes (CapTable.toBytes response.capTable))
+      .returnPayload response.toBytes (CapTable.toBytes response.capTable)
   | .asyncCall nextTarget nextMethod nextPayload =>
-      pure (.asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
-        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+      .asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
+        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
   | .forwardCall nextTarget nextMethod nextPayload options =>
       let base : RawAdvancedHandlerResult := .asyncCall
         nextTarget nextMethod.interfaceId nextMethod.methodId
@@ -878,50 +898,43 @@ end CapTable
         match options.sendResultsTo with
         | .yourself => withHints
         | .caller => .sendResultsToCaller withHints
-      pure withSend
+      withSend
   | .tailCall nextTarget nextMethod nextPayload =>
-      pure (.tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
-        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable))
+      .tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
+        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
   | .throwRemote message detail =>
-      pure (.throwRemote message detail)
+      .throwRemote message detail
   | .throwRemoteWithType type message detail =>
-      pure (.exceptionType type.toUInt8 (.throwRemote message detail))
+      .exceptionType type.toUInt8 (.throwRemote message detail)
   | .control opts next =>
-      pure (.control opts.releaseParams opts.allowCancellation opts.isStreaming
-        (← toRawAdvancedHandlerResult next))
+      .control opts.releaseParams opts.allowCancellation opts.isStreaming
+        (toRawAdvancedHandlerResult next)
 
-@[inline] private partial def toRawAdvancedHandlerReply
-    (reply : AdvancedHandlerReply) : IO RawAdvancedHandlerResult := do
+@[inline] private def mapDeferredAdvancedHandlerTask
+    (task : Task (Except IO.Error AdvancedHandlerResult)) :
+    Task (Except IO.Error RawAdvancedHandlerResult) :=
+  Task.map (fun result => result.map toRawAdvancedHandlerResult) task
+
+@[inline] private def toRawAdvancedHandlerReply
+    (reply : AdvancedHandlerReply) : RawAdvancedHandlerResult :=
   match reply with
   | .now result =>
       toRawAdvancedHandlerResult result
-  | .deferred task => do
-      let rawTask ← IO.asTask do
-        try
-          let result ← IO.wait task
-          match result with
-          | .ok next =>
-              toRawAdvancedHandlerResult next
-          | .error err =>
-              throw err
-        catch err =>
-          if (← IO.checkCanceled) then
-            IO.cancel task
-          throw err
-      return .awaitTask rawTask task
+  | .deferred task =>
+      .awaitTask (mapDeferredAdvancedHandlerTask task) task
   | .control opts next =>
-      return .control opts.releaseParams opts.allowCancellation opts.isStreaming
-        (← toRawAdvancedHandlerReply next)
+      .control opts.releaseParams opts.allowCancellation opts.isStreaming
+        (toRawAdvancedHandlerReply next)
   | .pipeline pipeline next =>
-      return .setPipeline pipeline.toBytes (CapTable.toBytes pipeline.capTable)
-        (← toRawAdvancedHandlerReply next)
+      .setPipeline pipeline.toBytes (CapTable.toBytes pipeline.capTable)
+        (toRawAdvancedHandlerReply next)
 
 @[inline] private def toRawAdvancedHandlerCallAsync
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : RawAdvancedHandlerCall :=
   fun target interfaceId methodId requestBytes requestCaps => do
     let request ← decodePayloadChecked requestBytes requestCaps
     let method : Method := { interfaceId := interfaceId, methodId := methodId }
-    toRawAdvancedHandlerReply (← handler target method request)
+    pure (toRawAdvancedHandlerReply (← handler target method request))
 
 @[inline] private def toRawAdvancedHandlerCall
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RawAdvancedHandlerCall :=

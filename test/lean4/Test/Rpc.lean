@@ -308,3 +308,42 @@ def testRpcReturnResultsSentElsewhere : IO Unit := do
     | Return.Which.resultsSentElsewhere _ => pure ()
     | _ => assertEqual true false
   | _ => assertEqual true false
+
+@[test]
+def testRpcAdvancedDeferTaskHelper : IO Unit := do
+  let task : Task (Except IO.Error Capnp.Rpc.AdvancedHandlerResult) :=
+    Task.pure (.ok (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))
+  let reply :=
+    Capnp.Rpc.Advanced.deferTask task
+      { releaseParams := true, allowCancellation := true }
+  match reply with
+  | .control opts next => do
+      assertEqual opts.releaseParams true
+      assertEqual opts.allowCancellation true
+      match next with
+      | .deferred deferredTask =>
+          match (← IO.wait deferredTask) with
+          | .ok (.respond payload) =>
+              assertEqual payload.capTable.caps.size 0
+          | _ =>
+              throw (IO.userError "deferTask did not produce expected deferred respond payload")
+      | _ =>
+          throw (IO.userError "deferTask control wrapper did not contain deferred task")
+  | _ =>
+      throw (IO.userError "deferTask with control options did not emit control wrapper")
+
+@[test]
+def testRpcAdvancedDeferPromiseHelper : IO Unit := do
+  let promise : Capnp.Async.Promise Capnp.Rpc.AdvancedHandlerResult :=
+    Capnp.Async.Promise.ofTask
+      (Task.pure (.ok (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope)))
+  let reply := Capnp.Rpc.Advanced.deferPromise promise
+  match reply with
+  | .deferred deferredTask =>
+      match (← IO.wait deferredTask) with
+      | .ok (.respond payload) =>
+          assertEqual payload.capTable.caps.size 0
+      | _ =>
+          throw (IO.userError "deferPromise did not produce expected deferred respond payload")
+  | _ =>
+      throw (IO.userError "deferPromise did not emit deferred reply")

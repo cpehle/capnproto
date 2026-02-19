@@ -26,6 +26,23 @@ The runtime ownership remains with `Capnp.Rpc.Runtime`.
     (action : Capnp.KjAsync.RuntimeM α) : IO α :=
   Capnp.KjAsync.RuntimeM.run runtime.asKjAsyncRuntime action
 
+/--
+Start a KJ timer on this RPC runtime and expose it as a Lean task.
+This keeps orchestration in KJ while still fitting Lean-side async APIs.
+-/
+@[inline] def sleepNanosAsTask (runtime : Capnp.Rpc.Runtime)
+    (delayNanos : UInt64) : IO (Task (Except IO.Error Unit)) :=
+  runtime.runKjAsync do
+    let promise ← Capnp.KjAsync.RuntimeM.sleepNanosStart delayNanos
+    promise.awaitAsTask
+
+/-- Millisecond variant of `sleepNanosAsTask`. -/
+@[inline] def sleepMillisAsTask (runtime : Capnp.Rpc.Runtime)
+    (delayMillis : UInt32) : IO (Task (Except IO.Error Unit)) :=
+  runtime.runKjAsync do
+    let promise ← Capnp.KjAsync.RuntimeM.sleepMillisStart delayMillis
+    promise.awaitAsTask
+
 end Runtime
 
 namespace RuntimeM
@@ -48,6 +65,18 @@ The runtime ownership remains with the outer `Capnp.Rpc.Runtime`.
 -/
 @[inline] def runKjAsync (action : Capnp.KjAsync.RuntimeM α) : Capnp.Rpc.RuntimeM α :=
   withKjAsyncRuntime fun runtime => Capnp.KjAsync.RuntimeM.run runtime action
+
+/-- RuntimeM variant of `Capnp.Rpc.Runtime.sleepNanosAsTask`. -/
+@[inline] def sleepNanosAsTask
+    (delayNanos : UInt64) : Capnp.Rpc.RuntimeM (Task (Except IO.Error Unit)) := do
+  let runtime ← Capnp.Rpc.RuntimeM.runtime
+  runtime.sleepNanosAsTask delayNanos
+
+/-- RuntimeM variant of `Capnp.Rpc.Runtime.sleepMillisAsTask`. -/
+@[inline] def sleepMillisAsTask
+    (delayMillis : UInt32) : Capnp.Rpc.RuntimeM (Task (Except IO.Error Unit)) := do
+  let runtime ← Capnp.Rpc.RuntimeM.runtime
+  runtime.sleepMillisAsTask delayMillis
 
 end RuntimeM
 end Rpc

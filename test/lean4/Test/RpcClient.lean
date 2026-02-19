@@ -1,5 +1,6 @@
 import LeanTest
 import Capnp.Rpc
+import Capnp.RpcKjAsync
 import Capnp.KjAsync
 import Capnp.Gen.test.lean4.fixtures.rpc_echo
 
@@ -1761,6 +1762,61 @@ def testInteropCppClientCallsLeanServerWithCapabilities : IO Unit := do
       pure ()
 
 @[test]
+def testInteropCppClientReceivesLeanServerCapability : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let sink ← runtime.registerEchoTarget
+    let bootstrap ← runtime.registerHandlerTarget (fun _ _ _ => do
+      pure (mkCapabilityPayload sink))
+    let baselineTargets ← runtime.targetCount
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let response ← Capnp.Rpc.Interop.cppCallWithAccept runtime server listener address Echo.fooMethod
+      payload
+
+    assertEqual response.capTable.caps.size 1
+    let returnedCap? := Capnp.readCapabilityFromTable response.capTable (Capnp.getRoot response.msg)
+    assertEqual returnedCap?.isSome true
+    match returnedCap? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap =>
+        assertEqual (returnedCap == (UInt32.ofNat 0)) false
+
+    runtime.releaseCapTable response.capTable
+    let rec waitForTargetCount (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let current ← runtime.targetCount
+      if current == baselineTargets then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError s!"response capability cleanup did not converge: {current} vs {baselineTargets}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForTargetCount attempts
+    waitForTargetCount 200
+
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+    runtime.releaseTarget sink
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testInteropLeanClientCallsCppServer : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -1882,9 +1938,12 @@ def testInteropLeanClientCancelsPendingCallToCppDelayedServer : IO Unit := do
     IO.sleep (UInt32.ofNat 20)
 
     let target ← connectRuntimeTargetWithRetry runtime address
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
     let pending ← runtime.startCall target Echo.fooMethod payload
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 1)
     IO.sleep (UInt32.ofNat 10)
     pending.release
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
 
     let doubleReleaseFailed ←
       try
@@ -1907,6 +1966,45 @@ def testInteropLeanClientCancelsPendingCallToCppDelayedServer : IO Unit := do
 
     runtime.releaseTarget target
 
+    match serveTask.get with
+    | .ok observed =>
+        assertEqual observed.capTable.caps.size 0
+    | .error err =>
+        throw err
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testInteropLeanPendingCallOutcomeCapturesCppException : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeThrowOnce address Echo.fooMethod true)
+    IO.sleep (UInt32.ofNat 20)
+
+    let target ← connectRuntimeTargetWithRetry runtime address
+    let pending ← runtime.startCall target Echo.fooMethod payload
+    let outcome ← pending.awaitOutcome
+    match outcome with
+    | .ok _ _ =>
+        throw (IO.userError "expected pending call to C++ one-shot throw server to fail")
+    | .error ex =>
+        assertEqual ex.type .failed
+        if !(ex.description.containsSubstr "remote exception: test exception") then
+          throw (IO.userError s!"missing remote exception text: {ex.description}")
+        assertEqual ex.detail "cpp-detail-1".toUTF8
+
+    runtime.releaseTarget target
     match serveTask.get with
     | .ok observed =>
         assertEqual observed.capTable.caps.size 0
@@ -3249,19 +3347,34 @@ def testRuntimeAdvancedHandlerDeferredCancellationDoesNotCarryAcrossCalls : IO U
 @[test]
 def testRuntimeAdvancedHandlerDeferredRespond : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
-  let seenRespond ← IO.mkRef false
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let deferred ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req => do
-      Capnp.Rpc.Advanced.defer do
+      let responseTask ← IO.asTask do
         IO.sleep (UInt32.ofNat 25)
-        seenRespond.set true
-        pure (Capnp.Rpc.Advanced.respond req))
+        pure (Capnp.Rpc.Advanced.respond req)
+      pure (Capnp.Rpc.Advanced.deferTask responseTask))
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM deferred payload
     assertEqual response.capTable.caps.size 0
-    assertEqual (← seenRespond.get) true
     runtime.releaseTarget deferred
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeKjAsyncSleepAsTaskHelpers : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sleepTask ← runtime.sleepMillisAsTask (UInt32.ofNat 5)
+    match (← IO.wait sleepTask) with
+    | .ok () => pure ()
+    | .error err => throw err
+
+    let sleepTaskM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.sleepNanosAsTask (UInt64.ofNat 1000000)
+    match (← IO.wait sleepTaskM) with
+    | .ok () => pure ()
+    | .error err => throw err
   finally
     runtime.shutdown
 
