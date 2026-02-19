@@ -614,6 +614,144 @@ def testKjAsyncRuntimeConnectWithTimeoutMillisSuccess : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncConnectionPromiseTimeoutThenCancelRelease : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket timeout edge test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let listener ← runtime.listen address
+      let pending ← listener.acceptStart
+      let startedAt ← IO.monoNanosNow
+      let accepted? ← pending.awaitWithTimeoutMillis? (UInt32.ofNat 40)
+      let finishedAt ← IO.monoNanosNow
+      let elapsed := finishedAt - startedAt
+
+      assertTrue (accepted?.isNone)
+        "ConnectionPromiseRef.awaitWithTimeoutMillis? should return none on timeout"
+      assertTrue (elapsed >= 20000000)
+        "connection promise timeout elapsed too quickly"
+      assertTrue (elapsed < 6000000000)
+        "connection promise timeout appears to hang"
+
+      let cancelErr ←
+        try
+          pending.cancel
+          pure ""
+        catch e =>
+          pure (toString e)
+      assertTrue (cancelErr.contains "unknown KJ connection promise id")
+        "timed-out connection promise should be cleaned up before cancel"
+
+      let releaseErr ←
+        try
+          pending.release
+          pure ""
+        catch e =>
+          pure (toString e)
+      assertTrue (releaseErr.contains "unknown KJ connection promise id")
+        "timed-out connection promise should be cleaned up before release"
+
+      let probe ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      probe.await
+      listener.release
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncRuntimeConnectWithRetryExhaustedNoHang : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket retry edge test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let startedAt ← IO.monoNanosNow
+      let errMsg ←
+        try
+          let unexpected ←
+            runtime.connectWithRetry address (UInt32.ofNat 3) (UInt32.ofNat 25)
+          unexpected.release
+          pure ""
+        catch e =>
+          pure (toString e)
+      let finishedAt ← IO.monoNanosNow
+      let elapsed := finishedAt - startedAt
+
+      assertTrue (!errMsg.isEmpty)
+        "connectWithRetry should fail after attempts are exhausted"
+      assertTrue (elapsed >= 20000000)
+        "connectWithRetry exhaustion elapsed too quickly"
+      assertTrue (elapsed < 6000000000)
+        "connectWithRetry exhaustion appears to hang"
+
+      let probe ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      probe.await
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
+def testKjAsyncRuntimeConnectWithRetryAsPromiseExhaustedNoHang : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ unix socket retry edge test skipped on Windows"
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let connectPromise ←
+        runtime.connectWithRetryAsPromise address (UInt32.ofNat 3) (UInt32.ofNat 25)
+      let startedAt ← IO.monoNanosNow
+      let errMsg ←
+        try
+          let unexpected ← connectPromise.await
+          unexpected.release
+          pure ""
+        catch e =>
+          pure (toString e)
+      let finishedAt ← IO.monoNanosNow
+      let elapsed := finishedAt - startedAt
+
+      assertTrue (!errMsg.isEmpty)
+        "connectWithRetryAsPromise should fail after attempts are exhausted"
+      assertTrue (elapsed >= 20000000)
+        "connectWithRetryAsPromise exhaustion elapsed too quickly"
+      assertTrue (elapsed < 6000000000)
+        "connectWithRetryAsPromise exhaustion appears to hang"
+
+      let probe ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      probe.await
+    finally
+      runtime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncRuntimeConnectWithRetryListenerAppears : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket retry helper test skipped on Windows"

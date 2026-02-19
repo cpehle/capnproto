@@ -1018,6 +1018,41 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
+private def connectionPromiseCancelAndReleaseBestEffort (runtime : Runtime)
+    (promiseHandle : UInt32) : IO Unit := do
+  try
+    ffiRuntimeConnectionPromiseCancelImpl runtime.handle promiseHandle
+  catch _ =>
+    pure ()
+  try
+    ffiRuntimeConnectionPromiseReleaseImpl runtime.handle promiseHandle
+  catch _ =>
+    pure ()
+
+private def connectionPromiseAwait (pending : ConnectionPromiseRef) : IO Connection := do
+  try
+    return {
+      runtime := pending.runtime
+      handle := (← ffiRuntimeConnectionPromiseAwaitImpl pending.runtime.handle pending.handle)
+    }
+  catch err =>
+    connectionPromiseCancelAndReleaseBestEffort pending.runtime pending.handle
+    throw err
+
+private def connectionPromiseAwaitWithTimeoutNanos? (pending : ConnectionPromiseRef)
+    (timeoutNanos : UInt64) : IO (Option Connection) := do
+  try
+    let (hasValue, handle) ←
+      ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
+        pending.runtime.handle pending.handle timeoutNanos
+    if hasValue then
+      return some { runtime := pending.runtime, handle := handle }
+    else
+      return none
+  catch err =>
+    connectionPromiseCancelAndReleaseBestEffort pending.runtime pending.handle
+    throw err
+
 private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (remaining : UInt32) (retryDelayMs : UInt32) (portHint : UInt32)
     (lastErr? : Option IO.Error := none) : IO Connection := do
@@ -1028,11 +1063,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     | none =>
       throw (IO.userError "Runtime.connectWithRetry exhausted attempts")
   try
-    let pending ← runtime.connectStart address portHint
-    return {
-      runtime := runtime
-      handle := (← ffiRuntimeConnectionPromiseAwaitImpl runtime.handle pending.handle)
-    }
+    connectionPromiseAwait (← runtime.connectStart address portHint)
   catch err =>
     let nextRemaining := remaining - 1
     if nextRemaining > 0 && retryDelayMs > 0 then
@@ -1042,11 +1073,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def connectAsTask (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO (Task (Except IO.Error Connection)) := do
   let pending ← runtime.connectStart address portHint
-  IO.asTask do
-    return {
-      runtime := runtime
-      handle := (← ffiRuntimeConnectionPromiseAwaitImpl runtime.handle pending.handle)
-    }
+  IO.asTask (connectionPromiseAwait pending)
 
 @[inline] def connectAsPromise (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO (Capnp.Async.Promise Connection) := do
@@ -1056,12 +1083,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def connectWithTimeoutNanos? (runtime : Runtime) (address : String)
     (timeoutNanos : UInt64) (portHint : UInt32 := 0) : IO (Option Connection) := do
   let pending ← runtime.connectStart address portHint
-  let (hasValue, handle) ←
-    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl runtime.handle pending.handle timeoutNanos
-  if hasValue then
-    return some { runtime := runtime, handle := handle }
-  else
-    return none
+  connectionPromiseAwaitWithTimeoutNanos? pending timeoutNanos
 
 @[inline] def connectWithTimeoutMillis? (runtime : Runtime) (address : String)
     (timeoutMillis : UInt32) (portHint : UInt32 := 0) : IO (Option Connection) := do
@@ -1127,12 +1149,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (timeoutNanos : UInt64) : IO (Option Connection) := do
   ensureSameRuntime runtime listener.runtime "Listener"
   let pending ← runtime.listenerAcceptStart listener
-  let (hasValue, handle) ←
-    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl runtime.handle pending.handle timeoutNanos
-  if hasValue then
-    return some { runtime := runtime, handle := handle }
-  else
-    return none
+  connectionPromiseAwaitWithTimeoutNanos? pending timeoutNanos
 
 @[inline] def listenerAcceptWithTimeoutMillis? (runtime : Runtime) (listener : Listener)
     (timeoutMillis : UInt32) : IO (Option Connection) := do
@@ -2436,24 +2453,42 @@ end Connection
 
 namespace ConnectionPromiseRef
 
+private def cancelAndReleaseBestEffort (promise : ConnectionPromiseRef) : IO Unit := do
+  try
+    ffiRuntimeConnectionPromiseCancelImpl promise.runtime.handle promise.handle
+  catch _ =>
+    pure ()
+  try
+    ffiRuntimeConnectionPromiseReleaseImpl promise.runtime.handle promise.handle
+  catch _ =>
+    pure ()
+
 @[inline] def await (promise : ConnectionPromiseRef) : IO Connection := do
-  return {
-    runtime := promise.runtime
-    handle := (← ffiRuntimeConnectionPromiseAwaitImpl promise.runtime.handle promise.handle)
-  }
+  try
+    return {
+      runtime := promise.runtime
+      handle := (← ffiRuntimeConnectionPromiseAwaitImpl promise.runtime.handle promise.handle)
+    }
+  catch err =>
+    cancelAndReleaseBestEffort promise
+    throw err
 
 @[inline] def awaitWithTimeoutNanos? (promise : ConnectionPromiseRef)
     (timeoutNanos : UInt64) : IO (Option Connection) := do
-  let (hasValue, handle) ←
-    ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
-      promise.runtime.handle promise.handle timeoutNanos
-  if hasValue then
-    return some {
-      runtime := promise.runtime
-      handle := handle
-    }
-  else
-    return none
+  try
+    let (hasValue, handle) ←
+      ffiRuntimeConnectionPromiseAwaitWithTimeoutImpl
+        promise.runtime.handle promise.handle timeoutNanos
+    if hasValue then
+      return some {
+        runtime := promise.runtime
+        handle := handle
+      }
+    else
+      return none
+  catch err =>
+    cancelAndReleaseBestEffort promise
+    throw err
 
 @[inline] def awaitWithTimeoutMillis? (promise : ConnectionPromiseRef)
     (timeoutMillis : UInt32) : IO (Option Connection) :=
