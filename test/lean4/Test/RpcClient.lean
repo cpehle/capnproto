@@ -1175,6 +1175,77 @@ def testRuntimeClientQueueMetricsPreAcceptBacklogDrains : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeClientQueueMetricsPreAcceptCancellationDrains : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    let target ← client.bootstrap
+    let pending ← runtime.startCall target Echo.fooMethod payload
+
+    let rec waitForPending (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let pendingCount ← runtime.pendingCallCount
+      if pendingCount == (UInt64.ofNat 1) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"pre-accept cancellation pending call did not materialize: pending={pendingCount}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForPending attempts
+    waitForPending 200
+
+    pending.release
+
+    let rec waitForDrain (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let pendingCount ← runtime.pendingCallCount
+      let queueCount ← client.queueCount
+      let queueSize ← client.queueSize
+      if pendingCount == (UInt64.ofNat 0) &&
+          queueCount == (UInt64.ofNat 0) &&
+          queueSize == (UInt64.ofNat 0) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"pre-accept cancellation metrics did not drain: pending={pendingCount}, queueCount={queueCount}, queueSize={queueSize}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForDrain attempts
+    waitForDrain 200
+
+    server.accept listener
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target payload
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeClientSetFlowLimit : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -2460,6 +2531,125 @@ def testInteropLeanClientReceivesCppExceptionDetail : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeParityPromisedCapabilityRejectsWithoutDisconnect : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let heldCap ← IO.mkRef (none : Option Capnp.Rpc.Client)
+  let runtime ← Capnp.Rpc.Runtime.init
+  let waitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO (Option (Except IO.Error α)) := do
+    let timeoutTask ← runtime.sleepMillisAsTask timeoutMillis
+    let wrappedTask : Task (Except IO.Error (Option (Except IO.Error α))) := Task.map
+      (fun result => .ok (some result))
+      task
+    let wrappedTimeout : Task (Except IO.Error (Option (Except IO.Error α))) := Task.map
+      (fun result =>
+        match result with
+        | .ok _ => .ok none
+        | .error err => .error err)
+      timeoutTask
+    match (← IO.waitAny [wrappedTask, wrappedTimeout]) with
+    | .ok outcome =>
+        pure outcome
+    | .error err =>
+        throw (IO.userError s!"{label}: {err}")
+  let awaitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO α := do
+    match (← waitTaskWithin label task timeoutMillis) with
+    | some (.ok value) =>
+        pure value
+    | some (.error err) =>
+        throw (IO.userError s!"{label}: {err}")
+    | none =>
+        throw (IO.userError s!"{label}: timeout")
+  let assertTaskPendingWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 150) : IO Unit := do
+    match (← waitTaskWithin label task timeoutMillis) with
+    | none =>
+        pure ()
+    | some (.ok _) =>
+        throw (IO.userError s!"{label}: completed before promise rejection")
+    | some (.error err) =>
+        throw (IO.userError s!"{label}: failed before promise rejection: {err}")
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let relay ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        let cap? := Capnp.readCapabilityFromTable req.capTable (Capnp.getRoot req.msg)
+        match cap? with
+        | some cap =>
+            let retained ← runtime.retainTarget cap
+            match (← heldCap.get) with
+            | some previous => runtime.releaseTarget previous
+            | none => pure ()
+            heldCap.set (some retained)
+            pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+        | none =>
+            pure (Capnp.Rpc.Advanced.respond req)
+      else if method.interfaceId == Echo.interfaceId && method.methodId == Echo.barMethodId then
+        match (← heldCap.get) with
+        | some cap =>
+            pure (Capnp.Rpc.Advanced.asyncForward cap Echo.fooMethod req)
+        | none =>
+            pure (Capnp.Rpc.Advanced.throwRemote "promised-cap relay has no held capability")
+      else
+        pure (Capnp.Rpc.Advanced.respond req))
+
+    let server ← runtime.newServer relay
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let remoteTarget ← client.bootstrap
+
+    let (promiseCap, fulfiller) ← runtime.newPromiseCapability
+    let _ ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM remoteTarget (mkCapabilityPayload promiseCap)
+
+    let pending ← runtime.startCall remoteTarget Echo.barMethod payload
+    let pendingTask ← IO.asTask pending.awaitOutcome
+    assertTaskPendingWithin "promised capability pending call" pendingTask
+
+    fulfiller.reject .disconnected "promised capability rejected" "promised-disconnect-detail".toUTF8
+
+    let outcome ← awaitTaskWithin "promised capability awaitOutcome" pendingTask
+    match outcome with
+    | .ok _ _ =>
+        throw (IO.userError "expected promised capability call to fail after rejection")
+    | .error ex =>
+        assertEqual ex.type .disconnected
+        if !(ex.description.containsSubstr "promised capability rejected") then
+          throw (IO.userError s!"missing promised capability rejection text: {ex.description}")
+        assertEqual ex.detail "promised-disconnect-detail".toUTF8
+
+    let healthCheck ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM remoteTarget payload
+    assertEqual healthCheck.capTable.caps.size 0
+
+    runtime.releaseTarget remoteTarget
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget relay
+    match (← heldCap.get) with
+    | some cap =>
+        runtime.releaseTarget cap
+        heldCap.set none
+    | none =>
+        pure ()
+    fulfiller.release
+    runtime.releaseTarget promiseCap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testInteropCppClientPipeliningThroughLeanTailCallForwarder : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
@@ -3315,6 +3505,72 @@ def testRuntimeTraceEncoderCallResultVisibility : IO Unit := do
         assertEqual ex.type .overloaded
         assertEqual ex.remoteTrace ""
     assertEqual (← traceCalls.get) 2
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget throwing
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeTraceEncoderPreservesDetailAndType : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let traceCalls ← IO.mkRef (0 : Nat)
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let throwing ← runtime.registerAdvancedHandlerTarget (fun _ method _ => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        pure <| Capnp.Rpc.Advanced.throwRemoteWithType
+          Capnp.Rpc.RemoteExceptionType.disconnected
+          "trace detail visibility test exception"
+          "trace-detail-1".toUTF8
+      else
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload))
+    let server ← runtime.newServer throwing
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let target ← client.bootstrap
+
+    runtime.setTraceEncoder (fun description => do
+      traceCalls.modify (fun n => n + 1)
+      pure s!"detail-trace<{description}>")
+
+    let tracedRes ← runtime.callResult target Echo.fooMethod payload
+    match tracedRes with
+    | .ok _ =>
+        throw (IO.userError "expected trace/detail call to fail")
+    | .error ex => do
+        assertEqual ex.type .disconnected
+        if !(ex.description.containsSubstr "trace detail visibility test exception") then
+          throw (IO.userError s!"missing trace/detail exception text: {ex.description}")
+        assertEqual ex.detail "trace-detail-1".toUTF8
+        if !(ex.remoteTrace.containsSubstr "detail-trace<") then
+          throw (IO.userError s!"missing encoded trace marker: {ex.remoteTrace}")
+    assertEqual (← traceCalls.get) 1
+
+    runtime.disableTraceEncoder
+    let untracedRes ← runtime.callResult target Echo.fooMethod payload
+    match untracedRes with
+    | .ok _ =>
+        throw (IO.userError "expected untraced detail call to fail")
+    | .error ex => do
+        assertEqual ex.type .disconnected
+        assertEqual ex.detail "trace-detail-1".toUTF8
+        assertEqual ex.remoteTrace ""
+    assertEqual (← traceCalls.get) 1
 
     runtime.releaseTarget target
     client.release
