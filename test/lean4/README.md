@@ -47,3 +47,8 @@ cmake -S . -B build -DCAPNP_ENABLE_LEAN4_TESTS=ON
 cmake --build build
 ctest --test-dir build -R capnp-lean4-tests -V
 ```
+
+## RPC parity artifact
+
+`test/lean4/parity_matrix.json` is the machine-readable Lean/C++ RPC behavior-class parity map
+used by `doc/lean4-rpc-plan.md`.

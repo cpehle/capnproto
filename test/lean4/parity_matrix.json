@@ -1,0 +1,107 @@
+[
+  {
+    "behaviorClass": "Core call/return and release/cancel semantics",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"basics\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"release capability\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"release capabilities when canceled during return\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"cancellation\")"
+    ],
+    "leanTests": [
+      "Test.Rpc.testRpcReleaseMessageRoundtrip",
+      "Test.Rpc.testRpcReturnCanceled",
+      "Test.RpcClient.testRuntimePendingCallRelease",
+      "Test.RpcClient.testRuntimeParityAdvancedDeferredReleaseWithoutAllowCancellation"
+    ],
+    "status": "covered",
+    "notes": "Message-level and runtime-level release/cancel semantics are exercised."
+  },
+  {
+    "behaviorClass": "Ordering-sensitive pipelining/resolve/disembargo/tail-call",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"pipelining\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"resolve promise\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"embargo\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"don't embargo null capability\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"tail call\")",
+      "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"Two-hop embargo\")"
+    ],
+    "leanTests": [
+      "Test.RpcClient.testRuntimeParityResolvePipelineOrdering",
+      "Test.RpcClient.testRuntimeParityDisembargoNullPipelineDoesNotDisconnect",
+      "Test.RpcClient.testRuntimeParityTailCallPipelineOrdering",
+      "Test.RpcClient.testRuntimeParityAdvancedDeferredSetPipelineOrdering",
+      "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering"
+    ],
+    "status": "partial",
+    "notes": "Behavioral ordering coverage exists, but direct protocol-level Resolve/Disembargo inspection/control is not exposed."
+  },
+  {
+    "behaviorClass": "Transport connect/listen/disconnect lifecycle",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"loopback bootstrap()\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"clean connection shutdown\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"connections set idle when appropriate\")"
+    ],
+    "leanTests": [
+      "Test.RpcClient.testRuntimeAsyncClientLifecyclePrimitives",
+      "Test.RpcClient.testRuntimeClientOnDisconnectAfterServerRelease",
+      "Test.RpcClient.testRuntimeDisconnectVisibilityViaCallResult",
+      "Test.RpcClient.testInteropLeanClientObservesCppDisconnectAfterOneShot"
+    ],
+    "status": "covered",
+    "notes": "Lean runtime and interop tests cover connect/bootstrap/disconnect visibility and cleanup."
+  },
+  {
+    "behaviorClass": "Reliability abort and failure propagation",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"abort\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"call promise that later rejects\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"handles exceptions thrown during disconnect\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"disconnection exception retains details\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"method throws exception with detail\")"
+    ],
+    "leanTests": [
+      "Test.RpcClient.testRuntimeParityCancelDisconnectSequencing",
+      "Test.RpcClient.testInteropLeanClientCancelsPendingCallToCppDelayedServer",
+      "Test.RpcClient.testInteropLeanPendingCallOutcomeCapturesCppException",
+      "Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail"
+    ],
+    "status": "partial",
+    "notes": "Cancellation and exception propagation are covered; explicit abort-path parity scenarios still need expansion."
+  },
+  {
+    "behaviorClass": "Flow control and trace observability",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"connections set idle when appropriate\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"method throws exception with trace encoder\")"
+    ],
+    "leanTests": [
+      "Test.RpcClient.testRuntimeClientQueueMetrics",
+      "Test.RpcClient.testRuntimeClientQueueMetricsPreAcceptBacklogDrains",
+      "Test.RpcClient.testRuntimeClientSetFlowLimit",
+      "Test.RpcClient.testRuntimeTraceEncoderToggle",
+      "Test.RpcClient.testRuntimeSetTraceEncoderOnExistingConnection",
+      "Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility"
+    ],
+    "status": "partial",
+    "notes": "Queue/flow/trace surfaces are covered, but deeper C++-internal diagnostics parity is still limited."
+  },
+  {
+    "behaviorClass": "Advanced streaming and FD transfer",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"Streaming over RPC\")",
+      "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"Streaming over RPC no premature cancellation when client dropped\")",
+      "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"send FD over RPC\")",
+      "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"FD per message limit\")"
+    ],
+    "leanTests": [
+      "Test.RpcClient.testRuntimeStreamingCall",
+      "Test.RpcClient.testRuntimeRegisterStreamingHandlerTarget",
+      "Test.RpcClient.testRuntimeFdPassingOverNetwork",
+      "Test.RpcClient.testRuntimeFdTargetLocalGetFd"
+    ],
+    "status": "partial",
+    "notes": "Baseline streaming and FD passing exist; FD-limit and broader platform-gated coverage remain."
+  }
+]

@@ -1,202 +1,170 @@
 # Lean4 RPC Backend Plan (C++ Parity)
 
-This plan tracks the gap between the Lean4 backend and Cap'n Proto's C++ RPC support, and defines
-how to close it with minimal semantic drift from C++ behavior.
+This plan tracks closure to C++ RPC behavior parity and keeps implementation priorities explicit.
 
 ## Goal
 
-Deliver a Lean-facing RPC backend that behaves like C++ two-party RPC by default, with explicit
-runtime initialization and shutdown, and a monadic API layer for ergonomic state handling.
+Deliver a production-ready Lean RPC stack with:
+- C++-shape runtime semantics (two-party first, explicit lifecycle)
+- advanced handler control surface for Lean-implemented capabilities
+- first-class async composition (`KjAsync` + `Capnp.Async`) without semantic drift
+- clear parity matrix against C++ behavior classes
 
-## Status Snapshot (2026-02-07)
+## Status Snapshot (2026-02-19)
 
-Implemented now:
+Implemented baseline:
 - explicit runtime lifecycle (`Runtime.init`, `Runtime.shutdown`, `RuntimeM.runWithNewRuntime`)
-- client/server handles (`newClient`, `newServer`, `bootstrap`, `listen`, `accept`, `drain`,
-  `onDisconnect`, release APIs)
-- capability lifecycle (`releaseTarget`, `retainTarget`, `releaseCapTable`) with retain/release
-  tests covering alias lifetimes
-- Lean-implemented capability targets (`registerHandlerTarget`) with network roundtrip tests
-- capability-table aware raw call path in runtime FFI
-- C++ interop in both directions:
-  - C++ client -> Lean server (`Interop.cppCallWithAccept`)
-  - Lean client -> C++ server (`Interop.cppServeEchoOnce` + `runtime.connect`)
-  - capability-table interop for C++ client -> Lean server is now covered by test
-- queue/backpressure observability and flow-limit controls for runtime clients
-- pending-call API for promise pipelining (`startCall`, `pendingCallGetPipelinedCap`,
-  `pendingCallAwait`, `pendingCallRelease`) with Lean tests
-- streaming call path (`streamingCall`), capability resolution wait (`targetWhenResolved`), and
-  optional capability FD query (`targetGetFd?`)
-- explicit tail-call forwarding API (`registerTailCallTarget`) with Lean tests
-- FD-capability registration (`registerFdTarget`) with Lean<->Lean network FD passing test
-- runtime trace encoder toggles (`enableTraceEncoder` / `disableTraceEncoder`) with remote-trace
-  propagation test coverage
+- two-party client/server handles (`newClient`, `newServer`, bootstrap/listen/accept/drain)
+- disconnect and lifecycle APIs (`onDisconnect`, release APIs, retain/release semantics)
+- pending-call pipelining (`startCall`, `pendingCallGetPipelinedCap`, await/release)
+- advanced handler controls:
+  - deferred async handler replies
+  - `sendResultsTo` caller forwarding
+  - call hints (`noPromisePipelining`, `onlyPromisePipeline`)
+  - `setPipeline` controls and validation
+  - typed remote exceptions with detail payloads
+- parity-oriented ordering tests for resolve/disembargo/tail-call classes
+- Lean<->C++ interop tests (both client and server directions)
+- trace encoder support:
+  - enable/disable toggles
+  - custom callback (`setTraceEncoder`)
+- KJ async networking/runtime surface exposed in Lean (`tcp`, `udp/datagram`, `http`, `websocket`)
 
-Still missing for full C++ RPC parity:
-- direct protocol-level control/inspection for ordering-sensitive behavior (`Resolve`,
-  `Disembargo`, tail-call forwarding behavior classes) beyond `whenResolved`-level observation
-- richer instrumentation parity with C++ internals (custom trace callbacks and deeper diagnostics)
-- broader parity matrix against `rpc-test.c++` / `rpc-twoparty-test.c++` behavior classes
+## Parity Closure Checklist
 
-## Current Baseline (Implemented)
+Legend: `[x]` done, `[~]` partial, `[ ]` open.
 
-- Lean runtime already supports serialization, builders, checked decoding, packed mode, and
-  capability pointer helpers.
-- Lean codegen emits typed interface metadata and client call wrappers (`callFoo`, `callFooM`).
-- Lean RPC runtime now has:
-  - explicit `Runtime.init` / `Runtime.shutdown`
-  - target lifecycle (`registerEchoTarget`, `releaseTarget`)
-  - network connect (`connect`)
-  - listener lifecycle (`listenEcho`, `acceptEcho`, `releaseListener`)
-  - runtime-managed two-party handles (`newClient`, `newServer`, bootstrap/listen/accept/drain)
-  - client queue metrics (`queueSize`, `queueCount`, `outgoingWaitNanos`)
-  - capability-table roundtrip in FFI raw calls
-- `RuntimeM` exists as the higher-level monadic interface over explicit runtime handles.
+- [x] Core two-party runtime lifecycle and handles.
+- [x] Core call/return/cancel/disconnect semantics.
+- [x] Promise pipelining (`startCall` + pipelined caps).
+- [x] Tail-call forwarding controls.
+- [x] Resolve/disembargo behavior classes (Lean parity tests present).
+- [x] Advanced call-context controls (`sendResultsTo`, call hints, deferred replies, validation).
+- [x] Structured remote exception propagation (type + detail payloads).
+- [x] Trace encoder toggles and callback surface.
+- [x] Multi-vat basics (bootstrap, sturdy refs, forwarding stats, connection checks).
+- [~] Full parity matrix coverage against `rpc-test.c++` / `rpc-twoparty-test.c++` (many classes mapped, not yet exhaustively tracked in docs/CI).
+- [~] Streaming + FD parity coverage across platforms (implemented, but CI/platform gating still needs formal closure).
+- [ ] GC-backed foreign object ownership to remove manual release burden in public APIs.
+- [ ] Typed promised-capability codegen surface (`Rpc.Promise`-style generated ergonomics).
+- [ ] Zero-copy message/data paths in hot RPC/KJ async flows.
+- [ ] C++ bridge modularization (split large bridge translation units into focused modules).
 
-## Gap Matrix vs C++ RPC
+## Open Gaps (Priority Order)
 
-1. Two-party connection/runtime surface:
-- C++: `TwoPartyClient`, `TwoPartyServer`, `RpcSystem`, `onDisconnect`, queue/backpressure metrics.
-- Lean today: minimal connect/listen/accept helpers for echo-target testing.
-- Needed: first-class client/server handles, bootstrap plumbing, disconnect observability.
+1. Parity matrix hardening.
+- Maintain an explicit behavior-class map: C++ test class -> Lean test(s) -> status.
+- Wire this map into CI so parity regressions are visible immediately.
 
-2. Full protocol coverage:
-- C++: robust `Call`, `Return`, `Finish`, `Resolve`, `Release`, `Disembargo`, tail-call/pipeline.
-- Lean today: delegates a narrow request/response path via FFI helper calls.
-- Needed: expose all operational semantics through stable Lean APIs and tests.
+2. Lifecycle ergonomics (deep integration track).
+- Current public API still requires explicit release patterns in many paths.
+- Move toward GC-backed wrappers/foreign objects where practical.
+- Keep explicit runtime initialization/shutdown semantics unchanged.
 
-3. Capability lifetime semantics:
-- C++: import/export tables, retain/release correctness, cancellation cleanup guarantees.
-- Lean today: explicit target/listener release but no exposed retain/release policy surface.
-- Needed: clear Lean lifecycle APIs matching C++ behavior under cancellation and failure.
+3. Zero-copy/performance track.
+- Current RPC/KJ async payload flows are ByteArray-centric.
+- Add low-risk zero-copy paths first (borrowing/slice-view style where ownership is clear).
+- Add benchmark gates for before/after validation.
 
-4. Streaming and FD support:
-- C++: stream calls and optional FD passing in two-party network.
-- Lean today: exposed via runtime APIs (`streamingCall`, `registerFdTarget`, `targetGetFd?`).
-- Needed: expand behavioral parity tests and platform-gated coverage in CI.
+4. Bridge maintainability.
+- `rpc_bridge_runtime.cpp` and `kj_async_bridge.cpp` remain large and hard to reason about.
+- Refactor into modules by concern (runtime lifecycle, advanced handlers, promises, transport).
+- Preserve ABI and test behavior during split.
 
-5. Flow control and observability:
-- C++: flow limits, queue size/count/wait-time metrics, trace encoder hooks.
-- Lean today: flow limits, queue metrics, and basic trace encoder toggles are exposed.
-- Needed: custom trace callback surface and richer telemetry parity.
+5. Networking scope boundaries and documentation.
+- Document exact supported HTTP method surface and transport capabilities.
+- Document unsupported/intentional exclusions and expected error modes.
 
-6. Test parity:
-- C++ has extensive `rpc-test.c++` and `rpc-twoparty-test.c++` suites.
-- Lean today has smoke/integration coverage but not parity scenarios (tail call, embargo races, etc.).
-- Needed: mapped Lean test matrix covering representative cases per C++ behavior class.
+## Networking Scope (Current)
 
-## Runtime Architecture Alternatives
+Lean `KjAsync` currently exposes:
+- TCP stream connect/listen/read/write helpers.
+- UDP datagram bind/send/receive (including promise/task forms).
+- HTTP client/server helpers (including streaming request/response bodies).
+- WebSocket client/server messaging helpers.
 
-### A) Thin C ABI over existing C++ two-party stack (Recommended now)
+HTTP method enum currently includes:
+- `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `TRACE`.
 
-- Reuse `TwoPartyClient`, `TwoPartyServer`, `RpcSystem`, and KJ event loop directly.
-- Keep runtime explicit (Lean handle + lifecycle), mirroring C++ ownership patterns.
-- Expose Lean-safe opaque handles for client/server/capability objects.
+Out-of-scope or not yet explicitly planned for parity:
+- additional HTTP method variants beyond the enum above
+- protocol features not represented in the current KJ bridge method tags
 
-Why this is best now:
-- closest semantic match to C++ backend
-- fastest path to interop confidence
-- avoids reimplementing complex protocol state machines in Lean immediately
+## Milestones and Exit Criteria
 
-### B) Lower-level C ABI around `RpcSystem` internals
+### M0: Plan Hygiene (Immediate)
 
-- More control over message/state surfaces, but higher API and maintenance complexity.
-- Useful only if we need features the convenience classes cannot expose cleanly.
-
-### C) Pure Lean protocol runtime
-
-- Long-term option for reduced FFI surface and stronger Lean-native reasoning.
-- Highest engineering risk; should follow after functional parity exists.
-
-### D) Sidecar process
-
-- Not recommended as default backend.
-- Consider only for isolation/deployment constraints that require process boundaries.
-
-## Plan to Close the Gap
-
-### Phase 0: Stabilize Build/Test Harness
-
-- Resolve or isolate Lean `LibrarySuggestions` timeout noise for large generated modules.
-- Ensure `lake test` can run deterministically in CI for RPC additions.
+- Update this plan on every parity-affecting merge.
+- Add a machine-readable parity checklist artifact in `test/lean4/`.
 
 Exit criteria:
-- reliable Lean RPC test runs in CI without manual artifact cleanup/kill steps.
+- every parity claim in this document links to concrete Lean test coverage.
 
-### Phase 1: Canonical Two-Party Runtime Surface
+### M1: Parity Matrix Closure
 
-- Introduce Lean-visible handles and APIs mirroring C++ shape:
-  - `Runtime.newClient`, `Runtime.newServer`
-  - `server.listen`, `server.accept`, `server.drain`
-  - `client.bootstrap`, `client.onDisconnect`
-- Keep explicit initialization/shutdown and ownership boundaries.
+- Enumerate all targeted behavior classes from `rpc-test.c++` / `rpc-twoparty-test.c++`.
+- Mark each class as implemented/tested/blocked.
+- Add missing parity tests for uncovered critical classes.
 
 Exit criteria:
-- Lean client can bootstrap a server capability and perform typed calls end-to-end.
+- all P0/P1 behavior classes mapped and passing in Lean CI.
 
-### Phase 2: Lifecycle/Failure Semantics
+M1 seed matrix status (`2026-02-19`):
+- [x] Explicit behavior-class matrix exists in `test/lean4/parity_matrix.json`.
+- [x] Core call/return + release/cancel class is `covered`.
+- [x] Transport connect/listen/disconnect class is `covered`.
+- [ ] Ordering-sensitive class is `partial`.
+- [ ] Reliability abort/failure-propagation class is `partial`.
+- [ ] Flow control + trace observability class is `partial`.
+- [ ] Streaming + FD transfer class is `partial`.
 
-- Add explicit APIs for:
-  - disconnect handling
-  - cancellation propagation
-  - deterministic release behavior for imports/exports
-- Align errors and edge-case behavior to C++ semantics as closely as possible.
+Behavior-class mapping table:
 
-Exit criteria:
-- Lean tests for release-after-cancel, abort/disconnect, and double-release behavior pass.
+| Behavior class | C++ RPC references | Lean tests | Status | Notes |
+| --- | --- | --- | --- | --- |
+| Core call/return and release/cancel semantics | `rpc-test.c++`: `basics`, `release capability`, `release capabilities when canceled during return`, `cancellation` | `testRpcReleaseMessageRoundtrip`, `testRpcReturnCanceled`, `testRuntimePendingCallRelease`, `testRuntimeParityAdvancedDeferredReleaseWithoutAllowCancellation` | `covered` | Message-level and runtime-level release/cancel semantics are exercised. |
+| Ordering-sensitive pipelining/resolve/disembargo/tail-call | `rpc-test.c++`: `pipelining`, `resolve promise`, `embargo`, `don't embargo null capability`, `tail call`; `rpc-twoparty-test.c++`: `Two-hop embargo` | `testRuntimeParityResolvePipelineOrdering`, `testRuntimeParityDisembargoNullPipelineDoesNotDisconnect`, `testRuntimeParityTailCallPipelineOrdering`, `testRuntimeParityAdvancedDeferredSetPipelineOrdering`, `testRuntimeTwoHopPipelinedResolveOrdering` | `partial` | Behavioral ordering coverage exists, but direct protocol-level `Resolve`/`Disembargo` inspection/control is not exposed. |
+| Transport connect/listen/disconnect lifecycle | `rpc-test.c++`: `loopback bootstrap()`, `clean connection shutdown`, `connections set idle when appropriate` | `testRuntimeAsyncClientLifecyclePrimitives`, `testRuntimeClientOnDisconnectAfterServerRelease`, `testRuntimeDisconnectVisibilityViaCallResult`, `testInteropLeanClientObservesCppDisconnectAfterOneShot` | `covered` | Lean runtime and interop tests cover connect/bootstrap/disconnect visibility and cleanup. |
+| Reliability abort and failure propagation | `rpc-test.c++`: `abort`, `call promise that later rejects`, `handles exceptions thrown during disconnect`, `disconnection exception retains details`, `method throws exception with detail` | `testRuntimeParityCancelDisconnectSequencing`, `testInteropLeanClientCancelsPendingCallToCppDelayedServer`, `testInteropLeanPendingCallOutcomeCapturesCppException`, `testInteropLeanClientReceivesCppExceptionDetail` | `partial` | Cancellation and exception propagation are covered; explicit abort-path parity scenarios still need expansion. |
+| Flow control and trace observability | `rpc-test.c++`: `connections set idle when appropriate`, `method throws exception with trace encoder` | `testRuntimeClientQueueMetrics`, `testRuntimeClientQueueMetricsPreAcceptBacklogDrains`, `testRuntimeClientSetFlowLimit`, `testRuntimeTraceEncoderToggle`, `testRuntimeSetTraceEncoderOnExistingConnection`, `testRuntimeTraceEncoderCallResultVisibility` | `partial` | Queue/flow/trace surfaces are covered, but deeper C++-internal diagnostics parity is still limited. |
+| Advanced streaming and FD transfer | `rpc-twoparty-test.c++`: `Streaming over RPC`, `Streaming over RPC no premature cancellation when client dropped`, `send FD over RPC`, `FD per message limit` | `testRuntimeStreamingCall`, `testRuntimeRegisterStreamingHandlerTarget`, `testRuntimeFdPassingOverNetwork`, `testRuntimeFdTargetLocalGetFd` | `partial` | Baseline streaming and FD passing exist; FD-limit and broader platform-gated coverage remain. |
 
-### Phase 3: Pipeline and Tail-Call Behavior
+### M2: Lifecycle Ergonomics
 
-- Expose protocol features required for:
-  - pipelined calls
-  - tail-call forwarding
-  - resolve/disembargo ordering guarantees
-- Add targeted tests mirroring key `rpc-test.c++` scenarios.
-
-Exit criteria:
-- Lean reproduces representative C++ cases for pipelining/tail-call/disembargo.
-
-### Phase 4: Flow Control and Runtime Tuning
-
-- Add flow limit and queue metrics wrappers.
-- Optionally expose trace encoder plumbing where practical.
-
-Exit criteria:
-- Lean runtime can set flow limits and report queue metrics for diagnostics/backpressure.
-
-### Phase 5: Streaming and Optional FD Passing
-
-- Add streaming call support first (platform-agnostic).
-- Add FD passing as optional feature behind capability checks/platform guards.
+- Prototype GC-backed wrapper path for selected handles (`Client` first).
+- Reduce required manual release calls in high-level APIs.
+- Preserve explicit runtime ownership boundaries.
 
 Exit criteria:
-- streaming tests pass in Lean; FD tests pass where platform/runtime supports it.
+- representative app paths run without manual release calls for common capability usage.
 
-### Phase 6: Interop and Compatibility Lock-In
+### M3: Zero-Copy + Perf
 
-- Add interop tests against C++ server/client fixtures.
-- Freeze Lean API contracts and document compatibility guarantees.
+- Identify top copy hotspots in RPC/KJ async bridging.
+- Add low-risk zero-copy variants with clear ownership semantics.
+- Benchmark and regress-test these paths.
 
 Exit criteria:
-- mixed Lean<->C++ roundtrip tests pass for core RPC semantics.
+- measurable copy reduction and latency/throughput improvement on benchmark scenarios.
 
-## Test Mapping Strategy
+### M4: Bridge Modularization
 
-Rather than port every C++ RPC test verbatim, map by behavior class:
+- Split C++ bridge code by subsystem with unchanged external ABI.
+- Keep Lean extern signatures stable during refactor.
 
-- Core call/return: basics, release, cancellation.
-- Ordering-sensitive behavior: pipelining, resolve, disembargo.
-- Transport behavior: connect/listen/disconnect.
-- Reliability behavior: abort paths and failure propagation.
-- Advanced features: streaming, FD transfer (optional).
+Exit criteria:
+- bridge code is modular, parity tests still pass, no ABI regressions.
 
-Each Lean behavior test should cite the corresponding C++ test name in a comment/doc note.
+### M5: CI and Docs Lock-In
 
-## Immediate Next Implementation Slice
+- Gate parity-critical tests in CI for Linux and macOS.
+- Publish user-facing docs for recommended Lean RPC/KjAsync patterns.
 
-1. Add ordering-sensitive parity tests mapped to C++ categories (`Resolve`/`Disembargo` classes).
-2. Expand interop tests from smoke checks to parity scenarios (cap transfer, failure/disconnect,
-   cancellation behavior).
+Exit criteria:
+- deterministic parity CI and documented supported feature matrix.
 
-This keeps implementation aligned with C++ conventions while focusing on the remaining parity
-blockers rather than adding unrelated surface area.
+## Immediate Next Slice
+
+1. Wire `test/lean4/parity_matrix.json` into CI parity checks.
+2. Close one `partial` class end-to-end (recommended: ordering-sensitive resolve/disembargo control).
+3. Continue M2 with a narrow `Client` lifecycle ergonomics prototype while keeping runtime lifecycle explicit.
