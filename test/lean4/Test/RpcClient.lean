@@ -562,6 +562,178 @@ def testRuntimeReleaseTarget : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeWithTargetLifecycleHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let response ← runtime.withTarget (← runtime.registerEchoTarget) (fun target => do
+      Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload)
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+
+    let failedInScope ←
+      try
+        runtime.withTarget (← runtime.registerEchoTarget) (fun _ => do
+          throw (IO.userError "expected Runtime.withTarget failure"))
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedInScope true
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeWithCapTableLifecycleHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+
+    let capResponse1 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target capPayload
+    assertEqual capResponse1.capTable.caps.size 1
+    let returnedCap1? := Capnp.readCapabilityFromTable capResponse1.capTable (Capnp.getRoot capResponse1.msg)
+    assertEqual returnedCap1?.isSome true
+    match returnedCap1? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap1 =>
+        let response ← runtime.withCapTable capResponse1.capTable (fun _ => do
+          Capnp.Rpc.RuntimeM.run runtime do
+            Echo.callFooM returnedCap1 payload)
+        assertEqual response.capTable.caps.size 0
+        let failedAfterScope ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              Echo.callFooM returnedCap1 payload
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedAfterScope true
+
+    let capResponse2 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target capPayload
+    assertEqual capResponse2.capTable.caps.size 1
+    let returnedCap2? := Capnp.readCapabilityFromTable capResponse2.capTable (Capnp.getRoot capResponse2.msg)
+    assertEqual returnedCap2?.isSome true
+    match returnedCap2? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap2 =>
+        let failedInScope ←
+          try
+            runtime.withCapTable capResponse2.capTable (fun _ => do
+              throw (IO.userError "expected Runtime.withCapTable failure"))
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedInScope true
+        let failedAfterScope ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              Echo.callFooM returnedCap2 payload
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedAfterScope true
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMWithTargetLifecycleHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      let target ← Capnp.Rpc.RuntimeM.registerEchoTarget
+      Capnp.Rpc.RuntimeM.withTarget target (fun scopedTarget => do
+        Echo.callFooM scopedTarget payload)
+    assertEqual response.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+
+    let failedInScope ←
+      try
+        let _ ← Capnp.Rpc.RuntimeM.run runtime do
+          let target ← Capnp.Rpc.RuntimeM.registerEchoTarget
+          let _ ← (Capnp.Rpc.RuntimeM.withTarget target (fun _ => do
+            throw (IO.userError "expected RuntimeM.withTarget failure")) :
+              Capnp.Rpc.RuntimeM Unit)
+        pure false
+      catch _ =>
+        pure true
+    assertEqual failedInScope true
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 0)
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMWithCapTableLifecycleHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+
+    let capResponse1 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target capPayload
+    assertEqual capResponse1.capTable.caps.size 1
+    let returnedCap1? := Capnp.readCapabilityFromTable capResponse1.capTable (Capnp.getRoot capResponse1.msg)
+    assertEqual returnedCap1?.isSome true
+    match returnedCap1? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap1 =>
+        let response ← Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.withCapTable capResponse1.capTable (fun _ => do
+            Echo.callFooM returnedCap1 payload)
+        assertEqual response.capTable.caps.size 0
+        let failedAfterScope ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              Echo.callFooM returnedCap1 payload
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedAfterScope true
+
+    let capResponse2 ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM target capPayload
+    assertEqual capResponse2.capTable.caps.size 1
+    let returnedCap2? := Capnp.readCapabilityFromTable capResponse2.capTable (Capnp.getRoot capResponse2.msg)
+    assertEqual returnedCap2?.isSome true
+    match returnedCap2? with
+    | none =>
+        throw (IO.userError "RPC response is missing expected capability")
+    | some returnedCap2 =>
+        let failedInScope ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              let _ ← (Capnp.Rpc.RuntimeM.withCapTable capResponse2.capTable (fun _ => do
+                throw (IO.userError "expected RuntimeM.withCapTable failure")) :
+                  Capnp.Rpc.RuntimeM Unit)
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedInScope true
+        let failedAfterScope ←
+          try
+            let _ ← Capnp.Rpc.RuntimeM.run runtime do
+              Echo.callFooM returnedCap2 payload
+            pure false
+          catch _ =>
+            pure true
+        assertEqual failedAfterScope true
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeRetainTarget : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

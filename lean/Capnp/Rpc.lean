@@ -1019,6 +1019,18 @@ namespace Runtime
 @[inline] def retainTarget (runtime : Runtime) (target : Client) : IO Client :=
   ffiRuntimeRetainTargetImpl runtime.handle target
 
+@[inline] def withTarget (runtime : Runtime) (target : Client)
+    (action : Client -> IO α) : IO α := do
+  try
+    action target
+  finally
+    runtime.releaseTarget target
+
+@[inline] def withRetainedTarget (runtime : Runtime) (target : Client)
+    (action : Client -> IO α) : IO α := do
+  let retained ← runtime.retainTarget target
+  runtime.withTarget retained action
+
 @[inline] def newPromiseCapability (runtime : Runtime) :
     IO (Client × RuntimePromiseCapabilityFulfillerRef) := do
   let (promiseTarget, fulfiller) ← ffiRuntimeNewPromiseCapabilityImpl runtime.handle
@@ -1045,6 +1057,13 @@ namespace Runtime
     pure ()
   else
     ffiRuntimeReleaseTargetsImpl runtime.handle (CapTable.toBytes capTable)
+
+@[inline] def withCapTable (runtime : Runtime) (capTable : Capnp.CapTable)
+    (action : Capnp.CapTable -> IO α) : IO α := do
+  try
+    action capTable
+  finally
+    runtime.releaseCapTable capTable
 
 @[inline] def connect (runtime : Runtime) (address : String) (portHint : UInt32 := 0) : IO Client :=
   ffiRuntimeConnectImpl runtime.handle address portHint
@@ -1871,6 +1890,17 @@ namespace RuntimeM
 @[inline] def retainTarget (target : Client) : RuntimeM Client := do
   Runtime.retainTarget (← runtime) target
 
+@[inline] def withTarget (target : Client) (action : Client -> RuntimeM α) : RuntimeM α := do
+  try
+    action target
+  finally
+    releaseTarget target
+
+@[inline] def withRetainedTarget (target : Client)
+    (action : Client -> RuntimeM α) : RuntimeM α := do
+  let retained ← retainTarget target
+  withTarget retained action
+
 @[inline] def newPromiseCapability : RuntimeM (Client × RuntimePromiseCapabilityFulfillerRef) := do
   Runtime.newPromiseCapability (← runtime)
 
@@ -1891,6 +1921,13 @@ namespace RuntimeM
 
 @[inline] def releaseCapTable (capTable : Capnp.CapTable) : RuntimeM Unit := do
   Runtime.releaseCapTable (← runtime) capTable
+
+@[inline] def withCapTable (capTable : Capnp.CapTable)
+    (action : Capnp.CapTable -> RuntimeM α) : RuntimeM α := do
+  try
+    action capTable
+  finally
+    releaseCapTable capTable
 
 @[inline] def connect (address : String) (portHint : UInt32 := 0) : RuntimeM Client := do
   Runtime.connect (← runtime) address portHint
