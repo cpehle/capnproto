@@ -2063,28 +2063,41 @@ def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
-  let awaitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
-      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO α := do
+  let waitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO (Option (Except IO.Error α)) := do
     let timeoutTask ← runtime.sleepMillisAsTask timeoutMillis
-    let wrappedTask : Task (Except IO.Error (Option α)) := Task.map
-      (fun result =>
-        match result with
-        | .ok value => .ok (some value)
-        | .error err => .error err)
+    let wrappedTask : Task (Except IO.Error (Option (Except IO.Error α))) := Task.map
+      (fun result => .ok (some result))
       task
-    let wrappedTimeout : Task (Except IO.Error (Option α)) := Task.map
+    let wrappedTimeout : Task (Except IO.Error (Option (Except IO.Error α))) := Task.map
       (fun result =>
         match result with
         | .ok _ => .ok none
         | .error err => .error err)
       timeoutTask
     match (← IO.waitAny [wrappedTask, wrappedTimeout]) with
-    | .ok (some value) =>
-        pure value
-    | .ok none =>
-        throw (IO.userError s!"{label}: timeout")
+    | .ok outcome =>
+        pure outcome
     | .error err =>
         throw (IO.userError s!"{label}: {err}")
+  let awaitTaskWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 3000) : IO α := do
+    match (← waitTaskWithin label task timeoutMillis) with
+    | some (.ok value) =>
+        pure value
+    | some (.error err) =>
+        throw (IO.userError s!"{label}: {err}")
+    | none =>
+        throw (IO.userError s!"{label}: timeout")
+  let assertTaskPendingWithin {α : Type} (label : String) (task : Task (Except IO.Error α))
+      (timeoutMillis : UInt32 := UInt32.ofNat 150) : IO Unit := do
+    match (← waitTaskWithin label task timeoutMillis) with
+    | none =>
+        pure ()
+    | some (.ok _) =>
+        throw (IO.userError s!"{label}: completed before disconnect")
+    | some (.error err) =>
+        throw (IO.userError s!"{label}: failed before disconnect: {err}")
   try
     try
       IO.FS.removeFile socketPath
@@ -2114,6 +2127,8 @@ def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
       Echo.callFooM target payload
     assertEqual response.capTable.caps.size 0
 
+    assertTaskPendingWithin "interop one-shot server completion before disconnect" serveTask
+
     let disconnectPromise ← client.onDisconnectStart
     runtime.releaseTarget target
     client.release
@@ -2123,14 +2138,15 @@ def testInteropLeanClientObservesCppDisconnectAfterOneShot : IO Unit := do
     let observed ← awaitTaskWithin "interop one-shot server completion" serveTask
     assertEqual observed.capTable.caps.size 0
 
-    let reconnectFailed ←
-      try
-        let target2 ← runtime.connect address
+    let reconnectTask ← IO.asTask (runtime.connect address)
+    match (← waitTaskWithin "interop one-shot reconnect attempt" reconnectTask) with
+    | some (.ok target2) =>
         runtime.releaseTarget target2
-        pure false
-      catch _ =>
-        pure true
-    assertEqual reconnectFailed true
+        throw (IO.userError "expected reconnect after one-shot disconnect to fail")
+    | some (.error _) =>
+        pure ()
+    | none =>
+        throw (IO.userError "interop one-shot reconnect attempt: timeout")
   finally
     runtime.shutdown
     try
