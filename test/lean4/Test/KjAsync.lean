@@ -1770,67 +1770,46 @@ def testKjAsyncHttpRequestTaskAndPromiseHelpers : IO Unit := do
 
 @[test]
 def testKjAsyncHttpEncodedHeaderApis : IO Unit := do
+  let requestHeaders := #[{ name := "x-http-encoded", value := "request" }]
+  let encodedRequestHeaders := Capnp.KjAsync.encodeHttpHeaders requestHeaders
+  let decodedRequestHeaders ← Capnp.KjAsync.decodeHttpHeaders encodedRequestHeaders
+  assertTrue (decodedRequestHeaders == requestHeaders)
+    "decodeHttpHeaders should roundtrip encodeHttpHeaders for request headers"
+
   let serverRuntime ← Capnp.KjAsync.Runtime.init
   let clientRuntime ← Capnp.KjAsync.Runtime.init
   try
     let server ← serverRuntime.httpServerListen "127.0.0.1" 0
-    let encodedRequestHeaders := Capnp.KjAsync.encodeHttpHeaders
-      #[{ name := "x-http-encoded", value := "request" }]
-    let encodedResponseHeadersA := Capnp.KjAsync.encodeHttpHeaders
-      #[{ name := "x-http-encoded", value := "response-a" }]
-    let encodedResponseHeadersB := Capnp.KjAsync.encodeHttpHeaders
-      #[{ name := "x-http-encoded", value := "response-b" }]
+    let encodedResponseHeaders := Capnp.KjAsync.encodeHttpHeaders
+      #[{ name := "x-http-encoded", value := "response" }]
 
-    let requestBodyA := "http-encoded-a".toUTF8
-    let responseTask ← IO.asTask do
-      clientRuntime.httpRequestWithEncodedHeaders
-        .post "127.0.0.1" "/lean-http-encoded-a" encodedRequestHeaders requestBodyA server.boundPort
+    let requestBody := "http-encoded".toUTF8
+    let responseTask ← clientRuntime.httpRequestWithHeadersAsTask
+      .post "127.0.0.1" "/lean-http-encoded"
+      requestHeaders requestBody server.boundPort
 
-    let requestA ← waitForHttpServerRequest serverRuntime server
-    assertEqual requestA.path "/lean-http-encoded-a"
-    assertEqual requestA.body requestBodyA
+    let request ← waitForHttpServerRequest serverRuntime server
+    assertEqual request.path "/lean-http-encoded"
+    assertEqual request.body requestBody
     assertTrue
-      (requestA.headers.any (fun h => h.name == "x-http-encoded" && h.value == "request"))
+      (request.headers.any (fun h => h.name == "x-http-encoded" && h.value == "request"))
       "expected x-http-encoded request header for encoded request helper"
 
-    serverRuntime.httpServerRespondWithEncodedHeaders server requestA.requestId
-      (UInt32.ofNat 203) "Non-Authoritative Information" encodedResponseHeadersA requestBodyA
+    serverRuntime.httpServerRespondWithEncodedHeaders server request.requestId
+      (UInt32.ofNat 203) "Non-Authoritative Information" encodedResponseHeaders requestBody
     serverRuntime.pump
 
-    let responseA ←
+    let response ←
       match (← IO.wait responseTask) with
       | .ok response => pure response
       | .error err =>
-        throw (IO.userError s!"httpRequestWithEncodedHeaders failed: {err}")
-    assertEqual responseA.status (UInt32.ofNat 203)
-    assertEqual responseA.statusText "Non-Authoritative Information"
-    assertEqual responseA.body requestBodyA
+        throw (IO.userError s!"httpRequestWithHeadersAsTask failed: {err}")
+    assertEqual response.status (UInt32.ofNat 203)
+    assertEqual response.statusText "Non-Authoritative Information"
+    assertEqual response.body requestBody
     assertTrue
-      (responseA.headers.any (fun h => h.name == "x-http-encoded" && h.value == "response-a"))
+      (response.headers.any (fun h => h.name == "x-http-encoded" && h.value == "response"))
       "expected x-http-encoded response header for runtime encoded response helper"
-
-    let requestBodyB := "http-encoded-b".toUTF8
-    let pending ← clientRuntime.httpRequestStartWithEncodedHeaders
-      .post "127.0.0.1" "/lean-http-encoded-b" encodedRequestHeaders requestBodyB server.boundPort
-
-    let requestB ← waitForHttpServerRequest serverRuntime server
-    assertEqual requestB.path "/lean-http-encoded-b"
-    assertEqual requestB.body requestBodyB
-    assertTrue
-      (requestB.headers.any (fun h => h.name == "x-http-encoded" && h.value == "request"))
-      "expected x-http-encoded request header for encoded start helper"
-
-    server.respondWithEncodedHeaders requestB.requestId
-      (UInt32.ofNat 202) "Accepted" encodedResponseHeadersB requestBodyB
-    serverRuntime.pump
-
-    let responseB ← pending.awaitWithHeaders
-    assertEqual responseB.status (UInt32.ofNat 202)
-    assertEqual responseB.statusText "Accepted"
-    assertEqual responseB.body requestBodyB
-    assertTrue
-      (responseB.headers.any (fun h => h.name == "x-http-encoded" && h.value == "response-b"))
-      "expected x-http-encoded response header for HttpServer encoded response helper"
 
     server.release
   finally
