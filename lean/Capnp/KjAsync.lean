@@ -97,6 +97,13 @@ structure HttpResponseEx where
   body : ByteArray
   deriving Inhabited, BEq
 
+structure HttpResponseEncoded where
+  status : UInt32
+  statusText : String
+  encodedHeaders : ByteArray
+  body : ByteArray
+  deriving Inhabited, BEq
+
 structure HttpResponsePromiseRef where
   runtime : Runtime
   handle : UInt32
@@ -121,6 +128,13 @@ structure HttpServerResponseBody where
   runtime : Runtime
   handle : UInt32
   deriving Inhabited, BEq, Repr
+
+structure HttpResponseStreamingEncoded where
+  status : UInt32
+  statusText : String
+  encodedHeaders : ByteArray
+  body : HttpResponseBody
+  deriving Inhabited, BEq
 
 structure HttpResponseStreaming where
   status : UInt32
@@ -824,6 +838,24 @@ Reuse the returned bytes across repeated calls to avoid re-encoding header array
 @[inline] def decodeHttpHeaders (bytes : ByteArray) : IO (Array HttpHeader) :=
   decodeHeaders bytes
 
+@[inline] private def decodeHttpResponseEncoded (response : HttpResponseEncoded) :
+    IO HttpResponseEx := do
+  return {
+    status := response.status
+    statusText := response.statusText
+    headers := (← decodeHeaders response.encodedHeaders)
+    body := response.body
+  }
+
+@[inline] private def decodeHttpResponseStreamingEncoded
+    (response : HttpResponseStreamingEncoded) : IO HttpResponseStreaming := do
+  return {
+    status := response.status
+    statusText := response.statusText
+    headers := (← decodeHeaders response.encodedHeaders)
+    body := response.body
+  }
+
 inductive HttpMethod where
   | get
   | head
@@ -1479,36 +1511,49 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
       portHint path body responseBodyLimit
   return { status := status, body := responseBody }
 
-@[inline] def httpRequestWithEncodedHeaders (runtime : Runtime) (method : HttpMethod)
-    (address : String) (path : String) (requestHeaders : ByteArray)
-    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+@[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeaders (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersImpl runtime.handle (httpMethodToTag method) address
       portHint path requestHeaders body
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := responseBody
   }
+
+@[inline] def httpRequestWithEncodedHeaders (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  decodeHttpResponseEncoded (← runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeaders method
+    address path requestHeaders body portHint)
 
 @[inline] def httpRequestWithHeaders (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : IO HttpResponseEx := do
   runtime.httpRequestWithEncodedHeaders method address path (encodeHeaders requestHeaders) body portHint
 
-@[inline] def httpRequestWithEncodedHeadersSecure (runtime : Runtime) (method : HttpMethod)
-    (address : String) (path : String) (requestHeaders : ByteArray)
-    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+@[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecure (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersSecureImpl runtime.handle (httpMethodToTag method) address
       portHint path requestHeaders body
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := responseBody
   }
+
+@[inline] def httpRequestWithEncodedHeadersSecure (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  decodeHttpResponseEncoded
+    (← runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecure method address path
+      requestHeaders body portHint)
 
 @[inline] def httpRequestWithHeadersSecure (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -1516,19 +1561,27 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   runtime.httpRequestWithEncodedHeadersSecure method address path (encodeHeaders requestHeaders) body
     portHint
 
-@[inline] def httpRequestWithEncodedHeadersWithResponseLimit (runtime : Runtime)
-    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
-    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
-    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeaders
+    (runtime : Runtime) (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : ByteArray) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersWithResponseLimitImpl runtime.handle (httpMethodToTag method)
       address portHint path requestHeaders body responseBodyLimit
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := responseBody
   }
+
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimit (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  decodeHttpResponseEncoded
+    (← runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeaders method
+      address path requestHeaders responseBodyLimit body portHint)
 
 @[inline] def httpRequestWithHeadersWithResponseLimit (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -1537,10 +1590,10 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   runtime.httpRequestWithEncodedHeadersWithResponseLimit method address path
     (encodeHeaders requestHeaders) responseBodyLimit body portHint
 
-@[inline] def httpRequestWithEncodedHeadersWithResponseLimitSecure (runtime : Runtime)
-    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
-    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
-    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeadersSecure
+    (runtime : Runtime) (method : HttpMethod) (address : String) (path : String)
+    (requestHeaders : ByteArray) (responseBodyLimit : UInt64)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureImpl runtime.handle
       (httpMethodToTag method) address portHint path requestHeaders body
@@ -1548,9 +1601,17 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := responseBody
   }
+
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimitSecure (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : IO HttpResponseEx := do
+  decodeHttpResponseEncoded
+    (← runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeadersSecure
+      method address path requestHeaders responseBodyLimit body portHint)
 
 @[inline] def httpRequestWithHeadersWithResponseLimitSecure (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String)
@@ -1696,29 +1757,38 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     ffiRuntimeHttpResponsePromiseAwaitImpl runtime.handle promise.handle
   return { status := status, body := responseBody }
 
-@[inline] def httpResponsePromiseAwaitWithHeaders (runtime : Runtime)
-    (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
+@[inline] def httpResponsePromiseAwaitWithEncodedHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseEncoded := do
   ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl runtime.handle promise.handle
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := responseBody
   }
 
-@[inline] def httpResponsePromiseAwaitStreamingWithHeaders (runtime : Runtime)
-    (promise : HttpResponsePromiseRef) : IO HttpResponseStreaming := do
+@[inline] def httpResponsePromiseAwaitWithHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
+  decodeHttpResponseEncoded (← runtime.httpResponsePromiseAwaitWithEncodedHeaders promise)
+
+@[inline] def httpResponsePromiseAwaitStreamingWithEncodedHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseStreamingEncoded := do
   ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, statusText, responseHeaderBytes, responseBodyHandle) ←
     ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl runtime.handle promise.handle
   return {
     status := status
     statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
+    encodedHeaders := responseHeaderBytes
     body := { runtime := runtime, handle := responseBodyHandle }
   }
+
+@[inline] def httpResponsePromiseAwaitStreamingWithHeaders (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseStreaming := do
+  decodeHttpResponseStreamingEncoded
+    (← runtime.httpResponsePromiseAwaitStreamingWithEncodedHeaders promise)
 
 @[inline] def httpResponsePromiseCancel (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO Unit := do
@@ -1742,12 +1812,27 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   pure (Capnp.Async.Promise.ofTask
     (← runtime.httpRequestAsTask method address path body portHint))
 
+@[inline] def httpRequestWithEncodedHeadersAsTask (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error HttpResponseEx)) := do
+  IO.asTask do
+    runtime.httpRequestWithEncodedHeaders method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithEncodedHeadersAsPromise (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise HttpResponseEx) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.httpRequestWithEncodedHeadersAsTask method address path requestHeaders body
+      portHint))
+
 @[inline] def httpRequestWithHeadersAsTask (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     IO (Task (Except IO.Error HttpResponseEx)) := do
-  IO.asTask do
-    runtime.httpRequestWithHeaders method address path requestHeaders body portHint
+  runtime.httpRequestWithEncodedHeadersAsTask method address path
+    (encodeHeaders requestHeaders) body portHint
 
 @[inline] def httpRequestWithHeadersAsPromise (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -1756,12 +1841,27 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   pure (Capnp.Async.Promise.ofTask
     (← runtime.httpRequestWithHeadersAsTask method address path requestHeaders body portHint))
 
+@[inline] def httpRequestWithEncodedHeadersSecureAsTask (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error HttpResponseEx)) := do
+  IO.asTask do
+    runtime.httpRequestWithEncodedHeadersSecure method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithEncodedHeadersSecureAsPromise (runtime : Runtime)
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise HttpResponseEx) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.httpRequestWithEncodedHeadersSecureAsTask method address path requestHeaders
+      body portHint))
+
 @[inline] def httpRequestWithHeadersSecureAsTask (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     IO (Task (Except IO.Error HttpResponseEx)) := do
-  IO.asTask do
-    runtime.httpRequestWithHeadersSecure method address path requestHeaders body portHint
+  runtime.httpRequestWithEncodedHeadersSecureAsTask method address path
+    (encodeHeaders requestHeaders) body portHint
 
 @[inline] def httpRequestWithHeadersSecureAsPromise (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -2385,27 +2485,20 @@ namespace HttpResponsePromiseRef
     ffiRuntimeHttpResponsePromiseAwaitImpl promise.runtime.handle promise.handle
   return { status := status, body := responseBody }
 
+@[inline] def awaitWithEncodedHeaders (promise : HttpResponsePromiseRef) :
+    IO HttpResponseEncoded := do
+  promise.runtime.httpResponsePromiseAwaitWithEncodedHeaders promise
+
 @[inline] def awaitWithHeaders (promise : HttpResponsePromiseRef) : IO HttpResponseEx := do
-  let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl promise.runtime.handle promise.handle
-  return {
-    status := status
-    statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
-    body := responseBody
-  }
+  decodeHttpResponseEncoded (← promise.awaitWithEncodedHeaders)
+
+@[inline] def awaitStreamingWithEncodedHeaders (promise : HttpResponsePromiseRef) :
+    IO HttpResponseStreamingEncoded := do
+  promise.runtime.httpResponsePromiseAwaitStreamingWithEncodedHeaders promise
 
 @[inline] def awaitStreamingWithHeaders (promise : HttpResponsePromiseRef) :
     IO HttpResponseStreaming := do
-  let (status, statusText, responseHeaderBytes, responseBodyHandle) ←
-    ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl promise.runtime.handle
-      promise.handle
-  return {
-    status := status
-    statusText := statusText
-    headers := (← decodeHeaders responseHeaderBytes)
-    body := { runtime := promise.runtime, handle := responseBodyHandle }
-  }
+  decodeHttpResponseStreamingEncoded (← promise.awaitStreamingWithEncodedHeaders)
 
 @[inline] def cancel (promise : HttpResponsePromiseRef) : IO Unit :=
   ffiRuntimeHttpResponsePromiseCancelImpl promise.runtime.handle promise.handle
@@ -3773,6 +3866,13 @@ namespace RuntimeM
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
   Runtime.httpRequestWithEncodedHeaders (← runtime) method address path requestHeaders body portHint
 
+@[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeaders (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM HttpResponseEncoded := do
+  Runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeaders
+    (← runtime) method address path requestHeaders body portHint
+
 @[inline] def httpRequestWithHeaders (method : HttpMethod) (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
@@ -3784,6 +3884,13 @@ namespace RuntimeM
   Runtime.httpRequestWithEncodedHeadersSecure (← runtime) method address path requestHeaders body
     portHint
 
+@[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecure (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM HttpResponseEncoded := do
+  Runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecure
+    (← runtime) method address path requestHeaders body portHint
+
 @[inline] def httpRequestWithHeadersSecure (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
@@ -3794,6 +3901,13 @@ namespace RuntimeM
     (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
   Runtime.httpRequestWithEncodedHeadersWithResponseLimit
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
+
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeaders
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponseEncoded := do
+  Runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeaders
     (← runtime) method address path requestHeaders responseBodyLimit body portHint
 
 @[inline] def httpRequestWithHeadersWithResponseLimit (method : HttpMethod) (address : String)
@@ -3808,6 +3922,13 @@ namespace RuntimeM
     (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponseEx := do
   Runtime.httpRequestWithEncodedHeadersWithResponseLimitSecure
+    (← runtime) method address path requestHeaders responseBodyLimit body portHint
+
+@[inline] def httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeadersSecure
+    (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
+    (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM HttpResponseEncoded := do
+  Runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeadersSecure
     (← runtime) method address path requestHeaders responseBodyLimit body portHint
 
 @[inline] def httpRequestWithHeadersWithResponseLimitSecure (method : HttpMethod)
@@ -3850,6 +3971,18 @@ namespace RuntimeM
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStartWithHeaders (← runtime) method address path requestHeaders body portHint
 
+@[inline] def httpRequestWithEncodedHeadersAsTask (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : ByteArray) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error HttpResponseEx)) := do
+  Runtime.httpRequestWithEncodedHeadersAsTask
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithEncodedHeadersAsPromise (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : ByteArray) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Capnp.Async.Promise HttpResponseEx) := do
+  Runtime.httpRequestWithEncodedHeadersAsPromise
+    (← runtime) method address path requestHeaders body portHint
+
 @[inline] def httpRequestWithHeadersAsTask (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error HttpResponseEx)) := do
@@ -3872,6 +4005,20 @@ namespace RuntimeM
     (path : String) (requestHeaders : ByteArray) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStartWithEncodedHeadersSecure
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithEncodedHeadersSecureAsTask (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error HttpResponseEx)) := do
+  Runtime.httpRequestWithEncodedHeadersSecureAsTask
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithEncodedHeadersSecureAsPromise (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise HttpResponseEx) := do
+  Runtime.httpRequestWithEncodedHeadersSecureAsPromise
     (← runtime) method address path requestHeaders body portHint
 
 @[inline] def httpRequestWithHeadersSecureAsTask (method : HttpMethod) (address : String)
@@ -3941,9 +4088,17 @@ namespace RuntimeM
 @[inline] def awaitHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM HttpResponse := do
   promise.await
 
+@[inline] def awaitHttpResponseWithEncodedHeaders (promise : HttpResponsePromiseRef) :
+    RuntimeM HttpResponseEncoded := do
+  promise.awaitWithEncodedHeaders
+
 @[inline] def awaitHttpResponseWithHeaders (promise : HttpResponsePromiseRef) :
     RuntimeM HttpResponseEx := do
   promise.awaitWithHeaders
+
+@[inline] def awaitHttpResponseStreamingWithEncodedHeaders (promise : HttpResponsePromiseRef) :
+    RuntimeM HttpResponseStreamingEncoded := do
+  promise.awaitStreamingWithEncodedHeaders
 
 @[inline] def awaitHttpResponseStreamingWithHeaders (promise : HttpResponsePromiseRef) :
     RuntimeM HttpResponseStreaming := do

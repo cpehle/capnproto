@@ -1780,8 +1780,8 @@ def testKjAsyncHttpEncodedHeaderApis : IO Unit := do
   let clientRuntime ← Capnp.KjAsync.Runtime.init
   try
     let server ← serverRuntime.httpServerListen "127.0.0.1" 0
-    let encodedResponseHeaders := Capnp.KjAsync.encodeHttpHeaders
-      #[{ name := "x-http-encoded", value := "response" }]
+    let responseHeaders := #[{ name := "x-http-encoded", value := "response" }]
+    let encodedResponseHeaders := Capnp.KjAsync.encodeHttpHeaders responseHeaders
 
     let requestBody := "http-encoded".toUTF8
     let responseTask ← clientRuntime.httpRequestWithHeadersAsTask
@@ -1810,6 +1810,86 @@ def testKjAsyncHttpEncodedHeaderApis : IO Unit := do
     assertTrue
       (response.headers.any (fun h => h.name == "x-http-encoded" && h.value == "response"))
       "expected x-http-encoded response header for runtime encoded response helper"
+
+    server.release
+  finally
+    clientRuntime.shutdown
+    serverRuntime.shutdown
+
+@[test]
+def testKjAsyncHttpEncodedResponsePromiseAwaitApi : IO Unit := do
+  let requestHeaders := #[{ name := "x-http-encoded", value := "request" }]
+  let responseHeaders := #[{ name := "x-http-encoded", value := "response" }]
+  let encodedResponseHeaders := Capnp.KjAsync.encodeHttpHeaders responseHeaders
+
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestBody := "http-encoded-promise".toUTF8
+    let responseRef ← runtime.httpRequestStartWithHeaders
+      .post "127.0.0.1" "/lean-http-encoded-promise"
+      requestHeaders requestBody server.boundPort
+
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/lean-http-encoded-promise"
+    assertEqual request.body requestBody
+    runtime.httpServerRespondWithEncodedHeaders server request.requestId
+      (UInt32.ofNat 201) "Created" encodedResponseHeaders requestBody
+    runtime.pump
+
+    let encodedResponse ← responseRef.awaitWithEncodedHeaders
+    assertEqual encodedResponse.status (UInt32.ofNat 201)
+    assertEqual encodedResponse.statusText "Created"
+    assertEqual encodedResponse.body requestBody
+    let decodedHeaders ← Capnp.KjAsync.decodeHttpHeaders encodedResponse.encodedHeaders
+    assertTrue (decodedHeaders.size >= responseHeaders.size)
+      "expected encoded promise response headers to include user-provided headers"
+    for expected in responseHeaders do
+      assertTrue (decodedHeaders.any (fun h => h == expected))
+        s!"expected encoded promise response header {expected.name}"
+
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpEncodedResponseRequestApi : IO Unit := do
+  let requestHeaders := #[{ name := "x-http-encoded", value := "request" }]
+  let encodedRequestHeaders := Capnp.KjAsync.encodeHttpHeaders requestHeaders
+  let responseHeaders := #[{ name := "x-http-encoded", value := "response" }]
+  let encodedResponseHeaders := Capnp.KjAsync.encodeHttpHeaders responseHeaders
+
+  let serverRuntime ← Capnp.KjAsync.Runtime.init
+  let clientRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← serverRuntime.httpServerListen "127.0.0.1" 0
+    let requestBody := "http-encoded-raw".toUTF8
+    let responseTask ← IO.asTask do
+      clientRuntime.httpRequestWithEncodedHeadersAndEncodedResponseHeaders
+        .post "127.0.0.1" "/lean-http-encoded-raw"
+        encodedRequestHeaders requestBody server.boundPort
+
+    let request ← waitForHttpServerRequest serverRuntime server
+    assertEqual request.path "/lean-http-encoded-raw"
+    assertEqual request.body requestBody
+    serverRuntime.httpServerRespondWithEncodedHeaders server request.requestId
+      (UInt32.ofNat 200) "OK" encodedResponseHeaders requestBody
+    serverRuntime.pump
+
+    let encodedResponse ←
+      match (← IO.wait responseTask) with
+      | .ok response => pure response
+      | .error err =>
+        throw (IO.userError s!"httpRequestWithEncodedHeadersAndEncodedResponseHeaders failed: {err}")
+    assertEqual encodedResponse.status (UInt32.ofNat 200)
+    assertEqual encodedResponse.statusText "OK"
+    assertEqual encodedResponse.body requestBody
+    let decodedHeaders ← Capnp.KjAsync.decodeHttpHeaders encodedResponse.encodedHeaders
+    assertTrue (decodedHeaders.size >= responseHeaders.size)
+      "expected encoded response headers to include user-provided headers"
+    for expected in responseHeaders do
+      assertTrue (decodedHeaders.any (fun h => h == expected))
+        s!"expected encoded response header {expected.name}"
 
     server.release
   finally
