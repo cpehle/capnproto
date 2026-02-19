@@ -1711,12 +1711,11 @@ def testKjAsyncWebSocketCloseCodeHelpers : IO Unit := do
         let closePromise ← ws.closeStartCode (4001 : UInt32) "ws-close-code"
         pure (some closePromise))
       (UInt16.ofNat 4001) "ws-close-code"
-    -- Compatibility shim: UInt16 API still routes through the new UInt32 helper.
     checkClose
       (fun ws => do
-        let closePromise ← ws.closeStart (UInt16.ofNat 4002) "ws-close-shim"
+        let closePromise ← ws.closeStartCode (4002 : UInt32) "ws-close-code-2"
         pure (some closePromise))
-      (UInt16.ofNat 4002) "ws-close-shim"
+      (UInt16.ofNat 4002) "ws-close-code-2"
   finally
     runtime.shutdown
 
@@ -1900,6 +1899,55 @@ def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
       (response.headers.any
         (fun h => h.name == "x-lean-server" && h.value == "ok"))
       "expected response header x-lean-server"
+
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpServerRoundtripHeaderDecodeStress : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  let mkHeader : String → Nat → Capnp.KjAsync.HttpHeader := fun namePrefix idx =>
+    { name := s!"{namePrefix}-{idx}"
+    , value := s!"{namePrefix}-value-{idx}-{String.ofList (List.replicate (idx + 4) 'v')}"
+    }
+  let requestHeaders : Array Capnp.KjAsync.HttpHeader := Id.run do
+    let mut out : Array Capnp.KjAsync.HttpHeader := #[]
+    for i in [:16] do
+      out := out.push (mkHeader "x-req" i)
+    pure out
+  let responseHeaders : Array Capnp.KjAsync.HttpHeader := Id.run do
+    let mut out : Array Capnp.KjAsync.HttpHeader := #[]
+    for i in [:14] do
+      out := out.push (mkHeader "x-resp" i)
+    pure out
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestPath := s!"/lean-http-stress/{String.ofList (List.replicate 96 'p')}"
+    let requestBody := appendByteArray mkPayload ("-header-stress".toUTF8)
+    let responsePromise ← runtime.httpRequestStartWithHeaders
+      .post "127.0.0.1" requestPath requestHeaders requestBody server.boundPort
+
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path requestPath
+    assertEqual request.body requestBody
+    assertTrue (request.headers.size >= requestHeaders.size)
+      "expected request header count to include at least all user-provided headers"
+    for expected in requestHeaders do
+      assertTrue (request.headers.any (fun h => h == expected))
+        s!"expected request header {expected.name}"
+
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 207) "Multi-Status"
+      responseHeaders requestBody
+    let response ← runtime.httpResponsePromiseAwaitWithHeaders responsePromise
+    assertEqual response.status (UInt32.ofNat 207)
+    assertEqual response.statusText "Multi-Status"
+    assertEqual response.body requestBody
+    assertTrue (response.headers.size >= responseHeaders.size)
+      "expected response header count to include at least all user-provided headers"
+    for expected in responseHeaders do
+      assertTrue (response.headers.any (fun h => h == expected))
+        s!"expected response header {expected.name}"
 
     server.release
   finally

@@ -744,25 +744,42 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
       out := out.push b
     pure out
 
-@[inline] private def decodeUInt32Le? (bytes : ByteArray) (offset : Nat) :
-    Option (UInt32 × Nat) :=
-  if offset + 3 < bytes.size then
-    let b0 := (bytes.get! offset).toUInt32
-    let b1 := ((bytes.get! (offset + 1)).toUInt32) <<< 8
-    let b2 := ((bytes.get! (offset + 2)).toUInt32) <<< 16
-    let b3 := ((bytes.get! (offset + 3)).toUInt32) <<< 24
-    some (b0 ||| b1 ||| b2 ||| b3, offset + 4)
+@[inline] private def natToUInt32? (value : Nat) : Option UInt32 :=
+  if value ≤ (0xFFFFFFFF : UInt32).toNat then
+    some (UInt32.ofNat value)
   else
     none
 
-@[inline] private def decodeUtf8At (bytes : ByteArray) (offset length : Nat) : IO String := do
-  if offset + length ≤ bytes.size then
-    let slice := bytes.extract offset (offset + length)
-    match String.fromUTF8? slice with
-    | some s => pure s
-    | none => throw (IO.userError "invalid UTF-8 in KJ async payload")
+@[inline] private def sliceAtAndNext? (bytes : ByteArray) (offset length : UInt32) :
+    Option (ByteArray × UInt32) := do
+  let start := offset.toNat
+  let stop := start + length.toNat
+  if stop ≤ bytes.size then
+    let nextOffset ← natToUInt32? stop
+    some (bytes.extract start stop, nextOffset)
   else
-    throw (IO.userError "truncated KJ async payload")
+    none
+
+@[inline] private def decodeUInt32LeAt? (bytes : ByteArray) (offset : UInt32) :
+    Option (UInt32 × UInt32) := do
+  let i := offset.toNat
+  if i + 3 < bytes.size then
+    let nextOffset ← natToUInt32? (i + 4)
+    let b0 := (bytes.get! i).toUInt32
+    let b1 := ((bytes.get! (i + 1)).toUInt32) <<< 8
+    let b2 := ((bytes.get! (i + 2)).toUInt32) <<< 16
+    let b3 := ((bytes.get! (i + 3)).toUInt32) <<< 24
+    some (b0 ||| b1 ||| b2 ||| b3, nextOffset)
+  else
+    none
+
+@[inline] private def decodeUtf8AtAndNext (bytes : ByteArray) (offset length : UInt32) :
+    IO (String × UInt32) := do
+  let some (slice, nextOffset) := sliceAtAndNext? bytes offset length
+    | throw (IO.userError "truncated KJ async payload")
+  match String.fromUTF8? slice with
+  | some s => pure (s, nextOffset)
+  | none => throw (IO.userError "invalid UTF-8 in KJ async payload")
 
 @[inline] private def encodeHeaders (headers : Array HttpHeader) : ByteArray :=
   Id.run do
@@ -778,25 +795,22 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
     pure out
 
 @[inline] private def decodeHeaders (bytes : ByteArray) : IO (Array HttpHeader) := do
-  let some (count, offset0) := decodeUInt32Le? bytes 0
+  let some (count, offset0) := decodeUInt32LeAt? bytes 0
     | throw (IO.userError "invalid header list payload")
   let mut offset := offset0
   let mut headers : Array HttpHeader := #[]
   let mut remaining := count
   while remaining != 0 do
-    let some (nameLen, nextOffset) := decodeUInt32Le? bytes offset
+    let some (nameLen, nextOffset) := decodeUInt32LeAt? bytes offset
       | throw (IO.userError "invalid header list payload")
-    let nameLenNat := nameLen.toNat
-    let name ← decodeUtf8At bytes nextOffset nameLenNat
-    offset := nextOffset + nameLenNat
-    let some (valueLen, nextOffset2) := decodeUInt32Le? bytes offset
+    let (name, afterName) ← decodeUtf8AtAndNext bytes nextOffset nameLen
+    let some (valueLen, nextOffset2) := decodeUInt32LeAt? bytes afterName
       | throw (IO.userError "invalid header list payload")
-    let valueLenNat := valueLen.toNat
-    let value ← decodeUtf8At bytes nextOffset2 valueLenNat
-    offset := nextOffset2 + valueLenNat
+    let (value, afterValue) ← decodeUtf8AtAndNext bytes nextOffset2 valueLen
+    offset := afterValue
     headers := headers.push { name := name, value := value }
     remaining := remaining - 1
-  if offset == bytes.size then
+  if offset.toNat == bytes.size then
     pure headers
   else
     throw (IO.userError "invalid header list payload: trailing bytes")
@@ -887,56 +901,46 @@ structure HttpEndpoint where
 
 @[inline] private def decodeHttpServerRequest (runtime : Runtime) (bytes : ByteArray) :
     IO HttpServerRequest := do
-  let some (requestId, offset1) := decodeUInt32Le? bytes 0
+  let some (requestId, offset1) := decodeUInt32LeAt? bytes 0
     | throw (IO.userError "invalid HTTP server request payload")
-  let some (methodTag, offset2) := decodeUInt32Le? bytes offset1
+  let some (methodTag, offset2) := decodeUInt32LeAt? bytes offset1
     | throw (IO.userError "invalid HTTP server request payload")
-  let some (webSocketTag, offset3) := decodeUInt32Le? bytes offset2
+  let some (webSocketTag, offset3) := decodeUInt32LeAt? bytes offset2
     | throw (IO.userError "invalid HTTP server request payload")
-  let some (pathLen, offset4) := decodeUInt32Le? bytes offset3
+  let some (pathLen, offset4) := decodeUInt32LeAt? bytes offset3
     | throw (IO.userError "invalid HTTP server request payload")
-  let pathLenNat := pathLen.toNat
-  let path ← decodeUtf8At bytes offset4 pathLenNat
-  let offset5 := offset4 + pathLenNat
-  let some (headersLen, offset6) := decodeUInt32Le? bytes offset5
+  let (path, offset5) ← decodeUtf8AtAndNext bytes offset4 pathLen
+  let some (headersLen, offset6) := decodeUInt32LeAt? bytes offset5
     | throw (IO.userError "invalid HTTP server request payload")
-  let headersLenNat := headersLen.toNat
-  if offset6 + headersLenNat ≤ bytes.size then
-    let headerBytes := bytes.extract offset6 (offset6 + headersLenNat)
-    let headers ← decodeHeaders headerBytes
-    let offset7 := offset6 + headersLenNat
-    let some (bodyLen, offset8) := decodeUInt32Le? bytes offset7
-      | throw (IO.userError "invalid HTTP server request payload")
-    let bodyLenNat := bodyLen.toNat
-    if offset8 + bodyLenNat ≤ bytes.size then
-      let body := bytes.extract offset8 (offset8 + bodyLenNat)
-      let offset9 := offset8 + bodyLenNat
-      let bodyStream? ←
-        if offset9 == bytes.size then
+  let some (headerBytes, offset7) := sliceAtAndNext? bytes offset6 headersLen
+    | throw (IO.userError "invalid HTTP server request payload")
+  let headers ← decodeHeaders headerBytes
+  let some (bodyLen, offset8) := decodeUInt32LeAt? bytes offset7
+    | throw (IO.userError "invalid HTTP server request payload")
+  let some (body, offset9) := sliceAtAndNext? bytes offset8 bodyLen
+    | throw (IO.userError "invalid HTTP server request payload")
+  let bodyStream? ←
+    if offset9.toNat == bytes.size then
+      pure none
+    else
+      let some (bodyHandle, offset10) := decodeUInt32LeAt? bytes offset9
+        | throw (IO.userError "invalid HTTP server request payload")
+      if offset10.toNat == bytes.size then
+        if bodyHandle == 0 then
           pure none
         else
-          let some (bodyHandle, offset10) := decodeUInt32Le? bytes offset9
-            | throw (IO.userError "invalid HTTP server request payload")
-          if offset10 == bytes.size then
-            if bodyHandle == 0 then
-              pure none
-            else
-              pure (some { runtime := runtime, handle := bodyHandle })
-          else
-            throw (IO.userError "invalid HTTP server request payload: trailing bytes")
-      return {
-        requestId := requestId
-        method := (← httpMethodFromTag methodTag)
-        webSocketRequested := (webSocketTag != 0)
-        path := path
-        headers := headers
-        body := body
-        bodyStream? := bodyStream?
-      }
-    else
-      throw (IO.userError "invalid HTTP server request payload")
-  else
-    throw (IO.userError "invalid HTTP server request payload")
+          pure (some { runtime := runtime, handle := bodyHandle })
+      else
+        throw (IO.userError "invalid HTTP server request payload: trailing bytes")
+  return {
+    requestId := requestId
+    method := (← httpMethodFromTag methodTag)
+    webSocketRequested := (webSocketTag != 0)
+    path := path
+    headers := headers
+    body := body
+    bodyStream? := bodyStream?
+  }
 
 @[inline] private def drainHttpServerRequestBody (request : HttpServerRequest) :
     IO HttpServerRequest := do
@@ -2104,18 +2108,10 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     handle := (← ffiRuntimeWebSocketCloseStartImpl runtime.handle webSocket.handle code reason)
   }
 
-@[inline] def webSocketCloseStart (runtime : Runtime) (webSocket : WebSocket)
-    (code : UInt16) (reason : String := "") : IO PromiseRef := do
-  runtime.webSocketCloseStartCode webSocket code.toUInt32 reason
-
 @[inline] def webSocketCloseCode (runtime : Runtime) (webSocket : WebSocket)
     (code : UInt32) (reason : String := "") : IO Unit := do
   let promise ← runtime.webSocketCloseStartCode webSocket code reason
   ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
-
-@[inline] def webSocketClose (runtime : Runtime) (webSocket : WebSocket)
-    (code : UInt16) (reason : String := "") : IO Unit := do
-  runtime.webSocketCloseCode webSocket code.toUInt32 reason
 
 @[inline] def webSocketDisconnect (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
@@ -3231,34 +3227,19 @@ namespace WebSocket
       webSocket.runtime.handle webSocket.handle code reason)
   }
 
-@[inline] def closeStart (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : IO PromiseRef := do
-  webSocket.closeStartCode code.toUInt32 reason
-
 @[inline] def closeAsTaskCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : IO (Task (Except IO.Error Unit)) := do
   let promise ← webSocket.closeStartCode code reason
   promise.awaitAsTask
 
-@[inline] def closeAsTask (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : IO (Task (Except IO.Error Unit)) := do
-  webSocket.closeAsTaskCode code.toUInt32 reason
-
 @[inline] def closeAsPromiseCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← webSocket.closeAsTaskCode code reason))
-
-@[inline] def closeAsPromise (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : IO (Capnp.Async.Promise Unit) := do
-  webSocket.closeAsPromiseCode code.toUInt32 reason
 
 @[inline] def closeCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : IO Unit := do
   let promise ← webSocket.closeStartCode code reason
   promise.await
-
-@[inline] def close (webSocket : WebSocket) (code : UInt16) (reason : String := "") : IO Unit := do
-  webSocket.closeCode code.toUInt32 reason
 
 @[inline] def disconnect (webSocket : WebSocket) : IO Unit :=
   ffiRuntimeWebSocketDisconnectImpl webSocket.runtime.handle webSocket.handle
@@ -4172,35 +4153,19 @@ namespace RuntimeM
     (reason : String := "") : RuntimeM PromiseRef := do
   Runtime.webSocketCloseStartCode (← runtime) webSocket code reason
 
-@[inline] def webSocketCloseStart (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : RuntimeM PromiseRef := do
-  webSocketCloseStartCode webSocket code.toUInt32 reason
-
 @[inline] def webSocketCloseAsTaskCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM (Task (Except IO.Error Unit)) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.closeAsTaskCode code reason
-
-@[inline] def webSocketCloseAsTask (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : RuntimeM (Task (Except IO.Error Unit)) := do
-  webSocketCloseAsTaskCode webSocket code.toUInt32 reason
 
 @[inline] def webSocketCloseAsPromiseCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.closeAsPromiseCode code reason
 
-@[inline] def webSocketCloseAsPromise (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : RuntimeM (Capnp.Async.Promise Unit) := do
-  webSocketCloseAsPromiseCode webSocket code.toUInt32 reason
-
 @[inline] def webSocketCloseCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM Unit := do
   webSocket.closeCode code reason
-
-@[inline] def webSocketClose (webSocket : WebSocket) (code : UInt16)
-    (reason : String := "") : RuntimeM Unit := do
-  webSocketCloseCode webSocket code.toUInt32 reason
 
 @[inline] def webSocketDisconnect (webSocket : WebSocket) : RuntimeM Unit := do
   webSocket.disconnect
