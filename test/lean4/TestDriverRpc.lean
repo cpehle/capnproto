@@ -56,6 +56,7 @@ private def parityCriticalTests : Array Lean.Name := #[
 
   -- Flow control and trace observability.
   `testRuntimeClientQueueMetrics,
+  `testRuntimeClientQueueMetricsPreAcceptBacklogDrains,
   `testRuntimeClientSetFlowLimit,
   `testRuntimeTraceEncoderToggle,
   `testRuntimeSetTraceEncoderOnExistingConnection,

@@ -57,6 +57,10 @@ jobs:
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
+      - name: Validate Lean4 RPC parity matrix
+        if: matrix.driver == 'super-test' && matrix.clang == 20
+        run: |
+            python3 test/lean4/scripts/validate_parity_matrix.py
       - name: Lean4 RPC/KjAsync parity-critical tests
         if: matrix.driver == 'super-test' && matrix.clang == 20
         run: |
@@ -92,6 +96,9 @@ jobs:
       - name: super-test
         run: |
             ./super-test.sh quick
+      - name: Validate Lean4 RPC parity matrix
+        run: |
+            python3 test/lean4/scripts/validate_parity_matrix.py
       - name: Lean4 RPC/KjAsync parity-critical tests
         run: |
             curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y

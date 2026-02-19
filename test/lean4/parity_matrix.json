@@ -103,5 +103,26 @@
     ],
     "status": "partial",
     "notes": "Baseline streaming and FD passing exist; FD-limit and broader platform-gated coverage remain."
+  },
+  {
+    "behaviorClass": "RPC/KjAsync runtime-handle bridge helpers",
+    "cxxReferences": [
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"basics\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"tail call\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"cancellation\")"
+    ],
+    "leanTests": [
+      "Test.KjAsync.testKjAsyncPromiseOpsOnRpcRuntimeHandle",
+      "Test.KjAsync.testKjAsyncTaskSetOpsOnRpcRuntimeHandle",
+      "Test.KjAsync.testKjAsyncPipeFdOpsOnRpcRuntimeHandle",
+      "Test.KjAsync.testRpcRuntimeMRunKjAsyncBridge",
+      "Test.KjAsync.testRpcRuntimeRunKjAsyncBridgeHelpers",
+      "Test.KjAsync.testRpcRuntimeMWithKjAsyncRuntimeHelpers",
+      "Test.RpcClient.testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime",
+      "Test.RpcClient.testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread",
+      "Test.RpcClient.testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers"
+    ],
+    "status": "partial",
+    "notes": "Lean runtime-handle bridge helpers are covered for promises/tasks/fd primitives and worker-thread safety."
   }
 ]
