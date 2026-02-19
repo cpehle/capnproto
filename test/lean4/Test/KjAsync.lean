@@ -205,6 +205,49 @@ def testKjAsyncSharedAsyncHelpers : IO Unit := do
     finally
       left.release
       right.release
+
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    try
+      let connectTask ←
+        runtime.webSocketConnectAsTask "127.0.0.1" "/lean-ws-task-helper" server.boundPort
+      let requestA ← waitForHttpServerRequest runtime server
+      assertEqual requestA.path "/lean-ws-task-helper"
+      assertEqual requestA.webSocketRequested true
+      let serverWsA ← runtime.httpServerRespondWebSocket server requestA.requestId
+      let clientWsA ←
+        match (← IO.wait connectTask) with
+        | .ok webSocket => pure webSocket
+        | .error err =>
+          throw (IO.userError s!"Runtime.webSocketConnectAsTask failed: {err}")
+      (← clientWsA.sendTextAsPromise "task-connect-payload").await
+      match (← serverWsA.receive) with
+      | .text value =>
+        assertEqual value "task-connect-payload"
+      | _ =>
+        throw (IO.userError "expected text websocket message for connect task helper")
+      clientWsA.release
+      serverWsA.release
+
+      let connectPromise ← runtime.webSocketConnectWithHeadersAsPromise
+        "127.0.0.1" "/lean-ws-promise-helper"
+        #[{ name := "x-ws-helper", value := "1" }] server.boundPort
+      let requestB ← waitForHttpServerRequest runtime server
+      assertEqual requestB.path "/lean-ws-promise-helper"
+      assertTrue
+        (requestB.headers.any (fun h => h.name == "x-ws-helper" && h.value == "1"))
+        "expected x-ws-helper request header for promise helper"
+      let serverWsB ← runtime.httpServerRespondWebSocket server requestB.requestId
+      let clientWsB ← connectPromise.await
+      (← serverWsB.sendTextAsPromise "promise-connect-payload").await
+      match (← clientWsB.receive) with
+      | .text value =>
+        assertEqual value "promise-connect-payload"
+      | _ =>
+        throw (IO.userError "expected text websocket message for connect promise helper")
+      clientWsB.release
+      serverWsB.release
+    finally
+      server.release
   finally
     runtime.shutdown
 
@@ -1319,6 +1362,78 @@ def testKjAsyncDatagramPeerRoundtripConveniences : IO Unit := do
     rightRuntime.shutdown
 
 @[test]
+def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverPort ← receiverRuntime.datagramBind "127.0.0.1" 0
+    let receiverPortNumber ← receiverPort.getPort
+    let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
+    let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 9))
+
+    let receiveTask ← receiverRuntime.datagramReceiveAsTask receiverPort (UInt32.ofNat 1024)
+    let sendPromise ←
+      senderRuntime.datagramSendAsPromise senderPort "127.0.0.1" payload receiverPortNumber
+    let sentCount ← sendPromise.await
+    assertEqual sentCount (UInt32.ofNat payload.size)
+    let (_source, bytes) ←
+      match (← IO.wait receiveTask) with
+      | .ok datagram => pure datagram
+      | .error err =>
+        throw (IO.userError s!"datagramReceiveAsTask failed: {err}")
+    assertEqual bytes payload
+
+    let receivePromise ← receiverPort.receiveAsPromise (UInt32.ofNat 1024)
+    let sendTask ← senderPort.sendAsTask "127.0.0.1" payload receiverPortNumber
+    let sentCount2 ←
+      match (← IO.wait sendTask) with
+      | .ok value => pure value
+      | .error err =>
+        throw (IO.userError s!"DatagramPort.sendAsTask failed: {err}")
+    assertEqual sentCount2 (UInt32.ofNat payload.size)
+    let (_source2, bytes2) ← receivePromise.await
+    assertEqual bytes2 payload
+
+    let leftSeedPeer ← senderRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
+    let rightSeedPeer ← receiverRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
+    let leftPortNumber ← leftSeedPeer.port.getPort
+    let rightPortNumber ← rightSeedPeer.port.getPort
+    let leftPeer : Capnp.KjAsync.DatagramPeer := { leftSeedPeer with remotePort := rightPortNumber }
+    let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
+    let peerPayload := appendByteArray payload (ByteArray.empty.push (UInt8.ofNat 3))
+    try
+      let peerReceivePromise ← rightPeer.receiveAsPromise (UInt32.ofNat 1024)
+      let peerSendTask ← leftPeer.sendAsTask peerPayload
+      let peerSentCount ←
+        match (← IO.wait peerSendTask) with
+        | .ok value => pure value
+        | .error err =>
+          throw (IO.userError s!"DatagramPeer.sendAsTask failed: {err}")
+      assertEqual peerSentCount (UInt32.ofNat peerPayload.size)
+      let (_peerSource, peerBytes) ← peerReceivePromise.await
+      assertEqual peerBytes peerPayload
+
+      let reverseReceiveTask ← leftPeer.receiveAsTask (UInt32.ofNat 1024)
+      let reverseSendPromise ← rightPeer.sendAsPromise payload
+      let reverseSentCount ← reverseSendPromise.await
+      assertEqual reverseSentCount (UInt32.ofNat payload.size)
+      let (_reverseSource, reverseBytes) ←
+        match (← IO.wait reverseReceiveTask) with
+        | .ok datagram => pure datagram
+        | .error err =>
+          throw (IO.userError s!"DatagramPeer.receiveAsTask failed: {err}")
+      assertEqual reverseBytes payload
+    finally
+      leftPeer.release
+      rightPeer.release
+
+    senderPort.release
+    receiverPort.release
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
+
+@[test]
 def testKjAsyncWebSocketPipeAsyncSendReceive : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -1347,6 +1462,46 @@ def testKjAsyncWebSocketPipeAsyncSendReceive : IO Unit := do
 
     left.release
     right.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncWebSocketTaskAndPromiseHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newWebSocketPipe
+    try
+      let receiveTextPromise ← right.receiveAsPromise
+      let sendTextTask ← left.sendTextAsTask "lean-kjasync-text-task"
+      match (← IO.wait sendTextTask) with
+      | .ok () => pure ()
+      | .error err =>
+        throw (IO.userError s!"WebSocket.sendTextAsTask failed: {err}")
+      let textMessage ← receiveTextPromise.await
+      match textMessage with
+      | .text value =>
+        assertEqual value "lean-kjasync-text-task"
+      | _ =>
+        throw (IO.userError "expected websocket text message from receiveAsPromise")
+
+      let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 5))
+      let receiveBinaryTask ← right.receiveWithMaxAsTask (UInt32.ofNat 1024)
+      let sendBinaryPromise ← left.sendBinaryAsPromise payload
+      sendBinaryPromise.await
+      let binaryMessage ←
+        match (← IO.wait receiveBinaryTask) with
+        | .ok message => pure message
+        | .error err =>
+          throw (IO.userError s!"WebSocket.receiveWithMaxAsTask failed: {err}")
+      match binaryMessage with
+      | .binary bytes =>
+        assertEqual bytes payload
+      | _ =>
+        throw (IO.userError "expected websocket binary message from receiveWithMaxAsTask")
+
+    finally
+      left.release
+      right.release
   finally
     runtime.shutdown
 
@@ -1396,6 +1551,158 @@ def testKjAsyncWebSocketReceiveWithMaxRejectsOversize : IO Unit := do
 
     clientWs.release
     serverWs.release
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpRequestTaskAndPromiseHelpers : IO Unit := do
+  let serverRuntime ← Capnp.KjAsync.Runtime.init
+  let clientRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← serverRuntime.httpServerListen "127.0.0.1" 0
+    let requestBodyA := "http-task-helper-a".toUTF8
+    let responseTask ← clientRuntime.httpRequestWithHeadersAsTask
+      .post "127.0.0.1" "/lean-http-task" #[{ name := "x-http-helper", value := "task" }]
+      requestBodyA server.boundPort
+
+    let requestA ← waitForHttpServerRequest serverRuntime server
+    assertEqual requestA.path "/lean-http-task"
+    assertEqual requestA.body requestBodyA
+    serverRuntime.httpServerRespond server requestA.requestId (UInt32.ofNat 201) "Created"
+      #[{ name := "x-http-helper", value := "task-ok" }] requestBodyA
+    -- Pump the server runtime loop so the response flushes before awaiting on client helpers.
+    serverRuntime.sleepMillis (UInt32.ofNat 5)
+
+    let responseA ←
+      match (← IO.wait responseTask) with
+      | .ok response => pure response
+      | .error err =>
+        throw (IO.userError s!"httpRequestWithHeadersAsTask failed: {err}")
+    assertEqual responseA.status (UInt32.ofNat 201)
+    assertEqual responseA.statusText "Created"
+    assertEqual responseA.body requestBodyA
+    assertTrue
+      (responseA.headers.any (fun h => h.name == "x-http-helper" && h.value == "task-ok"))
+      "expected x-http-helper response header for task helper"
+
+    let requestBodyB := "http-task-helper-b".toUTF8
+    let responsePromise ← clientRuntime.httpRequestWithHeadersAsPromise
+      .post "127.0.0.1" "/lean-http-promise" #[{ name := "x-http-helper", value := "promise" }]
+      requestBodyB server.boundPort
+
+    let requestB ← waitForHttpServerRequest serverRuntime server
+    assertEqual requestB.path "/lean-http-promise"
+    assertEqual requestB.body requestBodyB
+    serverRuntime.httpServerRespond server requestB.requestId (UInt32.ofNat 202) "Accepted"
+      #[{ name := "x-http-helper", value := "promise-ok" }] requestBodyB
+    serverRuntime.sleepMillis (UInt32.ofNat 5)
+
+    let responseB ← responsePromise.await
+    assertEqual responseB.status (UInt32.ofNat 202)
+    assertEqual responseB.statusText "Accepted"
+    assertEqual responseB.body requestBodyB
+    assertTrue
+      (responseB.headers.any (fun h => h.name == "x-http-helper" && h.value == "promise-ok"))
+      "expected x-http-helper response header for promise helper"
+
+    server.release
+  finally
+    clientRuntime.shutdown
+    serverRuntime.shutdown
+
+@[test]
+def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestPartA := "stream-helper-request-a".toUTF8
+    let requestPartB := "-and-b".toUTF8
+    let expectedRequestBody := appendByteArray requestPartA requestPartB
+    let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
+      .post "127.0.0.1" "/lean-http-stream-helper"
+      #[{ name := "x-stream-helper", value := "1" }] server.boundPort
+    let requestBody ←
+      match requestBody? with
+      | some body => pure body
+      | none => throw (IO.userError "expected streaming HTTP request body handle")
+
+    let writeTask ← requestBody.writeAsTask requestPartA
+    match (← IO.wait writeTask) with
+    | .ok () => pure ()
+    | .error err =>
+      throw (IO.userError s!"HttpRequestBody.writeAsTask failed: {err}")
+    (← requestBody.writeAsPromise requestPartB).await
+    (← requestBody.finishAsPromise).await
+
+    let request ← waitForHttpServerRequestRaw runtime server
+    assertEqual request.path "/lean-http-stream-helper"
+    let requestBodyStream ←
+      match request.bodyStream? with
+      | some body => pure body
+      | none => throw (IO.userError "expected streamed server request body")
+    let firstChunk ←
+      match (← IO.wait (← requestBodyStream.readAsTask (UInt32.ofNat 1) (UInt32.ofNat 64))) with
+      | .ok chunk => pure chunk
+      | .error err =>
+        throw (IO.userError s!"HttpServerRequestBody.readAsTask failed: {err}")
+    let mut receivedRequestBody := ByteArray.empty
+    let mut done := false
+    if firstChunk.size == 0 then
+      done := true
+    else
+      receivedRequestBody := appendByteArray receivedRequestBody firstChunk
+    while !done do
+      let chunk ← (← requestBodyStream.readAsPromise (UInt32.ofNat 1) (UInt32.ofNat 64)).await
+      if chunk.size == 0 then
+        done := true
+      else
+        receivedRequestBody := appendByteArray receivedRequestBody chunk
+    requestBodyStream.release
+    assertEqual receivedRequestBody expectedRequestBody
+
+    let responseBody ← runtime.httpServerRespondStartStreaming server request.requestId
+      (UInt32.ofNat 203) "Non-Authoritative Information"
+      #[{ name := "x-stream-helper-response", value := "1" }]
+    let responsePartA := "stream-helper-response-a".toUTF8
+    let responsePartB := "-and-b".toUTF8
+    let expectedResponseBody := appendByteArray responsePartA responsePartB
+    match (← IO.wait (← responseBody.writeAsTask responsePartA)) with
+    | .ok () => pure ()
+    | .error err =>
+      throw (IO.userError s!"HttpServerResponseBody.writeAsTask failed: {err}")
+    (← responseBody.writeAsPromise responsePartB).await
+    (← responseBody.finishAsPromise).await
+
+    let response ← responsePromise.awaitStreamingWithHeaders
+    assertEqual response.status (UInt32.ofNat 203)
+    assertEqual response.statusText "Non-Authoritative Information"
+    assertTrue
+      (response.headers.any
+        (fun h => h.name == "x-stream-helper-response" && h.value == "1"))
+      "expected x-stream-helper-response header"
+    let firstResponseChunk ←
+      match (← IO.wait (← response.body.readAsTask (UInt32.ofNat 1) (UInt32.ofNat 64))) with
+      | .ok chunk => pure chunk
+      | .error err =>
+        throw (IO.userError s!"HttpResponseBody.readAsTask failed: {err}")
+    let mut receivedResponseBody := ByteArray.empty
+    let mut responseDone := false
+    if firstResponseChunk.size == 0 then
+      responseDone := true
+    else
+      receivedResponseBody := appendByteArray receivedResponseBody firstResponseChunk
+    while !responseDone do
+      let chunk ← (← response.body.readAsPromise (UInt32.ofNat 1) (UInt32.ofNat 64)).await
+      if chunk.size == 0 then
+        responseDone := true
+      else
+        receivedResponseBody := appendByteArray receivedResponseBody chunk
+    assertEqual receivedResponseBody expectedResponseBody
+    response.body.release
+
+    let drainPromise ← server.drainAsPromise
+    drainPromise.await
     server.release
   finally
     runtime.shutdown

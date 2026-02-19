@@ -1379,6 +1379,18 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   ensureSameRuntime runtime promise.runtime "UInt32PromiseRef"
   ffiRuntimeUInt32PromiseReleaseImpl runtime.handle promise.handle
 
+@[inline] def datagramSendAsTask (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let pending ← runtime.datagramSendStart port address bytes portHint
+  IO.asTask do
+    runtime.uint32PromiseAwait pending
+
+@[inline] def datagramSendAsPromise (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.datagramSendAsTask port address bytes portHint))
+
 @[inline] def datagramReceive (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
@@ -1406,6 +1418,18 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (promise : DatagramReceivePromiseRef) : IO Unit := do
   ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
   ffiRuntimeDatagramReceivePromiseReleaseImpl runtime.handle promise.handle
+
+@[inline] def datagramReceiveAsTask (runtime : Runtime) (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × ByteArray))) := do
+  let pending ← runtime.datagramReceiveStart port maxBytes
+  IO.asTask do
+    runtime.datagramReceivePromiseAwait pending
+
+@[inline] def datagramReceiveAsPromise (runtime : Runtime) (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × ByteArray)) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.datagramReceiveAsTask port maxBytes))
 
 @[inline] def withDatagramPort (runtime : Runtime) (address : String)
     (action : DatagramPort -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -1619,6 +1643,47 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (promise : HttpResponsePromiseRef) : IO Unit := do
   ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   ffiRuntimeHttpResponsePromiseReleaseImpl runtime.handle promise.handle
+
+@[inline] def httpRequestAsTask (runtime : Runtime) (method : HttpMethod) (address : String)
+    (path : String) (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error HttpResponse)) := do
+  IO.asTask do
+    runtime.httpRequest method address path body portHint
+
+@[inline] def httpRequestAsPromise (runtime : Runtime) (method : HttpMethod) (address : String)
+    (path : String) (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise HttpResponse) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.httpRequestAsTask method address path body portHint))
+
+@[inline] def httpRequestWithHeadersAsTask (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error HttpResponseEx)) := do
+  IO.asTask do
+    runtime.httpRequestWithHeaders method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersAsPromise (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise HttpResponseEx) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.httpRequestWithHeadersAsTask method address path requestHeaders body portHint))
+
+@[inline] def httpRequestWithHeadersSecureAsTask (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error HttpResponseEx)) := do
+  IO.asTask do
+    runtime.httpRequestWithHeadersSecure method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersSecureAsPromise (runtime : Runtime) (method : HttpMethod)
+    (address : String) (path : String) (requestHeaders : Array HttpHeader)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise HttpResponseEx) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.httpRequestWithHeadersSecureAsTask method address path requestHeaders body
+      portHint))
 
 @[inline] def httpRequestBodyWriteStart (runtime : Runtime) (requestBody : HttpRequestBody)
     (bytes : ByteArray) : IO PromiseRef := do
@@ -1899,6 +1964,55 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (promise : WebSocketPromiseRef) : IO Unit := do
   ensureSameRuntime runtime promise.runtime "WebSocketPromiseRef"
   ffiRuntimeWebSocketPromiseReleaseImpl runtime.handle promise.handle
+
+@[inline] def webSocketConnectAsTask (runtime : Runtime) (address : String) (path : String)
+    (portHint : UInt32 := 0) : IO (Task (Except IO.Error WebSocket)) := do
+  let pending ← runtime.webSocketConnectStart address path portHint
+  IO.asTask do
+    runtime.webSocketPromiseAwait pending
+
+@[inline] def webSocketConnectAsPromise (runtime : Runtime) (address : String)
+    (path : String) (portHint : UInt32 := 0) : IO (Capnp.Async.Promise WebSocket) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.webSocketConnectAsTask address path portHint))
+
+@[inline] def webSocketConnectSecureAsTask (runtime : Runtime) (address : String)
+    (path : String) (portHint : UInt32 := 0) : IO (Task (Except IO.Error WebSocket)) := do
+  let pending ← runtime.webSocketConnectStartSecure address path portHint
+  IO.asTask do
+    runtime.webSocketPromiseAwait pending
+
+@[inline] def webSocketConnectSecureAsPromise (runtime : Runtime) (address : String)
+    (path : String) (portHint : UInt32 := 0) : IO (Capnp.Async.Promise WebSocket) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.webSocketConnectSecureAsTask address path portHint))
+
+@[inline] def webSocketConnectWithHeadersAsTask (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error WebSocket)) := do
+  let pending ←
+    runtime.webSocketConnectStartWithHeaders address path requestHeaders portHint
+  IO.asTask do
+    runtime.webSocketPromiseAwait pending
+
+@[inline] def webSocketConnectWithHeadersAsPromise (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise WebSocket) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.webSocketConnectWithHeadersAsTask address path requestHeaders portHint))
+
+@[inline] def webSocketConnectWithHeadersSecureAsTask (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error WebSocket)) := do
+  let pending ←
+    runtime.webSocketConnectStartWithHeadersSecure address path requestHeaders portHint
+  IO.asTask do
+    runtime.webSocketPromiseAwait pending
+
+@[inline] def webSocketConnectWithHeadersSecureAsPromise (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise WebSocket) := do
+  pure (Capnp.Async.Promise.ofTask
+    (← runtime.webSocketConnectWithHeadersSecureAsTask address path requestHeaders portHint))
 
 @[inline] def webSocketRelease (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
@@ -2665,6 +2779,27 @@ namespace DatagramPort
     handle := (← ffiRuntimeDatagramReceiveStartImpl port.runtime.handle port.handle maxBytes)
   }
 
+@[inline] def sendAsTask (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let promise ← port.sendStart address bytes portHint
+  promise.awaitAsTask
+
+@[inline] def sendAsPromise (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← port.sendAsTask address bytes portHint))
+
+@[inline] def receiveAsTask (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × ByteArray))) := do
+  let promise ← port.receiveStart maxBytes
+  IO.asTask do
+    ffiRuntimeDatagramReceivePromiseAwaitImpl port.runtime.handle promise.handle
+
+@[inline] def receiveAsPromise (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × ByteArray)) := do
+  pure (Capnp.Async.Promise.ofTask (← port.receiveAsTask maxBytes))
+
 @[inline] def sendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
   let promise ← port.sendStart address bytes portHint
@@ -2695,6 +2830,15 @@ namespace DatagramPeer
 @[inline] def sendStart (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32PromiseRef :=
   peer.port.sendStart peer.remoteAddress bytes peer.remotePort
 
+@[inline] def sendAsTask (peer : DatagramPeer) (bytes : ByteArray) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let promise ← peer.sendStart bytes
+  promise.awaitAsTask
+
+@[inline] def sendAsPromise (peer : DatagramPeer) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← peer.sendAsTask bytes))
+
 @[inline] def sendAwait (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32 := do
   peer.port.sendAwait peer.remoteAddress bytes peer.remotePort
 
@@ -2705,6 +2849,14 @@ namespace DatagramPeer
 @[inline] def receiveStart (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef :=
   peer.port.receiveStart maxBytes
+
+@[inline] def receiveAsTask (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × ByteArray))) :=
+  peer.port.receiveAsTask maxBytes
+
+@[inline] def receiveAsPromise (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × ByteArray)) :=
+  peer.port.receiveAsPromise maxBytes
 
 @[inline] def receiveMany (peer : DatagramPeer) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : IO (Array (String × ByteArray)) :=
@@ -2760,6 +2912,13 @@ namespace HttpServer
     handle := (← ffiRuntimeHttpServerDrainStartImpl server.runtime.handle server.handle)
   }
 
+@[inline] def drainAsTask (server : HttpServer) : IO (Task (Except IO.Error Unit)) := do
+  let promise ← server.drainStart
+  promise.awaitAsTask
+
+@[inline] def drainAsPromise (server : HttpServer) : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← server.drainAsTask))
+
 @[inline] def drain (server : HttpServer) : IO Unit :=
   ffiRuntimeHttpServerDrainImpl server.runtime.handle server.handle
 
@@ -2809,6 +2968,15 @@ namespace HttpRequestBody
       requestBody.runtime.handle requestBody.handle bytes)
   }
 
+@[inline] def writeAsTask (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← requestBody.writeStart bytes
+  promise.awaitAsTask
+
+@[inline] def writeAsPromise (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← requestBody.writeAsTask bytes))
+
 @[inline] def write (requestBody : HttpRequestBody) (bytes : ByteArray) : IO Unit := do
   let promise ← requestBody.writeStart bytes
   promise.await
@@ -2819,6 +2987,15 @@ namespace HttpRequestBody
     handle := (← ffiRuntimeHttpRequestBodyFinishStartImpl
       requestBody.runtime.handle requestBody.handle)
   }
+
+@[inline] def finishAsTask (requestBody : HttpRequestBody) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← requestBody.finishStart
+  promise.awaitAsTask
+
+@[inline] def finishAsPromise (requestBody : HttpRequestBody) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← requestBody.finishAsTask))
 
 @[inline] def finish (requestBody : HttpRequestBody) : IO Unit := do
   let promise ← requestBody.finishStart
@@ -2838,6 +3015,15 @@ namespace HttpResponseBody
     handle := (← ffiRuntimeHttpResponseBodyReadStartImpl
       responseBody.runtime.handle responseBody.handle minBytes maxBytes)
   }
+
+@[inline] def readAsTask (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error ByteArray)) := do
+  let promise ← responseBody.readStart minBytes maxBytes
+  promise.awaitAsTask
+
+@[inline] def readAsPromise (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← responseBody.readAsTask minBytes maxBytes))
 
 @[inline] def read (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
     IO ByteArray :=
@@ -2859,6 +3045,15 @@ namespace HttpServerRequestBody
       requestBody.handle minBytes maxBytes)
   }
 
+@[inline] def readAsTask (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error ByteArray)) := do
+  let promise ← requestBody.readStart minBytes maxBytes
+  promise.awaitAsTask
+
+@[inline] def readAsPromise (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← requestBody.readAsTask minBytes maxBytes))
+
 @[inline] def read (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO ByteArray :=
   ffiRuntimeHttpServerRequestBodyReadImpl requestBody.runtime.handle requestBody.handle
@@ -2879,6 +3074,15 @@ namespace HttpServerResponseBody
       responseBody.handle bytes)
   }
 
+@[inline] def writeAsTask (responseBody : HttpServerResponseBody) (bytes : ByteArray) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← responseBody.writeStart bytes
+  promise.awaitAsTask
+
+@[inline] def writeAsPromise (responseBody : HttpServerResponseBody) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← responseBody.writeAsTask bytes))
+
 @[inline] def write (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO Unit := do
   let promise ← responseBody.writeStart bytes
   promise.await
@@ -2889,6 +3093,15 @@ namespace HttpServerResponseBody
     handle := (← ffiRuntimeHttpServerResponseBodyFinishStartImpl responseBody.runtime.handle
       responseBody.handle)
   }
+
+@[inline] def finishAsTask (responseBody : HttpServerResponseBody) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← responseBody.finishStart
+  promise.awaitAsTask
+
+@[inline] def finishAsPromise (responseBody : HttpServerResponseBody) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← responseBody.finishAsTask))
 
 @[inline] def finish (responseBody : HttpServerResponseBody) : IO Unit := do
   let promise ← responseBody.finishStart
@@ -2911,6 +3124,15 @@ namespace WebSocket
       webSocket.runtime.handle webSocket.handle text)
   }
 
+@[inline] def sendTextAsTask (webSocket : WebSocket) (text : String) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← webSocket.sendTextStart text
+  promise.awaitAsTask
+
+@[inline] def sendTextAsPromise (webSocket : WebSocket) (text : String) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.sendTextAsTask text))
+
 @[inline] def sendText (webSocket : WebSocket) (text : String) : IO Unit := do
   let promise ← webSocket.sendTextStart text
   promise.await
@@ -2921,6 +3143,15 @@ namespace WebSocket
     handle := (← ffiRuntimeWebSocketSendBinaryStartImpl
       webSocket.runtime.handle webSocket.handle bytes)
   }
+
+@[inline] def sendBinaryAsTask (webSocket : WebSocket) (bytes : ByteArray) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← webSocket.sendBinaryStart bytes
+  promise.awaitAsTask
+
+@[inline] def sendBinaryAsPromise (webSocket : WebSocket) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.sendBinaryAsTask bytes))
 
 @[inline] def sendBinary (webSocket : WebSocket) (bytes : ByteArray) : IO Unit := do
   let promise ← webSocket.sendBinaryStart bytes
@@ -2939,6 +3170,24 @@ namespace WebSocket
     handle := (← ffiRuntimeWebSocketReceiveStartWithMaxImpl webSocket.runtime.handle
       webSocket.handle maxBytes)
   }
+
+@[inline] def receiveAsTask (webSocket : WebSocket) :
+    IO (Task (Except IO.Error WebSocketMessage)) := do
+  let promise ← webSocket.receiveStart
+  promise.awaitAsTask
+
+@[inline] def receiveAsPromise (webSocket : WebSocket) :
+    IO (Capnp.Async.Promise WebSocketMessage) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.receiveAsTask))
+
+@[inline] def receiveWithMaxAsTask (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO (Task (Except IO.Error WebSocketMessage)) := do
+  let promise ← webSocket.receiveStartWithMax maxBytes
+  promise.awaitAsTask
+
+@[inline] def receiveWithMaxAsPromise (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO (Capnp.Async.Promise WebSocketMessage) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.receiveWithMaxAsTask maxBytes))
 
 @[inline] def receive (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← webSocket.receiveStart
@@ -2959,6 +3208,15 @@ namespace WebSocket
     handle := (← ffiRuntimeWebSocketCloseStartImpl webSocket.runtime.handle
       webSocket.handle code.toUInt32 reason)
   }
+
+@[inline] def closeAsTask (webSocket : WebSocket) (code : UInt16)
+    (reason : String := "") : IO (Task (Except IO.Error Unit)) := do
+  let promise ← webSocket.closeStart code reason
+  promise.awaitAsTask
+
+@[inline] def closeAsPromise (webSocket : WebSocket) (code : UInt16)
+    (reason : String := "") : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.closeAsTask code reason))
 
 @[inline] def close (webSocket : WebSocket) (code : UInt16) (reason : String := "") : IO Unit := do
   let promise ← webSocket.closeStart code reason
@@ -3266,6 +3524,16 @@ namespace RuntimeM
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32PromiseRef := do
   Runtime.datagramSendStart (← runtime) port address bytes portHint
 
+@[inline] def datagramSendAsTask (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error UInt32)) := do
+  Runtime.datagramSendAsTask (← runtime) port address bytes portHint
+
+@[inline] def datagramSendAsPromise (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise UInt32) := do
+  Runtime.datagramSendAsPromise (← runtime) port address bytes portHint
+
 @[inline] def datagramSendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
   port.sendAwait address bytes portHint
@@ -3281,6 +3549,16 @@ namespace RuntimeM
     (bytes : ByteArray) : RuntimeM UInt32PromiseRef := do
   peer.sendStart bytes
 
+@[inline] def datagramPeerSendAsTask (peer : DatagramPeer) (bytes : ByteArray) :
+    RuntimeM (Task (Except IO.Error UInt32)) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendAsTask bytes
+
+@[inline] def datagramPeerSendAsPromise (peer : DatagramPeer) (bytes : ByteArray) :
+    RuntimeM (Capnp.Async.Promise UInt32) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendAsPromise bytes
+
 @[inline] def datagramPeerSendAwait (peer : DatagramPeer) (bytes : ByteArray) :
     RuntimeM UInt32 := do
   peer.sendAwait bytes
@@ -3292,6 +3570,16 @@ namespace RuntimeM
 @[inline] def datagramPeerReceiveStart (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
   peer.receiveStart maxBytes
+
+@[inline] def datagramPeerReceiveAsTask (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Task (Except IO.Error (String × ByteArray))) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.receiveAsTask maxBytes
+
+@[inline] def datagramPeerReceiveAsPromise (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) : RuntimeM (Capnp.Async.Promise (String × ByteArray)) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.receiveAsPromise maxBytes
 
 @[inline] def datagramPeerReceiveMany (peer : DatagramPeer) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
@@ -3316,6 +3604,14 @@ namespace RuntimeM
 @[inline] def datagramReceiveStart (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
   Runtime.datagramReceiveStart (← runtime) port maxBytes
+
+@[inline] def datagramReceiveAsTask (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Task (Except IO.Error (String × ByteArray))) := do
+  Runtime.datagramReceiveAsTask (← runtime) port maxBytes
+
+@[inline] def datagramReceiveAsPromise (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Capnp.Async.Promise (String × ByteArray)) := do
+  Runtime.datagramReceiveAsPromise (← runtime) port maxBytes
 
 @[inline] def datagramReceiveMany (port : DatagramPort) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
@@ -3379,6 +3675,16 @@ namespace RuntimeM
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStart (← runtime) method address path body portHint
 
+@[inline] def httpRequestAsTask (method : HttpMethod) (address : String) (path : String)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error HttpResponse)) := do
+  Runtime.httpRequestAsTask (← runtime) method address path body portHint
+
+@[inline] def httpRequestAsPromise (method : HttpMethod) (address : String) (path : String)
+    (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise HttpResponse) := do
+  Runtime.httpRequestAsPromise (← runtime) method address path body portHint
+
 @[inline] def httpRequestStartWithResponseLimit (method : HttpMethod) (address : String)
     (path : String) (responseBodyLimit : UInt64) (body : ByteArray := ByteArray.empty)
     (portHint : UInt32 := 0) : RuntimeM HttpResponsePromiseRef := do
@@ -3391,11 +3697,34 @@ namespace RuntimeM
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStartWithHeaders (← runtime) method address path requestHeaders body portHint
 
+@[inline] def httpRequestWithHeadersAsTask (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error HttpResponseEx)) := do
+  Runtime.httpRequestWithHeadersAsTask (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersAsPromise (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Capnp.Async.Promise HttpResponseEx) := do
+  Runtime.httpRequestWithHeadersAsPromise
+    (← runtime) method address path requestHeaders body portHint
+
 @[inline] def httpRequestStartWithHeadersSecure (method : HttpMethod) (address : String)
     (path : String) (requestHeaders : Array HttpHeader)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     RuntimeM HttpResponsePromiseRef := do
   Runtime.httpRequestStartWithHeadersSecure
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersSecureAsTask (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error HttpResponseEx)) := do
+  Runtime.httpRequestWithHeadersSecureAsTask
+    (← runtime) method address path requestHeaders body portHint
+
+@[inline] def httpRequestWithHeadersSecureAsPromise (method : HttpMethod) (address : String)
+    (path : String) (requestHeaders : Array HttpHeader) (body : ByteArray := ByteArray.empty)
+    (portHint : UInt32 := 0) : RuntimeM (Capnp.Async.Promise HttpResponseEx) := do
+  Runtime.httpRequestWithHeadersSecureAsPromise
     (← runtime) method address path requestHeaders body portHint
 
 @[inline] def httpRequestStartStreamingWithHeaders (method : HttpMethod) (address : String)
@@ -3445,12 +3774,32 @@ namespace RuntimeM
     RuntimeM PromiseRef := do
   Runtime.httpRequestBodyWriteStart (← runtime) requestBody bytes
 
+@[inline] def httpRequestBodyWriteAsTask (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.writeAsTask bytes
+
+@[inline] def httpRequestBodyWriteAsPromise (requestBody : HttpRequestBody) (bytes : ByteArray) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.writeAsPromise bytes
+
 @[inline] def httpRequestBodyWrite (requestBody : HttpRequestBody) (bytes : ByteArray) :
     RuntimeM Unit := do
   Runtime.httpRequestBodyWrite (← runtime) requestBody bytes
 
 @[inline] def httpRequestBodyFinishStart (requestBody : HttpRequestBody) : RuntimeM PromiseRef := do
   Runtime.httpRequestBodyFinishStart (← runtime) requestBody
+
+@[inline] def httpRequestBodyFinishAsTask (requestBody : HttpRequestBody) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.finishAsTask
+
+@[inline] def httpRequestBodyFinishAsPromise (requestBody : HttpRequestBody) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.finishAsPromise
 
 @[inline] def httpRequestBodyFinish (requestBody : HttpRequestBody) : RuntimeM Unit := do
   Runtime.httpRequestBodyFinish (← runtime) requestBody
@@ -3462,6 +3811,16 @@ namespace RuntimeM
     (minBytes maxBytes : UInt32) : RuntimeM BytesPromiseRef := do
   Runtime.httpResponseBodyReadStart (← runtime) responseBody minBytes maxBytes
 
+@[inline] def httpResponseBodyReadAsTask (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Task (Except IO.Error ByteArray)) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
+  responseBody.readAsTask minBytes maxBytes
+
+@[inline] def httpResponseBodyReadAsPromise (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise ByteArray) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
+  responseBody.readAsPromise minBytes maxBytes
+
 @[inline] def httpResponseBodyRead (responseBody : HttpResponseBody)
     (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
   Runtime.httpResponseBodyRead (← runtime) responseBody minBytes maxBytes
@@ -3472,6 +3831,16 @@ namespace RuntimeM
 @[inline] def httpServerRequestBodyReadStart (requestBody : HttpServerRequestBody)
     (minBytes maxBytes : UInt32) : RuntimeM BytesPromiseRef := do
   Runtime.httpServerRequestBodyReadStart (← runtime) requestBody minBytes maxBytes
+
+@[inline] def httpServerRequestBodyReadAsTask (requestBody : HttpServerRequestBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Task (Except IO.Error ByteArray)) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
+  requestBody.readAsTask minBytes maxBytes
+
+@[inline] def httpServerRequestBodyReadAsPromise (requestBody : HttpServerRequestBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise ByteArray) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
+  requestBody.readAsPromise minBytes maxBytes
 
 @[inline] def httpServerRequestBodyRead (requestBody : HttpServerRequestBody)
     (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
@@ -3511,6 +3880,16 @@ namespace RuntimeM
 @[inline] def httpServerDrainStart (server : HttpServer) : RuntimeM PromiseRef := do
   Runtime.httpServerDrainStart (← runtime) server
 
+@[inline] def httpServerDrainAsTask (server : HttpServer) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) server.runtime "HttpServer"
+  server.drainAsTask
+
+@[inline] def httpServerDrainAsPromise (server : HttpServer) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) server.runtime "HttpServer"
+  server.drainAsPromise
+
 @[inline] def httpServerDrain (server : HttpServer) : RuntimeM Unit := do
   Runtime.httpServerDrain (← runtime) server
 
@@ -3541,6 +3920,16 @@ namespace RuntimeM
     (bytes : ByteArray) : RuntimeM PromiseRef := do
   Runtime.httpServerResponseBodyWriteStart (← runtime) responseBody bytes
 
+@[inline] def httpServerResponseBodyWriteAsTask (responseBody : HttpServerResponseBody)
+    (bytes : ByteArray) : RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.writeAsTask bytes
+
+@[inline] def httpServerResponseBodyWriteAsPromise (responseBody : HttpServerResponseBody)
+    (bytes : ByteArray) : RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.writeAsPromise bytes
+
 @[inline] def httpServerResponseBodyWrite (responseBody : HttpServerResponseBody)
     (bytes : ByteArray) : RuntimeM Unit := do
   Runtime.httpServerResponseBodyWrite (← runtime) responseBody bytes
@@ -3548,6 +3937,16 @@ namespace RuntimeM
 @[inline] def httpServerResponseBodyFinishStart (responseBody : HttpServerResponseBody) :
     RuntimeM PromiseRef := do
   Runtime.httpServerResponseBodyFinishStart (← runtime) responseBody
+
+@[inline] def httpServerResponseBodyFinishAsTask (responseBody : HttpServerResponseBody) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.finishAsTask
+
+@[inline] def httpServerResponseBodyFinishAsPromise (responseBody : HttpServerResponseBody) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.finishAsPromise
 
 @[inline] def httpServerResponseBodyFinish (responseBody : HttpServerResponseBody) :
     RuntimeM Unit := do
@@ -3579,19 +3978,58 @@ namespace RuntimeM
     (portHint : UInt32 := 0) : RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStart (← runtime) address path portHint
 
+@[inline] def webSocketConnectAsTask (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error WebSocket)) := do
+  Runtime.webSocketConnectAsTask (← runtime) address path portHint
+
+@[inline] def webSocketConnectAsPromise (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM (Capnp.Async.Promise WebSocket) := do
+  Runtime.webSocketConnectAsPromise (← runtime) address path portHint
+
 @[inline] def webSocketConnectStartSecure (address : String) (path : String)
     (portHint : UInt32 := 0) : RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStartSecure (← runtime) address path portHint
+
+@[inline] def webSocketConnectSecureAsTask (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM (Task (Except IO.Error WebSocket)) := do
+  Runtime.webSocketConnectSecureAsTask (← runtime) address path portHint
+
+@[inline] def webSocketConnectSecureAsPromise (address : String) (path : String)
+    (portHint : UInt32 := 0) : RuntimeM (Capnp.Async.Promise WebSocket) := do
+  Runtime.webSocketConnectSecureAsPromise (← runtime) address path portHint
 
 @[inline] def webSocketConnectStartWithHeaders (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStartWithHeaders (← runtime) address path requestHeaders portHint
 
+@[inline] def webSocketConnectWithHeadersAsTask (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error WebSocket)) := do
+  Runtime.webSocketConnectWithHeadersAsTask (← runtime) address path requestHeaders portHint
+
+@[inline] def webSocketConnectWithHeadersAsPromise (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise WebSocket) := do
+  Runtime.webSocketConnectWithHeadersAsPromise
+    (← runtime) address path requestHeaders portHint
+
 @[inline] def webSocketConnectStartWithHeadersSecure (address : String) (path : String)
     (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     RuntimeM WebSocketPromiseRef := do
   Runtime.webSocketConnectStartWithHeadersSecure (← runtime) address path requestHeaders portHint
+
+@[inline] def webSocketConnectWithHeadersSecureAsTask (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error WebSocket)) := do
+  Runtime.webSocketConnectWithHeadersSecureAsTask
+    (← runtime) address path requestHeaders portHint
+
+@[inline] def webSocketConnectWithHeadersSecureAsPromise (address : String) (path : String)
+    (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise WebSocket) := do
+  Runtime.webSocketConnectWithHeadersSecureAsPromise
+    (← runtime) address path requestHeaders portHint
 
 @[inline] def awaitWebSocket (promise : WebSocketPromiseRef) : RuntimeM WebSocket := do
   promise.await
@@ -3609,12 +4047,32 @@ namespace RuntimeM
     RuntimeM PromiseRef := do
   Runtime.webSocketSendTextStart (← runtime) webSocket text
 
+@[inline] def webSocketSendTextAsTask (webSocket : WebSocket) (text : String) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendTextAsTask text
+
+@[inline] def webSocketSendTextAsPromise (webSocket : WebSocket) (text : String) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendTextAsPromise text
+
 @[inline] def webSocketSendText (webSocket : WebSocket) (text : String) : RuntimeM Unit := do
   webSocket.sendText text
 
 @[inline] def webSocketSendBinaryStart (webSocket : WebSocket) (bytes : ByteArray) :
     RuntimeM PromiseRef := do
   Runtime.webSocketSendBinaryStart (← runtime) webSocket bytes
+
+@[inline] def webSocketSendBinaryAsTask (webSocket : WebSocket) (bytes : ByteArray) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendBinaryAsTask bytes
+
+@[inline] def webSocketSendBinaryAsPromise (webSocket : WebSocket) (bytes : ByteArray) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendBinaryAsPromise bytes
 
 @[inline] def webSocketSendBinary (webSocket : WebSocket) (bytes : ByteArray) : RuntimeM Unit := do
   webSocket.sendBinary bytes
@@ -3623,9 +4081,29 @@ namespace RuntimeM
     RuntimeM WebSocketMessagePromiseRef := do
   Runtime.webSocketReceiveStart (← runtime) webSocket
 
+@[inline] def webSocketReceiveAsTask (webSocket : WebSocket) :
+    RuntimeM (Task (Except IO.Error WebSocketMessage)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveAsTask
+
+@[inline] def webSocketReceiveAsPromise (webSocket : WebSocket) :
+    RuntimeM (Capnp.Async.Promise WebSocketMessage) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveAsPromise
+
 @[inline] def webSocketReceiveStartWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM WebSocketMessagePromiseRef := do
   Runtime.webSocketReceiveStartWithMax (← runtime) webSocket maxBytes
+
+@[inline] def webSocketReceiveWithMaxAsTask (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM (Task (Except IO.Error WebSocketMessage)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveWithMaxAsTask maxBytes
+
+@[inline] def webSocketReceiveWithMaxAsPromise (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM (Capnp.Async.Promise WebSocketMessage) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveWithMaxAsPromise maxBytes
 
 @[inline] def awaitWebSocketMessage (promise : WebSocketMessagePromiseRef) :
     RuntimeM WebSocketMessage := do
@@ -3649,6 +4127,16 @@ namespace RuntimeM
 @[inline] def webSocketCloseStart (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM PromiseRef := do
   Runtime.webSocketCloseStart (← runtime) webSocket code reason
+
+@[inline] def webSocketCloseAsTask (webSocket : WebSocket) (code : UInt16)
+    (reason : String := "") : RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.closeAsTask code reason
+
+@[inline] def webSocketCloseAsPromise (webSocket : WebSocket) (code : UInt16)
+    (reason : String := "") : RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.closeAsPromise code reason
 
 @[inline] def webSocketClose (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM Unit := do
