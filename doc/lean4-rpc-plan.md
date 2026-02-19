@@ -159,6 +159,7 @@ Exit criteria:
 
 - Gate parity-critical tests in CI for Linux and macOS.
 - Publish user-facing docs for recommended Lean RPC/KjAsync patterns.
+- Deterministic parity command: `cd test/lean4 && lake test -- --parity-critical`.
 
 Exit criteria:
 - deterministic parity CI and documented supported feature matrix.
