@@ -34,6 +34,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -530,6 +531,20 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<BoolCompletion> enqueueTargetWhenResolvedPoll(uint32_t target) {
+    auto completion = std::make_shared<BoolCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeBoolFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedTargetWhenResolvedPoll{target, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueEnableTraceEncoder() {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -828,6 +843,48 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedPromiseCapabilityRelease{fulfillerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueOrderingSetResolveHold(bool enabled) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedOrderingSetResolveHold{enabled, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueOrderingFlushHeldResolves() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedOrderingFlushHeldResolves{completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueOrderingHeldResolveCount() {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedOrderingHeldResolveCount{completion});
     }
     notifyWorker();
     return completion;
@@ -2108,6 +2165,11 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedTargetWhenResolvedPoll {
+    uint32_t target;
+    std::shared_ptr<BoolCompletion> completion;
+  };
+
   struct QueuedEnableTraceEncoder {
     std::shared_ptr<UnitCompletion> completion;
   };
@@ -2217,6 +2279,19 @@ class RuntimeLoop {
   struct QueuedPromiseCapabilityRelease {
     uint32_t fulfillerId;
     std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedOrderingSetResolveHold {
+    bool enabled;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedOrderingFlushHeldResolves {
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
+  struct QueuedOrderingHeldResolveCount {
+    std::shared_ptr<UInt64Completion> completion;
   };
 
   struct QueuedConnectTarget {
@@ -2619,6 +2694,7 @@ class RuntimeLoop {
       std::variant<QueuedRawCall, QueuedStartPendingCall, QueuedAwaitPendingCall,
                    QueuedReleasePendingCall, QueuedGetPipelinedCap, QueuedStreamingCall,
                    QueuedTargetGetFd, QueuedTargetWhenResolved, QueuedTargetWhenResolvedStart,
+                   QueuedTargetWhenResolvedPoll,
                    QueuedEnableTraceEncoder,
                    QueuedDisableTraceEncoder, QueuedSetTraceEncoder, QueuedCppCallWithAccept,
                    QueuedCppCallPipelinedWithAccept,
@@ -2629,6 +2705,8 @@ class RuntimeLoop {
                    QueuedReleaseTarget, QueuedReleaseTargets, QueuedRetainTarget,
                    QueuedNewPromiseCapability, QueuedPromiseCapabilityFulfill,
                    QueuedPromiseCapabilityReject, QueuedPromiseCapabilityRelease,
+                   QueuedOrderingSetResolveHold, QueuedOrderingFlushHeldResolves,
+                   QueuedOrderingHeldResolveCount,
                    QueuedConnectTarget, QueuedConnectTargetStart, QueuedConnectTargetFd,
                    QueuedNewTransportPipe, QueuedNewTransportFromFd, QueuedNewTransportFromFdTake,
                    QueuedReleaseTransport, QueuedTransportGetFd,
@@ -2862,6 +2940,11 @@ class RuntimeLoop {
 
     kj::Own<kj::PromiseFulfiller<kj::Own<capnp::ClientHook>>> fulfiller;
     uint32_t promiseTarget = 0;
+  };
+
+  struct HeldPromiseCapabilityResolve {
+    uint32_t fulfillerId = 0;
+    uint32_t target = 0;
   };
 
   void retainPeerOwnership(
@@ -4304,6 +4387,14 @@ class RuntimeLoop {
     return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
+  bool targetWhenResolvedPoll(kj::WaitScope& waitScope, uint32_t target) {
+    auto targetIt = targets_.find(target);
+    if (targetIt == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+    }
+    return targetIt->second.whenResolved().poll(waitScope);
+  }
+
   kj::String encodeTraceWithLean(const kj::Exception& e) {
     if (traceEncoderHandler_ == nullptr) {
       return kj::String();
@@ -4594,7 +4685,7 @@ class RuntimeLoop {
     }
   }
 
-  void promiseCapabilityFulfill(uint32_t fulfillerId, uint32_t target) {
+  void promiseCapabilityFulfillNow(uint32_t fulfillerId, uint32_t target) {
     auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
     if (promiseIt == promiseCapabilityFulfillers_.end()) {
       throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
@@ -4616,9 +4707,71 @@ class RuntimeLoop {
     promiseCapabilityFulfillers_.erase(promiseIt);
   }
 
+  void promiseCapabilityFulfill(uint32_t fulfillerId, uint32_t target) {
+    if (heldPromiseCapabilityFulfillerIds_.find(fulfillerId) !=
+        heldPromiseCapabilityFulfillerIds_.end()) {
+      throw std::runtime_error("promise capability fulfiller already has a held resolve");
+    }
+
+    if (!holdPromiseCapabilityResolves_) {
+      promiseCapabilityFulfillNow(fulfillerId, target);
+      return;
+    }
+
+    auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
+    if (promiseIt == promiseCapabilityFulfillers_.end()) {
+      throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
+                               std::to_string(fulfillerId));
+    }
+    if (target == 0) {
+      throw std::runtime_error("cannot fulfill promise capability with null target");
+    }
+    if (target == promiseIt->second.promiseTarget) {
+      throw std::runtime_error("cannot fulfill promise capability with itself");
+    }
+    if (targets_.find(target) == targets_.end()) {
+      throw std::runtime_error("unknown RPC target capability id: " + std::to_string(target));
+    }
+
+    heldPromiseCapabilityResolves_.push_back({fulfillerId, target});
+    heldPromiseCapabilityFulfillerIds_.insert(fulfillerId);
+  }
+
+  void dropHeldPromiseCapabilityResolve(uint32_t fulfillerId) {
+    if (heldPromiseCapabilityFulfillerIds_.erase(fulfillerId) == 0) {
+      return;
+    }
+    for (auto it = heldPromiseCapabilityResolves_.begin();
+         it != heldPromiseCapabilityResolves_.end(); ++it) {
+      if (it->fulfillerId == fulfillerId) {
+        heldPromiseCapabilityResolves_.erase(it);
+        return;
+      }
+    }
+  }
+
+  uint64_t flushHeldPromiseCapabilityResolves() {
+    uint64_t flushed = 0;
+    while (!heldPromiseCapabilityResolves_.empty()) {
+      auto request = heldPromiseCapabilityResolves_.front();
+      heldPromiseCapabilityResolves_.pop_front();
+      heldPromiseCapabilityFulfillerIds_.erase(request.fulfillerId);
+      promiseCapabilityFulfillNow(request.fulfillerId, request.target);
+      ++flushed;
+    }
+    return flushed;
+  }
+
+  void setResolveHoldEnabled(bool enabled) { holdPromiseCapabilityResolves_ = enabled; }
+
+  uint64_t heldResolveCount() const {
+    return static_cast<uint64_t>(heldPromiseCapabilityResolves_.size());
+  }
+
   void promiseCapabilityReject(uint32_t fulfillerId, uint8_t exceptionTypeTag,
                                const std::string& message,
                                const uint8_t* detailBytesData, size_t detailBytesSize) {
+    dropHeldPromiseCapabilityResolve(fulfillerId);
     auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
     if (promiseIt == promiseCapabilityFulfillers_.end()) {
       throw std::runtime_error("unknown RPC promise capability fulfiller id: " +
@@ -4636,6 +4789,7 @@ class RuntimeLoop {
   }
 
   void promiseCapabilityRelease(uint32_t fulfillerId) {
+    dropHeldPromiseCapabilityResolve(fulfillerId);
     auto promiseIt = promiseCapabilityFulfillers_.find(fulfillerId);
     if (promiseIt == promiseCapabilityFulfillers_.end()) {
       return;
@@ -5446,6 +5600,19 @@ class RuntimeLoop {
                 call.completion,
                 "unknown exception in capnp_lean_rpc_runtime_target_when_resolved_start");
           }
+        } else if (std::holds_alternative<QueuedTargetWhenResolvedPoll>(op)) {
+          auto call = std::get<QueuedTargetWhenResolvedPoll>(std::move(op));
+          try {
+            completeBoolSuccess(call.completion, targetWhenResolvedPoll(io.waitScope, call.target));
+          } catch (const kj::Exception& e) {
+            completeBoolFailure(call.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeBoolFailure(call.completion, e.what());
+          } catch (...) {
+            completeBoolFailure(
+                call.completion,
+                "unknown exception in capnp_lean_rpc_runtime_target_when_resolved_poll");
+          }
         } else if (std::holds_alternative<QueuedEnableTraceEncoder>(op)) {
           auto enable = std::get<QueuedEnableTraceEncoder>(std::move(op));
           try {
@@ -5723,6 +5890,46 @@ class RuntimeLoop {
             completeUnitFailure(
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_promise_capability_release");
+          }
+        } else if (std::holds_alternative<QueuedOrderingSetResolveHold>(op)) {
+          auto request = std::get<QueuedOrderingSetResolveHold>(std::move(op));
+          try {
+            setResolveHoldEnabled(request.enabled);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_ordering_set_resolve_hold");
+          }
+        } else if (std::holds_alternative<QueuedOrderingFlushHeldResolves>(op)) {
+          auto request = std::get<QueuedOrderingFlushHeldResolves>(std::move(op));
+          try {
+            completeUInt64Success(request.completion, flushHeldPromiseCapabilityResolves());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_ordering_flush_resolves");
+          }
+        } else if (std::holds_alternative<QueuedOrderingHeldResolveCount>(op)) {
+          auto request = std::get<QueuedOrderingHeldResolveCount>(std::move(op));
+          try {
+            completeUInt64Success(request.completion, heldResolveCount());
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_ordering_held_resolve_count");
           }
         } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
           auto connect = std::get<QueuedConnectTarget>(std::move(op));
@@ -6794,6 +7001,9 @@ class RuntimeLoop {
       kjAsyncPromises_.clear();
       kjAsyncTaskSets_.clear();
       promiseCapabilityFulfillers_.clear();
+      heldPromiseCapabilityResolves_.clear();
+      heldPromiseCapabilityFulfillerIds_.clear();
+      holdPromiseCapabilityResolves_ = false;
       clients_.clear();
       servers_.clear();
       sturdyRefs_.clear();
@@ -6865,6 +7075,8 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedTargetWhenResolved>(op).completion, message);
       } else if (std::holds_alternative<QueuedTargetWhenResolvedStart>(op)) {
         completeRegisterFailure(std::get<QueuedTargetWhenResolvedStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedTargetWhenResolvedPoll>(op)) {
+        completeBoolFailure(std::get<QueuedTargetWhenResolvedPoll>(op).completion, message);
       } else if (std::holds_alternative<QueuedEnableTraceEncoder>(op)) {
         completeUnitFailure(std::get<QueuedEnableTraceEncoder>(op).completion, message);
       } else if (std::holds_alternative<QueuedDisableTraceEncoder>(op)) {
@@ -6912,6 +7124,12 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedPromiseCapabilityReject>(op).completion, message);
       } else if (std::holds_alternative<QueuedPromiseCapabilityRelease>(op)) {
         completeUnitFailure(std::get<QueuedPromiseCapabilityRelease>(op).completion, message);
+      } else if (std::holds_alternative<QueuedOrderingSetResolveHold>(op)) {
+        completeUnitFailure(std::get<QueuedOrderingSetResolveHold>(op).completion, message);
+      } else if (std::holds_alternative<QueuedOrderingFlushHeldResolves>(op)) {
+        completeUInt64Failure(std::get<QueuedOrderingFlushHeldResolves>(op).completion, message);
+      } else if (std::holds_alternative<QueuedOrderingHeldResolveCount>(op)) {
+        completeUInt64Failure(std::get<QueuedOrderingHeldResolveCount>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTarget>(op)) {
         completeRegisterFailure(std::get<QueuedConnectTarget>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectTargetStart>(op)) {
@@ -7108,6 +7326,9 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, PendingUnitPromise> kjAsyncPromises_;
   std::unordered_map<uint32_t, kj::Own<RuntimeKjAsyncTaskSet>> kjAsyncTaskSets_;
   std::unordered_map<uint32_t, PendingPromiseCapability> promiseCapabilityFulfillers_;
+  std::deque<HeldPromiseCapabilityResolve> heldPromiseCapabilityResolves_;
+  std::unordered_set<uint32_t> heldPromiseCapabilityFulfillerIds_;
+  bool holdPromiseCapabilityResolves_ = false;
   std::unordered_map<uint32_t, kj::Own<NetworkClientPeer>> clients_;
   std::unordered_map<uint32_t, kj::Own<RuntimeServer>> servers_;
   GenericVatNetwork genericVatNetwork_;
@@ -7334,6 +7555,11 @@ std::shared_ptr<RegisterTargetCompletion> enqueueTargetWhenResolvedStart(Runtime
   return runtime.enqueueTargetWhenResolvedStart(target);
 }
 
+std::shared_ptr<BoolCompletion> enqueueTargetWhenResolvedPoll(RuntimeLoop& runtime,
+                                                              uint32_t target) {
+  return runtime.enqueueTargetWhenResolvedPoll(target);
+}
+
 std::shared_ptr<UnitCompletion> enqueueEnableTraceEncoder(RuntimeLoop& runtime) {
   return runtime.enqueueEnableTraceEncoder();
 }
@@ -7383,6 +7609,18 @@ std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityReject(RuntimeLoop& runt
 std::shared_ptr<UnitCompletion> enqueuePromiseCapabilityRelease(RuntimeLoop& runtime,
                                                                 uint32_t fulfillerId) {
   return runtime.enqueuePromiseCapabilityRelease(fulfillerId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueOrderingSetResolveHold(RuntimeLoop& runtime, bool enabled) {
+  return runtime.enqueueOrderingSetResolveHold(enabled);
+}
+
+std::shared_ptr<UInt64Completion> enqueueOrderingFlushHeldResolves(RuntimeLoop& runtime) {
+  return runtime.enqueueOrderingFlushHeldResolves();
+}
+
+std::shared_ptr<UInt64Completion> enqueueOrderingHeldResolveCount(RuntimeLoop& runtime) {
+  return runtime.enqueueOrderingHeldResolveCount();
 }
 
 std::shared_ptr<RegisterTargetCompletion> enqueueConnectTarget(RuntimeLoop& runtime,
@@ -7812,3 +8050,111 @@ std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
 }
 
 }  // namespace capnp_lean_rpc
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_target_when_resolved_poll(
+    uint64_t runtimeId, uint32_t target) {
+  auto runtime = capnp_lean_rpc::getRuntime(runtimeId);
+  if (!runtime) {
+    return capnp_lean_rpc::mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = capnp_lean_rpc::enqueueTargetWhenResolvedPoll(*runtime, target);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return capnp_lean_rpc::mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box(completion->value ? 1 : 0));
+    }
+  } catch (const kj::Exception& e) {
+    return capnp_lean_rpc::mkIoUserError(capnp_lean_rpc::describeKjException(e));
+  } catch (const std::exception& e) {
+    return capnp_lean_rpc::mkIoUserError(e.what());
+  } catch (...) {
+    return capnp_lean_rpc::mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_target_when_resolved_poll");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_ordering_set_resolve_hold(
+    uint64_t runtimeId, uint8_t enabled) {
+  auto runtime = capnp_lean_rpc::getRuntime(runtimeId);
+  if (!runtime) {
+    return capnp_lean_rpc::mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = capnp_lean_rpc::enqueueOrderingSetResolveHold(*runtime, enabled != 0);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return capnp_lean_rpc::mkIoUserError(completion->error);
+      }
+    }
+    return capnp_lean_rpc::mkIoOkUnit();
+  } catch (const kj::Exception& e) {
+    return capnp_lean_rpc::mkIoUserError(capnp_lean_rpc::describeKjException(e));
+  } catch (const std::exception& e) {
+    return capnp_lean_rpc::mkIoUserError(e.what());
+  } catch (...) {
+    return capnp_lean_rpc::mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_ordering_set_resolve_hold");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_ordering_flush_resolves(
+    uint64_t runtimeId) {
+  auto runtime = capnp_lean_rpc::getRuntime(runtimeId);
+  if (!runtime) {
+    return capnp_lean_rpc::mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = capnp_lean_rpc::enqueueOrderingFlushHeldResolves(*runtime);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return capnp_lean_rpc::mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return capnp_lean_rpc::mkIoUserError(capnp_lean_rpc::describeKjException(e));
+  } catch (const std::exception& e) {
+    return capnp_lean_rpc::mkIoUserError(e.what());
+  } catch (...) {
+    return capnp_lean_rpc::mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_ordering_flush_resolves");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_ordering_held_resolve_count(
+    uint64_t runtimeId) {
+  auto runtime = capnp_lean_rpc::getRuntime(runtimeId);
+  if (!runtime) {
+    return capnp_lean_rpc::mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = capnp_lean_rpc::enqueueOrderingHeldResolveCount(*runtime);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return capnp_lean_rpc::mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint64(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return capnp_lean_rpc::mkIoUserError(capnp_lean_rpc::describeKjException(e));
+  } catch (const std::exception& e) {
+    return capnp_lean_rpc::mkIoUserError(e.what());
+  } catch (...) {
+    return capnp_lean_rpc::mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_ordering_held_resolve_count");
+  }
+}

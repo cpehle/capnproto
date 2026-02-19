@@ -497,6 +497,18 @@ opaque ffiRuntimeTargetWhenResolvedImpl (runtime : UInt64) (target : UInt32) : I
 @[extern "capnp_lean_rpc_runtime_target_when_resolved_start"]
 opaque ffiRuntimeTargetWhenResolvedStartImpl (runtime : UInt64) (target : UInt32) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_target_when_resolved_poll"]
+opaque ffiRuntimeTargetWhenResolvedPollImpl (runtime : UInt64) (target : UInt32) : IO Bool
+
+@[extern "capnp_lean_rpc_runtime_ordering_set_resolve_hold"]
+opaque ffiRuntimeOrderingSetResolveHoldImpl (runtime : UInt64) (enabled : UInt8) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_ordering_flush_resolves"]
+opaque ffiRuntimeOrderingFlushResolvesImpl (runtime : UInt64) : IO UInt64
+
+@[extern "capnp_lean_rpc_runtime_ordering_held_resolve_count"]
+opaque ffiRuntimeOrderingHeldResolveCountImpl (runtime : UInt64) : IO UInt64
+
 @[extern "capnp_lean_rpc_runtime_enable_trace_encoder"]
 opaque ffiRuntimeEnableTraceEncoderImpl (runtime : UInt64) : IO Unit
 
@@ -1413,6 +1425,18 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     handle := (← ffiRuntimeTargetWhenResolvedStartImpl runtime.handle target)
   }
 
+@[inline] def targetWhenResolvedPoll (runtime : Runtime) (target : Client) : IO Bool :=
+  ffiRuntimeTargetWhenResolvedPollImpl runtime.handle target
+
+@[inline] def orderingSetResolveHold (runtime : Runtime) (enabled : Bool) : IO Unit :=
+  ffiRuntimeOrderingSetResolveHoldImpl runtime.handle (if enabled then 1 else 0)
+
+@[inline] def orderingFlushResolves (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeOrderingFlushResolvesImpl runtime.handle
+
+@[inline] def orderingHeldResolveCount (runtime : Runtime) : IO UInt64 :=
+  ffiRuntimeOrderingHeldResolveCountImpl runtime.handle
+
 @[inline] def targetWhenResolvedAsTask (runtime : Runtime) (target : Client) :
     IO (Task (Except IO.Error Unit)) := do
   let pending ← runtime.targetWhenResolvedStart target
@@ -2307,6 +2331,18 @@ namespace RuntimeM
 
 @[inline] def targetWhenResolvedStart (target : Client) : RuntimeM RuntimeUnitPromiseRef := do
   Runtime.targetWhenResolvedStart (← runtime) target
+
+@[inline] def targetWhenResolvedPoll (target : Client) : RuntimeM Bool := do
+  Runtime.targetWhenResolvedPoll (← runtime) target
+
+@[inline] def orderingSetResolveHold (enabled : Bool) : RuntimeM Unit := do
+  Runtime.orderingSetResolveHold (← runtime) enabled
+
+@[inline] def orderingFlushResolves : RuntimeM UInt64 := do
+  Runtime.orderingFlushResolves (← runtime)
+
+@[inline] def orderingHeldResolveCount : RuntimeM UInt64 := do
+  Runtime.orderingHeldResolveCount (← runtime)
 
 @[inline] def targetWhenResolvedAsTask (target : Client) :
     RuntimeM (Task (Except IO.Error Unit)) := do
