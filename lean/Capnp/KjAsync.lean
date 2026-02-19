@@ -997,6 +997,10 @@ namespace Runtime
 @[inline] def sleepMillis (runtime : Runtime) (delayMillis : UInt32) : IO Unit :=
   runtime.sleepNanos (millisToNanos delayMillis)
 
+/-- Pump the runtime loop briefly to make progress on pending async work. -/
+@[inline] def pump (runtime : Runtime) (delayMillis : UInt32 := UInt32.ofNat 5) : IO Unit :=
+  runtime.sleepMillis delayMillis
+
 @[inline] def listen (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener := do
   return {
@@ -3296,6 +3300,9 @@ namespace RuntimeM
 
 @[inline] def sleepMillis (delayMillis : UInt32) : RuntimeM Unit := do
   Runtime.sleepMillis (← runtime) delayMillis
+
+@[inline] def pump (delayMillis : UInt32 := UInt32.ofNat 5) : RuntimeM Unit := do
+  Runtime.pump (← runtime) delayMillis
 
 @[inline] def listen (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
   Runtime.listen (← runtime) address portHint

@@ -105,7 +105,7 @@ private partial def waitForHttpServerRequestRaw (runtime : Capnp.KjAsync.Runtime
   match (← runtime.httpServerPollRequestStreaming? server) with
   | some request => pure request
   | none =>
-    runtime.sleepMillis (UInt32.ofNat 5)
+    runtime.pump
     waitForHttpServerRequestRaw runtime server (attempts - 1)
 
 private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
@@ -1737,7 +1737,7 @@ def testKjAsyncHttpRequestTaskAndPromiseHelpers : IO Unit := do
     serverRuntime.httpServerRespond server requestA.requestId (UInt32.ofNat 201) "Created"
       #[{ name := "x-http-helper", value := "task-ok" }] requestBodyA
     -- Pump the server runtime loop so the response flushes before awaiting on client helpers.
-    serverRuntime.sleepMillis (UInt32.ofNat 5)
+    serverRuntime.pump
 
     let responseA ←
       match (← IO.wait responseTask) with
@@ -1761,7 +1761,7 @@ def testKjAsyncHttpRequestTaskAndPromiseHelpers : IO Unit := do
     assertEqual requestB.body requestBodyB
     serverRuntime.httpServerRespond server requestB.requestId (UInt32.ofNat 202) "Accepted"
       #[{ name := "x-http-helper", value := "promise-ok" }] requestBodyB
-    serverRuntime.sleepMillis (UInt32.ofNat 5)
+    serverRuntime.pump
 
     let responseB ← responsePromise.await
     assertEqual responseB.status (UInt32.ofNat 202)
