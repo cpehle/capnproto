@@ -815,6 +815,15 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
   else
     throw (IO.userError "invalid header list payload: trailing bytes")
 
+/-- Encode HTTP headers into the wire format used by `*_with_headers` KJ async FFI calls.
+Reuse the returned bytes across repeated calls to avoid re-encoding header arrays. -/
+@[inline] def encodeHttpHeaders (headers : Array HttpHeader) : ByteArray :=
+  encodeHeaders headers
+
+/-- Decode wire-format HTTP headers returned by `*_with_headers` KJ async FFI calls. -/
+@[inline] def decodeHttpHeaders (bytes : ByteArray) : IO (Array HttpHeader) :=
+  decodeHeaders bytes
+
 inductive HttpMethod where
   | get
   | head
@@ -1894,8 +1903,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (path : String) (portHint : UInt32 := 0) : IO WebSocket := do
   return {
     runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectWithHeadersImpl runtime.handle address portHint path
-      (encodeHeaders #[]))
+    handle := (← ffiRuntimeWebSocketConnectImpl runtime.handle address portHint path)
   }
 
 @[inline] def webSocketConnectSecure (runtime : Runtime) (address : String)
@@ -1910,8 +1918,43 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (path : String) (portHint : UInt32 := 0) : IO WebSocketPromiseRef := do
   return {
     runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectStartImpl runtime.handle address portHint path)
+  }
+
+@[inline] def webSocketConnectWithEncodedHeaders (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : ByteArray) (portHint : UInt32 := 0) :
+    IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersImpl runtime.handle address portHint path
+      requestHeaders)
+  }
+
+@[inline] def webSocketConnectWithEncodedHeadersSecure (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : ByteArray) (portHint : UInt32 := 0) :
+    IO WebSocket := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectWithHeadersSecureImpl runtime.handle address portHint path
+      requestHeaders)
+  }
+
+@[inline] def webSocketConnectStartWithEncodedHeaders (runtime : Runtime) (address : String)
+    (path : String) (requestHeaders : ByteArray) (portHint : UInt32 := 0) :
+    IO WebSocketPromiseRef := do
+  return {
+    runtime := runtime
     handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
-      runtime.handle address portHint path (encodeHeaders #[]))
+      runtime.handle address portHint path requestHeaders)
+  }
+
+@[inline] def webSocketConnectStartWithEncodedHeadersSecure (runtime : Runtime)
+    (address : String) (path : String) (requestHeaders : ByteArray)
+    (portHint : UInt32 := 0) : IO WebSocketPromiseRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersSecureImpl
+      runtime.handle address portHint path requestHeaders)
   }
 
 @[inline] def webSocketConnectStartSecure (runtime : Runtime) (address : String)
@@ -1925,38 +1968,25 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def webSocketConnectWithHeaders (runtime : Runtime) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     IO WebSocket := do
-  return {
-    runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectWithHeadersImpl runtime.handle address portHint path
-      (encodeHeaders requestHeaders))
-  }
+  runtime.webSocketConnectWithEncodedHeaders address path (encodeHttpHeaders requestHeaders) portHint
 
 @[inline] def webSocketConnectWithHeadersSecure (runtime : Runtime) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     IO WebSocket := do
-  return {
-    runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectWithHeadersSecureImpl runtime.handle address portHint path
-      (encodeHeaders requestHeaders))
-  }
+  runtime.webSocketConnectWithEncodedHeadersSecure address path
+    (encodeHttpHeaders requestHeaders) portHint
 
 @[inline] def webSocketConnectStartWithHeaders (runtime : Runtime) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     IO WebSocketPromiseRef := do
-  return {
-    runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersImpl
-      runtime.handle address portHint path (encodeHeaders requestHeaders))
-  }
+  runtime.webSocketConnectStartWithEncodedHeaders address path
+    (encodeHttpHeaders requestHeaders) portHint
 
 @[inline] def webSocketConnectStartWithHeadersSecure (runtime : Runtime) (address : String)
     (path : String) (requestHeaders : Array HttpHeader) (portHint : UInt32 := 0) :
     IO WebSocketPromiseRef := do
-  return {
-    runtime := runtime
-    handle := (← ffiRuntimeWebSocketConnectStartWithHeadersSecureImpl
-      runtime.handle address portHint path (encodeHeaders requestHeaders))
-  }
+  runtime.webSocketConnectStartWithEncodedHeadersSecure address path
+    (encodeHttpHeaders requestHeaders) portHint
 
 @[inline] def webSocketPromiseAwait (runtime : Runtime)
     (promise : WebSocketPromiseRef) : IO WebSocket := do

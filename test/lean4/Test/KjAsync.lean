@@ -2344,3 +2344,56 @@ def testKjAsyncWebSocketServerAccept : IO Unit := do
     server.release
   finally
     runtime.shutdown
+
+@[test]
+def testKjAsyncWebSocketEncodedHeaderApis : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    try
+      let encodedHeaders := Capnp.KjAsync.encodeHttpHeaders
+        #[{ name := "x-lean-ws-encoded", value := "1" }]
+
+      let connectPromiseA ← runtime.webSocketConnectStartWithEncodedHeaders
+        "127.0.0.1" "/lean-ws-encoded-start" encodedHeaders server.boundPort
+      let requestA ← waitForHttpServerRequest runtime server
+      assertEqual requestA.path "/lean-ws-encoded-start"
+      assertTrue
+        (requestA.headers.any (fun h => h.name == "x-lean-ws-encoded" && h.value == "1"))
+        "expected x-lean-ws-encoded request header for encoded start helper"
+      let serverWsA ← runtime.httpServerRespondWebSocket server requestA.requestId
+      let clientWsA ← connectPromiseA.await
+
+      (← clientWsA.sendTextStart "hello-encoded-start").await
+      match (← serverWsA.receive) with
+      | .text value =>
+        assertEqual value "hello-encoded-start"
+      | _ =>
+        throw (IO.userError "expected websocket text message for encoded start helper")
+
+      clientWsA.release
+      serverWsA.release
+
+      let connectPromiseB ← runtime.webSocketConnectStartWithEncodedHeaders
+        "127.0.0.1" "/lean-ws-encoded-direct" encodedHeaders server.boundPort
+      let requestB ← waitForHttpServerRequest runtime server
+      assertEqual requestB.path "/lean-ws-encoded-direct"
+      assertTrue
+        (requestB.headers.any (fun h => h.name == "x-lean-ws-encoded" && h.value == "1"))
+        "expected x-lean-ws-encoded request header for encoded direct helper"
+      let serverWsB ← runtime.httpServerRespondWebSocket server requestB.requestId
+      let clientWsB ← connectPromiseB.await
+
+      (← serverWsB.sendTextStart "hello-encoded-direct").await
+      match (← clientWsB.receive) with
+      | .text value =>
+        assertEqual value "hello-encoded-direct"
+      | _ =>
+        throw (IO.userError "expected websocket text message for encoded direct helper")
+
+      clientWsB.release
+      serverWsB.release
+    finally
+      server.release
+  finally
+    runtime.shutdown
