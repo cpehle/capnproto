@@ -175,6 +175,8 @@ inductive AdvancedHandlerResult where
 inductive AdvancedHandlerReply where
   | now (result : AdvancedHandlerResult)
   | deferred (task : Task (Except IO.Error AdvancedHandlerResult))
+  | deferredWithCancel (task : Task (Except IO.Error AdvancedHandlerResult))
+      (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
   | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply)
   | pipeline (pipeline : Payload) (next : AdvancedHandlerReply)
 
@@ -191,10 +193,26 @@ inductive AdvancedHandlerReply where
   else
     deferred
 
+@[inline] def AdvancedHandlerReply.deferTaskWithCancel
+    (task : Task (Except IO.Error AdvancedHandlerResult))
+    (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  let deferred : AdvancedHandlerReply := .deferredWithCancel task cancelTask
+  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
+    .control opts deferred
+  else
+    deferred
+
 @[inline] def AdvancedHandlerReply.deferPromise
     (promise : Capnp.Async.Promise AdvancedHandlerResult)
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
   AdvancedHandlerReply.deferTask promise.toTask opts
+
+@[inline] def AdvancedHandlerReply.deferPromiseWithCancel
+    (promise : Capnp.Async.Promise AdvancedHandlerResult)
+    (cancelPromise : Capnp.Async.Promise AdvancedHandlerResult)
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferTaskWithCancel promise.toTask cancelPromise.toTask opts
 
 @[inline] def AdvancedHandlerReply.defer
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
@@ -333,9 +351,13 @@ namespace Advanced
     (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
   .forwardCall target method payload AdvancedForwardOptions.toCallerNoPromisePipelining
 
-@[inline] def forwardOnlyPromisePipeline (target : Client) (method : Method)
+@[inline] def forwardToCallerOnlyPromisePipeline (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
   .forwardCall target method payload AdvancedForwardOptions.toCallerOnlyPromisePipeline
+
+@[inline] def forwardOnlyPromisePipeline (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
+  forwardToCallerOnlyPromisePipeline target method payload
 
 @[inline] def tailForward (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
@@ -372,10 +394,22 @@ namespace Advanced
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
   AdvancedHandlerReply.deferTask task opts
 
+@[inline] def deferTaskWithCancel
+    (task : Task (Except IO.Error AdvancedHandlerResult))
+    (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferTaskWithCancel task cancelTask opts
+
 @[inline] def deferPromise
     (promise : Capnp.Async.Promise AdvancedHandlerResult)
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
   AdvancedHandlerReply.deferPromise promise opts
+
+@[inline] def deferPromiseWithCancel
+    (promise : Capnp.Async.Promise AdvancedHandlerResult)
+    (cancelPromise : Capnp.Async.Promise AdvancedHandlerResult)
+    (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
+  AdvancedHandlerReply.deferPromiseWithCancel promise cancelPromise opts
 
 @[inline] def streamingNow (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   AdvancedHandlerReply.streaming (.now result)
@@ -922,6 +956,8 @@ end CapTable
       toRawAdvancedHandlerResult result
   | .deferred task =>
       .awaitTask (mapDeferredAdvancedHandlerTask task) task
+  | .deferredWithCancel task cancelTask =>
+      .awaitTask (mapDeferredAdvancedHandlerTask task) cancelTask
   | .control opts next =>
       .control opts.releaseParams opts.allowCancellation opts.isStreaming
         (toRawAdvancedHandlerReply next)
