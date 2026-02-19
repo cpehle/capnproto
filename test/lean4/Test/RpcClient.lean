@@ -3315,7 +3315,7 @@ def testRuntimeAdvancedHandlerForwardCallSendResultsToCallerWithHints : IO Unit 
     runtime.shutdown
 
 @[test]
-def testRuntimeAdvancedHandlerForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
+def testRuntimeAdvancedHandlerForwardToCallerWithOnlyPromisePipelineHint : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let seenMethod ← IO.mkRef ({ interfaceId := 0, methodId := 0 } : Capnp.Rpc.Method)
   let runtime ← Capnp.Rpc.Runtime.init
@@ -3324,7 +3324,7 @@ def testRuntimeAdvancedHandlerForwardToCallerOnlyPromisePipelineHelper : IO Unit
       seenMethod.set method
       pure req)
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
-      pure (Capnp.Rpc.Advanced.forwardToCallerOnlyPromisePipeline sink method req))
+      pure (Capnp.Rpc.Advanced.forwardToCaller sink method req { onlyPromisePipeline := true }))
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM forwarder payload
     assertEqual response.capTable.caps.size 0

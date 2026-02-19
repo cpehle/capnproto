@@ -464,10 +464,11 @@ def testRpcAdvancedStreamingDeferMergesControlOpts : IO Unit := do
       throw (IO.userError "streamingDefer did not emit merged control wrapper")
 
 @[test]
-def testRpcAdvancedForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
+def testRpcAdvancedForwardToCallerWithOnlyPromisePipelineHint : IO Unit := do
   let target : Capnp.Rpc.Client := UInt32.ofNat 99
   let method : Capnp.Rpc.Method := { interfaceId := UInt64.ofNat 77, methodId := UInt16.ofNat 5 }
-  let result := Capnp.Rpc.Advanced.forwardToCallerOnlyPromisePipeline target method
+  let hints : Capnp.Rpc.AdvancedCallHints := { onlyPromisePipeline := true }
+  let result := Capnp.Rpc.Advanced.forwardToCaller target method Capnp.emptyRpcEnvelope hints
   match result with
   | .forwardCall nextTarget nextMethod payload options => do
       assertEqual nextTarget target
@@ -475,11 +476,11 @@ def testRpcAdvancedForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
       assertEqual nextMethod.methodId method.methodId
       assertEqual payload.capTable.caps.size 0
       assertTrue (options.sendResultsTo == .caller)
-        "forwardToCallerOnlyPromisePipeline should send results to caller"
+        "forwardToCaller should send results to caller"
       assertEqual options.callHints.onlyPromisePipeline true
       assertEqual options.callHints.noPromisePipelining false
   | _ =>
-      throw (IO.userError "forwardToCallerOnlyPromisePipeline did not emit forwardCall result")
+      throw (IO.userError "forwardToCaller with onlyPromisePipeline hint did not emit forwardCall result")
 
 @[test]
 def testRpcAdvancedTailCallWithControlHelper : IO Unit := do

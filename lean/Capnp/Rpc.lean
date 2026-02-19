@@ -211,10 +211,6 @@ inductive AdvancedHandlerReply where
   else
     next
 
-@[inline] def AdvancedHandlerReply.fromResult
-    (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
-  .now result
-
 @[inline] def AdvancedHandlerReply.deferTask
     (task : Task (Except IO.Error AdvancedHandlerResult))
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
@@ -338,16 +334,6 @@ abbrev RawTraceEncoder := String -> IO String
     (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
   { opts with sendResultsTo := .caller }
 
-@[inline] def AdvancedForwardOptions.setSendResultsToYourself
-    (opts : AdvancedForwardOptions := {}) : AdvancedForwardOptions :=
-  { opts with sendResultsTo := .yourself }
-
-@[inline] def AdvancedForwardOptions.toCallerNoPromisePipelining : AdvancedForwardOptions :=
-  AdvancedForwardOptions.toCaller AdvancedCallHints.withNoPromisePipelining
-
-@[inline] def AdvancedForwardOptions.toCallerOnlyPromisePipeline : AdvancedForwardOptions :=
-  AdvancedForwardOptions.toCaller AdvancedCallHints.withOnlyPromisePipeline
-
 namespace Advanced
 
 @[inline] def respond (payload : Payload) : AdvancedHandlerResult :=
@@ -367,18 +353,6 @@ namespace Advanced
     (callHints : AdvancedCallHints := {}) : AdvancedHandlerResult :=
   .forwardCall target method payload (AdvancedForwardOptions.toCaller callHints)
 
-@[inline] def forwardNoPromisePipelining (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  .forwardCall target method payload (AdvancedForwardOptions.setNoPromisePipelining {})
-
-@[inline] def forwardToCallerNoPromisePipelining (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  .forwardCall target method payload AdvancedForwardOptions.toCallerNoPromisePipelining
-
-@[inline] def forwardToCallerOnlyPromisePipeline (target : Client) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) : AdvancedHandlerResult :=
-  .forwardCall target method payload AdvancedForwardOptions.toCallerOnlyPromisePipeline
-
 @[inline] def tailCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope)
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerResult :=
@@ -394,9 +368,6 @@ namespace Advanced
 
 @[inline] def streaming (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
   AdvancedHandlerResult.streaming next
-
-@[inline] def streamingDone : AdvancedHandlerResult :=
-  streaming (.respond Capnp.emptyRpcEnvelope)
 
 @[inline] def now (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   .now result
@@ -427,9 +398,6 @@ namespace Advanced
     (cancelPromise : Capnp.Async.Promise AdvancedHandlerResult)
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
   AdvancedHandlerReply.deferPromiseWithCancel promise cancelPromise opts
-
-@[inline] def streamingNow (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
-  AdvancedHandlerReply.streaming (.now result)
 
 @[inline] def streamingDefer
     (next : IO AdvancedHandlerResult) (opts : AdvancedHandlerControl := {}) :
@@ -989,11 +957,6 @@ end CapTable
     let method : Method := { interfaceId := interfaceId, methodId := methodId }
     pure (toRawAdvancedHandlerReply (← handler target method request))
 
-@[inline] private def toRawAdvancedHandlerCall
-    (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : RawAdvancedHandlerCall :=
-  toRawAdvancedHandlerCallAsync fun target method request => do
-    return AdvancedHandlerReply.fromResult (← handler target method request)
-
 namespace Runtime
 
 @[inline] def init : IO Runtime := do
@@ -1020,7 +983,9 @@ namespace Runtime
 
 @[inline] def registerAdvancedHandlerTarget (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerResult) : IO Client :=
-  ffiRuntimeRegisterAdvancedHandlerTargetImpl runtime.handle (toRawAdvancedHandlerCall handler)
+  ffiRuntimeRegisterAdvancedHandlerTargetImpl runtime.handle
+    (toRawAdvancedHandlerCallAsync fun target method payload => do
+      pure (.now (← handler target method payload)))
 
 @[inline] def registerAdvancedHandlerTargetAsync (runtime : Runtime)
     (handler : Client -> Method -> Payload -> IO AdvancedHandlerReply) : IO Client :=
