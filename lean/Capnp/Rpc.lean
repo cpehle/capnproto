@@ -1038,6 +1038,15 @@ namespace Runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
   }
 
+@[inline] def connectAsTask (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error Client)) := do
+  let pending ← runtime.connectStart address portHint
+  IO.asTask (ffiRuntimeRegisterPromiseAwaitImpl runtime.handle pending.handle)
+
+@[inline] def connectAsPromise (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise Client) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.connectAsTask address portHint))
+
 @[inline] def connectFd (runtime : Runtime) (fd : UInt32) : IO Client :=
   ffiRuntimeConnectFdImpl runtime.handle fd
 
@@ -1104,6 +1113,19 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     runtime := runtime
     handle := (← ffiRuntimeNewClientStartImpl runtime.handle address portHint)
   }
+
+@[inline] def newClientAsTask (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error RuntimeClientRef)) := do
+  let pending ← runtime.newClientStart address portHint
+  IO.asTask do
+    return {
+      runtime := runtime
+      handle := { raw := (← ffiRuntimeRegisterPromiseAwaitImpl runtime.handle pending.handle) }
+    }
+
+@[inline] def newClientAsPromise (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise RuntimeClientRef) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.newClientAsTask address portHint))
 
 @[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
   return { runtime := runtime, handle := { raw := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
@@ -1275,6 +1297,18 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     }
   }
 
+@[inline] def startCallAsTask (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Task (Except IO.Error Payload)) := do
+  let pending ← runtime.startCall target method payload
+  IO.asTask do
+    let (responseBytes, responseCaps) ←
+      ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.raw
+    decodePayloadChecked responseBytes responseCaps
+
+@[inline] def startCallAsPromise (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Async.Promise Payload) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.startCallAsTask target method payload))
+
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : IO Payload := do
   let (responseBytes, responseCaps) ←
     ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.raw
@@ -1342,6 +1376,15 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     handle := (← ffiRuntimeTargetWhenResolvedStartImpl runtime.handle target)
   }
 
+@[inline] def targetWhenResolvedAsTask (runtime : Runtime) (target : Client) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← runtime.targetWhenResolvedStart target
+  IO.asTask (ffiRuntimeUnitPromiseAwaitImpl runtime.handle pending.handle)
+
+@[inline] def targetWhenResolvedAsPromise (runtime : Runtime) (target : Client) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.targetWhenResolvedAsTask target))
+
 @[inline] def pump (runtime : Runtime) : IO Unit :=
   ffiRuntimePumpImpl runtime.handle
 
@@ -1402,6 +1445,15 @@ namespace RuntimeClientRef
     handle := (← ffiRuntimeClientOnDisconnectStartImpl client.runtime.handle client.handle.raw)
   }
 
+@[inline] def onDisconnectAsTask (client : RuntimeClientRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← client.onDisconnectStart
+  IO.asTask (ffiRuntimeUnitPromiseAwaitImpl client.runtime.handle pending.handle)
+
+@[inline] def onDisconnectAsPromise (client : RuntimeClientRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← client.onDisconnectAsTask))
+
 @[inline] def setFlowLimit (client : RuntimeClientRef) (words : UInt64) : IO Unit :=
   ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle.raw words
 
@@ -1441,6 +1493,15 @@ namespace RuntimeServerRef
       server.runtime.handle server.handle.raw listener.raw)
   }
 
+@[inline] def acceptAsTask (server : RuntimeServerRef) (listener : Listener) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← server.acceptStart listener
+  IO.asTask (ffiRuntimeUnitPromiseAwaitImpl server.runtime.handle pending.handle)
+
+@[inline] def acceptAsPromise (server : RuntimeServerRef) (listener : Listener) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← server.acceptAsTask listener))
+
 @[inline] def acceptFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit :=
   ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.raw fd
 
@@ -1460,6 +1521,15 @@ namespace RuntimeServerRef
     runtime := server.runtime
     handle := (← ffiRuntimeServerDrainStartImpl server.runtime.handle server.handle.raw)
   }
+
+@[inline] def drainAsTask (server : RuntimeServerRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← server.drainStart
+  IO.asTask (ffiRuntimeUnitPromiseAwaitImpl server.runtime.handle pending.handle)
+
+@[inline] def drainAsPromise (server : RuntimeServerRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← server.drainAsTask))
 
 @[inline] def withListener (server : RuntimeServerRef) (address : String)
     (action : Listener -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -1811,6 +1881,14 @@ namespace RuntimeM
     RuntimeM RuntimeRegisterPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
 
+@[inline] def connectAsTask (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error Client)) := do
+  Runtime.connectAsTask (← runtime) address portHint
+
+@[inline] def connectAsPromise (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise Client) := do
+  Runtime.connectAsPromise (← runtime) address portHint
+
 @[inline] def connectFd (fd : UInt32) : RuntimeM Client := do
   Runtime.connectFd (← runtime) fd
 
@@ -1850,6 +1928,14 @@ namespace RuntimeM
 @[inline] def newClientStart (address : String) (portHint : UInt32 := 0) :
     RuntimeM RuntimeRegisterPromiseRef := do
   Runtime.newClientStart (← runtime) address portHint
+
+@[inline] def newClientAsTask (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error RuntimeClientRef)) := do
+  Runtime.newClientAsTask (← runtime) address portHint
+
+@[inline] def newClientAsPromise (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise RuntimeClientRef) := do
+  Runtime.newClientAsPromise (← runtime) address portHint
 
 @[inline] def newServer (bootstrap : Client) : RuntimeM RuntimeServerRef := do
   Runtime.newServer (← runtime) bootstrap
@@ -1943,6 +2029,16 @@ namespace RuntimeM
   ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.onDisconnectStart
 
+@[inline] def clientOnDisconnectAsTask (client : RuntimeClientRef) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  let pending ← clientOnDisconnectStart client
+  pending.awaitAsTask
+
+@[inline] def clientOnDisconnectAsPromise (client : RuntimeClientRef) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  let pending ← clientOnDisconnectStart client
+  pending.toPromise
+
 @[inline] def clientSetFlowLimit (client : RuntimeClientRef) (words : UInt64) : RuntimeM Unit := do
   ensureCurrentRuntime client.runtime "RuntimeClientRef"
   client.setFlowLimit words
@@ -1994,6 +2090,16 @@ namespace RuntimeM
   ensureCurrentRuntimeHandle listener.runtimeHandle "Listener"
   server.acceptStart listener
 
+@[inline] def serverAcceptAsTask (server : RuntimeServerRef) (listener : Listener) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  let pending ← serverAcceptStart server listener
+  pending.awaitAsTask
+
+@[inline] def serverAcceptAsPromise (server : RuntimeServerRef) (listener : Listener) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  let pending ← serverAcceptStart server listener
+  pending.toPromise
+
 @[inline] def serverAcceptFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
   ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.acceptFd fd
@@ -2015,6 +2121,16 @@ namespace RuntimeM
 @[inline] def serverDrainStart (server : RuntimeServerRef) : RuntimeM RuntimeUnitPromiseRef := do
   ensureCurrentRuntime server.runtime "RuntimeServerRef"
   server.drainStart
+
+@[inline] def serverDrainAsTask (server : RuntimeServerRef) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  let pending ← serverDrainStart server
+  pending.awaitAsTask
+
+@[inline] def serverDrainAsPromise (server : RuntimeServerRef) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  let pending ← serverDrainStart server
+  pending.toPromise
 
 @[inline] def withClient (address : String)
     (action : RuntimeClientRef -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
@@ -2064,6 +2180,18 @@ namespace RuntimeM
 @[inline] def startCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
   Runtime.startCall (← runtime) target method payload
+
+@[inline] def startCallAsTask (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) :
+    RuntimeM (Task (Except IO.Error Payload)) := do
+  let pending ← startCall target method payload
+  pending.awaitAsTask
+
+@[inline] def startCallAsPromise (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) :
+    RuntimeM (Capnp.Async.Promise Payload) := do
+  let pending ← startCall target method payload
+  pending.toPromise
 
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
@@ -2124,6 +2252,16 @@ namespace RuntimeM
 
 @[inline] def targetWhenResolvedStart (target : Client) : RuntimeM RuntimeUnitPromiseRef := do
   Runtime.targetWhenResolvedStart (← runtime) target
+
+@[inline] def targetWhenResolvedAsTask (target : Client) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  let pending ← targetWhenResolvedStart target
+  pending.awaitAsTask
+
+@[inline] def targetWhenResolvedAsPromise (target : Client) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  let pending ← targetWhenResolvedStart target
+  pending.toPromise
 
 @[inline] def pump : RuntimeM Unit := do
   Runtime.pump (← runtime)

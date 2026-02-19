@@ -360,3 +360,92 @@ def testRpcAdvancedDeferPromiseHelper : IO Unit := do
           throw (IO.userError "deferPromise did not produce expected deferred respond payload")
   | _ =>
       throw (IO.userError "deferPromise did not emit deferred reply")
+
+private def testRpcAsyncHelperMethod : Capnp.Rpc.Method :=
+  { interfaceId := UInt64.ofNat 1, methodId := UInt16.ofNat 0 }
+
+@[test]
+def testRpcRuntimeStartCallAsyncHelpers : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    try
+      let task ← runtime.startCallAsTask target testRpcAsyncHelperMethod Capnp.emptyRpcEnvelope
+      match (← IO.wait task) with
+      | .ok payload =>
+          assertEqual payload.capTable.caps.size 0
+      | .error err =>
+          throw (IO.userError s!"Runtime.startCallAsTask failed: {err}")
+
+      let promise ← runtime.startCallAsPromise target testRpcAsyncHelperMethod Capnp.emptyRpcEnvelope
+      match (← promise.awaitResult) with
+      | .ok payload =>
+          assertEqual payload.capTable.caps.size 0
+      | .error err =>
+          throw (IO.userError s!"Runtime.startCallAsPromise failed: {err}")
+    finally
+      runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRpcRuntimeTargetWhenResolvedAsyncHelpers : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    try
+      let task ← runtime.targetWhenResolvedAsTask target
+      match (← IO.wait task) with
+      | .ok () => pure ()
+      | .error err =>
+          throw (IO.userError s!"Runtime.targetWhenResolvedAsTask failed: {err}")
+
+      let promise ← runtime.targetWhenResolvedAsPromise target
+      match (← promise.awaitResult) with
+      | .ok () => pure ()
+      | .error err =>
+          throw (IO.userError s!"Runtime.targetWhenResolvedAsPromise failed: {err}")
+    finally
+      runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRpcRuntimeMAsyncHelperBridges : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    try
+      let task ← Capnp.Rpc.RuntimeM.run runtime do
+        Capnp.Rpc.RuntimeM.startCallAsTask target testRpcAsyncHelperMethod Capnp.emptyRpcEnvelope
+      match (← IO.wait task) with
+      | .ok payload =>
+          assertEqual payload.capTable.caps.size 0
+      | .error err =>
+          throw (IO.userError s!"RuntimeM.startCallAsTask failed: {err}")
+
+      let promise ← Capnp.Rpc.RuntimeM.run runtime do
+        Capnp.Rpc.RuntimeM.startCallAsPromise target testRpcAsyncHelperMethod Capnp.emptyRpcEnvelope
+      match (← promise.awaitResult) with
+      | .ok payload =>
+          assertEqual payload.capTable.caps.size 0
+      | .error err =>
+          throw (IO.userError s!"RuntimeM.startCallAsPromise failed: {err}")
+
+      let resolvedTask ← Capnp.Rpc.RuntimeM.run runtime do
+        Capnp.Rpc.RuntimeM.targetWhenResolvedAsTask target
+      match (← IO.wait resolvedTask) with
+      | .ok () => pure ()
+      | .error err =>
+          throw (IO.userError s!"RuntimeM.targetWhenResolvedAsTask failed: {err}")
+
+      let resolvedPromise ← Capnp.Rpc.RuntimeM.run runtime do
+        Capnp.Rpc.RuntimeM.targetWhenResolvedAsPromise target
+      match (← resolvedPromise.awaitResult) with
+      | .ok () => pure ()
+      | .error err =>
+          throw (IO.userError s!"RuntimeM.targetWhenResolvedAsPromise failed: {err}")
+    finally
+      runtime.releaseTarget target
+  finally
+    runtime.shutdown
