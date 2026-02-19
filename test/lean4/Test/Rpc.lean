@@ -416,6 +416,48 @@ def testRpcAdvancedDeferPromiseWithCancelHelper : IO Unit := do
       throw (IO.userError "deferPromiseWithCancel did not emit deferredWithCancel reply")
 
 @[test]
+def testRpcAdvancedHandlerControlMergeForResultHelpers : IO Unit := do
+  let result :=
+    Capnp.Rpc.AdvancedHandlerResult.streaming
+      (Capnp.Rpc.AdvancedHandlerResult.allowCancellation
+        (Capnp.Rpc.AdvancedHandlerResult.releaseParams
+          (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope)))
+  match result with
+  | .control opts next => do
+      assertEqual opts.releaseParams true
+      assertEqual opts.allowCancellation true
+      assertEqual opts.isStreaming true
+      match next with
+      | .respond payload =>
+          assertEqual payload.capTable.caps.size 0
+      | _ =>
+          throw (IO.userError "result control helpers should merge into a single control wrapper")
+  | _ =>
+      throw (IO.userError "result control helpers did not emit merged control wrapper")
+
+@[test]
+def testRpcAdvancedStreamingDeferMergesControlOpts : IO Unit := do
+  let reply ← Capnp.Rpc.Advanced.streamingDefer
+    (pure (Capnp.Rpc.Advanced.respond Capnp.emptyRpcEnvelope))
+    { releaseParams := true, allowCancellation := true }
+  match reply with
+  | .control opts next => do
+      assertEqual opts.releaseParams true
+      assertEqual opts.allowCancellation true
+      assertEqual opts.isStreaming true
+      match next with
+      | .deferred deferredTask =>
+          match (← IO.wait deferredTask) with
+          | .ok (.respond payload) =>
+              assertEqual payload.capTable.caps.size 0
+          | _ =>
+              throw (IO.userError "streamingDefer merged control wrapper did not preserve deferred task")
+      | _ =>
+          throw (IO.userError "streamingDefer merged control wrapper did not contain deferred task")
+  | _ =>
+      throw (IO.userError "streamingDefer did not emit merged control wrapper")
+
+@[test]
 def testRpcAdvancedForwardToCallerOnlyPromisePipelineHelper : IO Unit := do
   let target : Capnp.Rpc.Client := UInt32.ofNat 99
   let method : Capnp.Rpc.Method := { interfaceId := UInt64.ofNat 77, methodId := UInt16.ofNat 5 }

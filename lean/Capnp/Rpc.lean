@@ -180,6 +180,37 @@ inductive AdvancedHandlerReply where
   | control (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply)
   | pipeline (pipeline : Payload) (next : AdvancedHandlerReply)
 
+@[inline] def AdvancedHandlerControl.hasAny (opts : AdvancedHandlerControl) : Bool :=
+  opts.releaseParams || opts.allowCancellation || opts.isStreaming
+
+@[inline] def AdvancedHandlerControl.merge
+    (first : AdvancedHandlerControl) (second : AdvancedHandlerControl) :
+    AdvancedHandlerControl :=
+  { releaseParams := first.releaseParams || second.releaseParams
+    allowCancellation := first.allowCancellation || second.allowCancellation
+    isStreaming := first.isStreaming || second.isStreaming
+  }
+
+@[inline] private def applyAdvancedHandlerResultControl
+    (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult) :
+    AdvancedHandlerResult :=
+  if opts.hasAny then
+    match next with
+    | .control nested nestedNext => .control (nested.merge opts) nestedNext
+    | _ => .control opts next
+  else
+    next
+
+@[inline] private def applyAdvancedHandlerReplyControl
+    (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply) :
+    AdvancedHandlerReply :=
+  if opts.hasAny then
+    match next with
+    | .control nested nestedNext => .control (nested.merge opts) nestedNext
+    | _ => .control opts next
+  else
+    next
+
 @[inline] def AdvancedHandlerReply.fromResult
     (result : AdvancedHandlerResult) : AdvancedHandlerReply :=
   .now result
@@ -187,21 +218,13 @@ inductive AdvancedHandlerReply where
 @[inline] def AdvancedHandlerReply.deferTask
     (task : Task (Except IO.Error AdvancedHandlerResult))
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
-  let deferred : AdvancedHandlerReply := .deferred task
-  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
-    .control opts deferred
-  else
-    deferred
+  applyAdvancedHandlerReplyControl opts (.deferred task)
 
 @[inline] def AdvancedHandlerReply.deferTaskWithCancel
     (task : Task (Except IO.Error AdvancedHandlerResult))
     (cancelTask : Task (Except IO.Error AdvancedHandlerResult))
     (opts : AdvancedHandlerControl := {}) : AdvancedHandlerReply :=
-  let deferred : AdvancedHandlerReply := .deferredWithCancel task cancelTask
-  if opts.releaseParams || opts.allowCancellation || opts.isStreaming then
-    .control opts deferred
-  else
-    deferred
+  applyAdvancedHandlerReplyControl opts (.deferredWithCancel task cancelTask)
 
 @[inline] def AdvancedHandlerReply.deferPromise
     (promise : Capnp.Async.Promise AdvancedHandlerResult)
@@ -222,23 +245,23 @@ inductive AdvancedHandlerReply where
 
 @[inline] def AdvancedHandlerResult.withControl
     (opts : AdvancedHandlerControl) (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
-  .control opts next
+  applyAdvancedHandlerResultControl opts next
 
 @[inline] def AdvancedHandlerResult.releaseParams
     (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
-  .control { releaseParams := true } next
+  AdvancedHandlerResult.withControl { releaseParams := true } next
 
 @[inline] def AdvancedHandlerResult.allowCancellation
     (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
-  .control { allowCancellation := true } next
+  AdvancedHandlerResult.withControl { allowCancellation := true } next
 
 @[inline] def AdvancedHandlerResult.streaming
     (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
-  .control { isStreaming := true } next
+  AdvancedHandlerResult.withControl { isStreaming := true } next
 
 @[inline] def AdvancedHandlerReply.withControl
     (opts : AdvancedHandlerControl) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
-  .control opts next
+  applyAdvancedHandlerReplyControl opts next
 
 @[inline] def AdvancedHandlerReply.withPipeline
     (pipeline : Payload) (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
@@ -246,15 +269,15 @@ inductive AdvancedHandlerReply where
 
 @[inline] def AdvancedHandlerReply.releaseParams
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
-  .control { releaseParams := true } next
+  AdvancedHandlerReply.withControl { releaseParams := true } next
 
 @[inline] def AdvancedHandlerReply.allowCancellation
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
-  .control { allowCancellation := true } next
+  AdvancedHandlerReply.withControl { allowCancellation := true } next
 
 @[inline] def AdvancedHandlerReply.streaming
     (next : AdvancedHandlerReply) : AdvancedHandlerReply :=
-  .control { isStreaming := true } next
+  AdvancedHandlerReply.withControl { isStreaming := true } next
 
 inductive RawAdvancedHandlerResult where
   | returnPayload (response : ByteArray) (responseCaps : ByteArray)
@@ -376,7 +399,7 @@ namespace Advanced
   .throwRemoteWithType type message detail
 
 @[inline] def streaming (next : AdvancedHandlerResult) : AdvancedHandlerResult :=
-  .control { isStreaming := true } next
+  AdvancedHandlerResult.streaming next
 
 @[inline] def streamingDone : AdvancedHandlerResult :=
   streaming (.respond Capnp.emptyRpcEnvelope)
