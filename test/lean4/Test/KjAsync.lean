@@ -1678,6 +1678,49 @@ def testKjAsyncWebSocketReceiveWithMaxRejectsOversize : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncWebSocketCloseCodeHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  let checkClose
+      (sendClose : Capnp.KjAsync.WebSocket -> IO (Option Capnp.KjAsync.PromiseRef))
+      (expectedCode : UInt16) (expectedReason : String) : IO Unit := do
+    let (sender, receiver) ← runtime.newWebSocketPipe
+    try
+      let closePromise? ← sendClose sender
+      match (← receiver.receive) with
+      | .close code reason => do
+          assertEqual code expectedCode
+          assertEqual reason expectedReason
+      | _ =>
+          throw (IO.userError "expected websocket close message")
+      match closePromise? with
+      | some closePromise =>
+          closePromise.await
+      | none =>
+          pure ()
+    finally
+      sender.release
+      receiver.release
+  try
+    checkClose
+      (fun ws => do
+        let closePromise ← runtime.webSocketCloseStartCode ws (4000 : UInt32) "runtime-close-code"
+        pure (some closePromise))
+      (UInt16.ofNat 4000) "runtime-close-code"
+    checkClose
+      (fun ws => do
+        let closePromise ← ws.closeStartCode (4001 : UInt32) "ws-close-code"
+        pure (some closePromise))
+      (UInt16.ofNat 4001) "ws-close-code"
+    -- Compatibility shim: UInt16 API still routes through the new UInt32 helper.
+    checkClose
+      (fun ws => do
+        let closePromise ← ws.closeStart (UInt16.ofNat 4002) "ws-close-shim"
+        pure (some closePromise))
+      (UInt16.ofNat 4002) "ws-close-shim"
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncHttpRequestTaskAndPromiseHelpers : IO Unit := do
   let serverRuntime ← Capnp.KjAsync.Runtime.init
   let clientRuntime ← Capnp.KjAsync.Runtime.init

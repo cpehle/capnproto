@@ -2092,19 +2092,26 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     ffiRuntimeWebSocketReceiveWithMaxImpl runtime.handle webSocket.handle maxBytes
   decodeWebSocketMessage tag closeCode text bytes
 
-@[inline] def webSocketCloseStart (runtime : Runtime) (webSocket : WebSocket)
-    (code : UInt16) (reason : String := "") : IO PromiseRef := do
+@[inline] def webSocketCloseStartCode (runtime : Runtime) (webSocket : WebSocket)
+    (code : UInt32) (reason : String := "") : IO PromiseRef := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
   return {
     runtime := runtime
-    handle := (← ffiRuntimeWebSocketCloseStartImpl
-      runtime.handle webSocket.handle code.toUInt32 reason)
+    handle := (← ffiRuntimeWebSocketCloseStartImpl runtime.handle webSocket.handle code reason)
   }
+
+@[inline] def webSocketCloseStart (runtime : Runtime) (webSocket : WebSocket)
+    (code : UInt16) (reason : String := "") : IO PromiseRef := do
+  runtime.webSocketCloseStartCode webSocket code.toUInt32 reason
+
+@[inline] def webSocketCloseCode (runtime : Runtime) (webSocket : WebSocket)
+    (code : UInt32) (reason : String := "") : IO Unit := do
+  let promise ← runtime.webSocketCloseStartCode webSocket code reason
+  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
 
 @[inline] def webSocketClose (runtime : Runtime) (webSocket : WebSocket)
     (code : UInt16) (reason : String := "") : IO Unit := do
-  let promise ← runtime.webSocketCloseStart webSocket code reason
-  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+  runtime.webSocketCloseCode webSocket code.toUInt32 reason
 
 @[inline] def webSocketDisconnect (runtime : Runtime) (webSocket : WebSocket) : IO Unit := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
@@ -2527,7 +2534,7 @@ namespace Connection
     throw (IO.userError "Connection.pipeTo requires both connections to share the same runtime")
   if chunkSize == 0 then
     throw (IO.userError "Connection.pipeTo requires chunkSize > 0")
-  let mut copied : UInt64 := 0
+  let mut copied : Nat := 0
   let mut done := false
   while !done do
     let chunk ← source.read (1 : UInt32) chunkSize
@@ -2535,8 +2542,8 @@ namespace Connection
       done := true
     else
       target.write chunk
-      copied := copied + chunk.size.toUInt64
-  pure copied
+      copied := copied + chunk.size
+  pure copied.toUInt64
 
 @[inline] def pipeToAndShutdownWrite (source target : Connection)
     (chunkSize : UInt32 := 0x1000) : IO UInt64 := do
@@ -3212,26 +3219,42 @@ namespace WebSocket
     ffiRuntimeWebSocketReceiveWithMaxImpl webSocket.runtime.handle webSocket.handle maxBytes
   decodeWebSocketMessage tag closeCode text bytes
 
-@[inline] def closeStart (webSocket : WebSocket) (code : UInt16)
+@[inline] def closeStartCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : IO PromiseRef := do
   return {
     runtime := webSocket.runtime
-    handle := (← ffiRuntimeWebSocketCloseStartImpl webSocket.runtime.handle
-      webSocket.handle code.toUInt32 reason)
+    handle := (← ffiRuntimeWebSocketCloseStartImpl
+      webSocket.runtime.handle webSocket.handle code reason)
   }
+
+@[inline] def closeStart (webSocket : WebSocket) (code : UInt16)
+    (reason : String := "") : IO PromiseRef := do
+  webSocket.closeStartCode code.toUInt32 reason
+
+@[inline] def closeAsTaskCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : IO (Task (Except IO.Error Unit)) := do
+  let promise ← webSocket.closeStartCode code reason
+  promise.awaitAsTask
 
 @[inline] def closeAsTask (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : IO (Task (Except IO.Error Unit)) := do
-  let promise ← webSocket.closeStart code reason
-  promise.awaitAsTask
+  webSocket.closeAsTaskCode code.toUInt32 reason
+
+@[inline] def closeAsPromiseCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.closeAsTaskCode code reason))
 
 @[inline] def closeAsPromise (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : IO (Capnp.Async.Promise Unit) := do
-  pure (Capnp.Async.Promise.ofTask (← webSocket.closeAsTask code reason))
+  webSocket.closeAsPromiseCode code.toUInt32 reason
+
+@[inline] def closeCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : IO Unit := do
+  let promise ← webSocket.closeStartCode code reason
+  promise.await
 
 @[inline] def close (webSocket : WebSocket) (code : UInt16) (reason : String := "") : IO Unit := do
-  let promise ← webSocket.closeStart code reason
-  promise.await
+  webSocket.closeCode code.toUInt32 reason
 
 @[inline] def disconnect (webSocket : WebSocket) : IO Unit :=
   ffiRuntimeWebSocketDisconnectImpl webSocket.runtime.handle webSocket.handle
@@ -4138,23 +4161,39 @@ namespace RuntimeM
     RuntimeM WebSocketMessage := do
   webSocket.receiveWithMax maxBytes
 
+@[inline] def webSocketCloseStartCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : RuntimeM PromiseRef := do
+  Runtime.webSocketCloseStartCode (← runtime) webSocket code reason
+
 @[inline] def webSocketCloseStart (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM PromiseRef := do
-  Runtime.webSocketCloseStart (← runtime) webSocket code reason
+  webSocketCloseStartCode webSocket code.toUInt32 reason
+
+@[inline] def webSocketCloseAsTaskCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.closeAsTaskCode code reason
 
 @[inline] def webSocketCloseAsTask (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM (Task (Except IO.Error Unit)) := do
+  webSocketCloseAsTaskCode webSocket code.toUInt32 reason
+
+@[inline] def webSocketCloseAsPromiseCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
-  webSocket.closeAsTask code reason
+  webSocket.closeAsPromiseCode code reason
 
 @[inline] def webSocketCloseAsPromise (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM (Capnp.Async.Promise Unit) := do
-  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
-  webSocket.closeAsPromise code reason
+  webSocketCloseAsPromiseCode webSocket code.toUInt32 reason
+
+@[inline] def webSocketCloseCode (webSocket : WebSocket) (code : UInt32)
+    (reason : String := "") : RuntimeM Unit := do
+  webSocket.closeCode code reason
 
 @[inline] def webSocketClose (webSocket : WebSocket) (code : UInt16)
     (reason : String := "") : RuntimeM Unit := do
-  webSocket.close code reason
+  webSocketCloseCode webSocket code.toUInt32 reason
 
 @[inline] def webSocketDisconnect (webSocket : WebSocket) : RuntimeM Unit := do
   webSocket.disconnect
