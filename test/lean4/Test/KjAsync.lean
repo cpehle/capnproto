@@ -20,13 +20,6 @@ private def mkPayload : ByteArray :=
     |>.push (UInt8.ofNat 107)
     |>.push (UInt8.ofNat 106)
 
-private def appendByteArray (dst src : ByteArray) : ByteArray :=
-  Id.run do
-    let mut out := dst
-    for b in src do
-      out := out.push b
-    pure out
-
 private def tlsSelfSignedCertPem : String :=
   String.intercalate "\n" [
     "-----BEGIN CERTIFICATE-----",
@@ -93,7 +86,7 @@ private partial def readHttpServerRequestBodyAll
     if chunk.size == 0 then
       done := true
     else
-      out := appendByteArray out chunk
+      out := ByteArray.append out chunk
   requestBody.release
   pure out
 
@@ -651,7 +644,7 @@ def testKjAsyncRuntimeMConnectAsPromiseEndpointRoundtrip : IO Unit := do
         let clientConn ← connectPromise.await
         let serverConn ← acceptPromise.await
 
-        let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 11))
+        let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 11))
         clientConn.write payload
         clientConn.shutdownWrite
 
@@ -1258,7 +1251,7 @@ def testKjAsyncRuntimeMDatagramBindEndpoint : IO Unit := do
     let receiverPortNumber ← receiverPort.getPort
     let senderPort ← Capnp.KjAsync.RuntimeM.run senderRuntime do
       Capnp.KjAsync.RuntimeM.datagramBindEndpoint senderEndpoint
-    let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 21))
+    let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 21))
 
     let receiveTask ← receiverRuntime.datagramReceiveAsTask receiverPort (UInt32.ofNat 1024)
     let sendPromise ←
@@ -1336,8 +1329,8 @@ def testKjAsyncConnectionReadAllAndPipeHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
     let payload1 := mkPayload
-    let payload2 := appendByteArray (ByteArray.empty.push (UInt8.ofNat 45)) mkPayload
-    let expected := appendByteArray payload1 payload2
+    let payload2 := ByteArray.append (ByteArray.empty.push (UInt8.ofNat 45)) mkPayload
+    let expected := ByteArray.append payload1 payload2
 
     let (writer, reader) ← runtime.newTwoWayPipe
     writer.write payload1
@@ -1410,7 +1403,7 @@ def testKjAsyncDatagramSendAwaitAndReceiveManyHelpers : IO Unit := do
     let receiverPortNumber ← receiverPort.getPort
     let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
     let payload1 := mkPayload
-    let payload2 := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 1))
+    let payload2 := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 1))
 
     let receiveTask ← IO.asTask do
       receiverPort.receiveMany (2 : UInt32) (1024 : UInt32)
@@ -1450,7 +1443,7 @@ def testKjAsyncDatagramPeerRoundtripConveniences : IO Unit := do
     let leftPeer : Capnp.KjAsync.DatagramPeer := { leftSeedPeer with remotePort := rightPortNumber }
     let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
     let payloadA := mkPayload
-    let payloadB := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 7))
+    let payloadB := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 7))
     try
       assertEqual leftPeer.remoteAddress "127.0.0.1"
       assertEqual leftPeer.remotePort rightPortNumber
@@ -1491,7 +1484,7 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let receiverPort ← receiverRuntime.datagramBind "127.0.0.1" 0
     let receiverPortNumber ← receiverPort.getPort
     let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
-    let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 9))
+    let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 9))
 
     let receiveTask ← receiverRuntime.datagramReceiveAsTask receiverPort (UInt32.ofNat 1024)
     let sendPromise ←
@@ -1522,7 +1515,7 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let rightPortNumber ← rightSeedPeer.port.getPort
     let leftPeer : Capnp.KjAsync.DatagramPeer := { leftSeedPeer with remotePort := rightPortNumber }
     let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
-    let peerPayload := appendByteArray payload (ByteArray.empty.push (UInt8.ofNat 3))
+    let peerPayload := ByteArray.append payload (ByteArray.empty.push (UInt8.ofNat 3))
     try
       let peerReceivePromise ← rightPeer.receiveAsPromise (UInt32.ofNat 1024)
       let peerSendTask ← leftPeer.sendAsTask peerPayload
@@ -1606,7 +1599,7 @@ def testKjAsyncWebSocketTaskAndPromiseHelpers : IO Unit := do
       | _ =>
         throw (IO.userError "expected websocket text message from receiveAsPromise")
 
-      let payload := appendByteArray mkPayload (ByteArray.empty.push (UInt8.ofNat 5))
+      let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 5))
       let receiveBinaryTask ← right.receiveWithMaxAsTask (UInt32.ofNat 1024)
       let sendBinaryPromise ← left.sendBinaryAsPromise payload
       sendBinaryPromise.await
@@ -1782,7 +1775,7 @@ def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpers : IO Unit := do
     let server ← runtime.httpServerListen "127.0.0.1" 0
     let requestPartA := "stream-helper-request-a".toUTF8
     let requestPartB := "-and-b".toUTF8
-    let expectedRequestBody := appendByteArray requestPartA requestPartB
+    let expectedRequestBody := ByteArray.append requestPartA requestPartB
     let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
       .post "127.0.0.1" "/lean-http-stream-helper"
       #[{ name := "x-stream-helper", value := "1" }] server.boundPort
@@ -1815,13 +1808,13 @@ def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpers : IO Unit := do
     if firstChunk.size == 0 then
       done := true
     else
-      receivedRequestBody := appendByteArray receivedRequestBody firstChunk
+      receivedRequestBody := ByteArray.append receivedRequestBody firstChunk
     while !done do
       let chunk ← (← requestBodyStream.readAsPromise (UInt32.ofNat 1) (UInt32.ofNat 64)).await
       if chunk.size == 0 then
         done := true
       else
-        receivedRequestBody := appendByteArray receivedRequestBody chunk
+        receivedRequestBody := ByteArray.append receivedRequestBody chunk
     requestBodyStream.release
     assertEqual receivedRequestBody expectedRequestBody
 
@@ -1830,7 +1823,7 @@ def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpers : IO Unit := do
       #[{ name := "x-stream-helper-response", value := "1" }]
     let responsePartA := "stream-helper-response-a".toUTF8
     let responsePartB := "-and-b".toUTF8
-    let expectedResponseBody := appendByteArray responsePartA responsePartB
+    let expectedResponseBody := ByteArray.append responsePartA responsePartB
     match (← IO.wait (← responseBody.writeAsTask responsePartA)) with
     | .ok () => pure ()
     | .error err =>
@@ -1855,13 +1848,13 @@ def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpers : IO Unit := do
     if firstResponseChunk.size == 0 then
       responseDone := true
     else
-      receivedResponseBody := appendByteArray receivedResponseBody firstResponseChunk
+      receivedResponseBody := ByteArray.append receivedResponseBody firstResponseChunk
     while !responseDone do
       let chunk ← (← response.body.readAsPromise (UInt32.ofNat 1) (UInt32.ofNat 64)).await
       if chunk.size == 0 then
         responseDone := true
       else
-        receivedResponseBody := appendByteArray receivedResponseBody chunk
+        receivedResponseBody := ByteArray.append receivedResponseBody chunk
     assertEqual receivedResponseBody expectedResponseBody
     response.body.release
 
@@ -1924,7 +1917,7 @@ def testKjAsyncHttpServerRoundtripHeaderDecodeStress : IO Unit := do
   try
     let server ← runtime.httpServerListen "127.0.0.1" 0
     let requestPath := s!"/lean-http-stress/{String.ofList (List.replicate 96 'p')}"
-    let requestBody := appendByteArray mkPayload ("-header-stress".toUTF8)
+    let requestBody := ByteArray.append mkPayload ("-header-stress".toUTF8)
     let responsePromise ← runtime.httpRequestStartWithHeaders
       .post "127.0.0.1" requestPath requestHeaders requestBody server.boundPort
 
@@ -1994,7 +1987,7 @@ def testKjAsyncHttpStreamingRequestAndResponse : IO Unit := do
     let server ← runtime.httpServerListen "127.0.0.1" 0
     let requestPartA := "stream-request-part-a".toUTF8
     let requestPartB := "-and-b".toUTF8
-    let expectedRequestBody := appendByteArray requestPartA requestPartB
+    let expectedRequestBody := ByteArray.append requestPartA requestPartB
 
     let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
       .post "127.0.0.1" "/lean-http-stream" #[{ name := "x-stream", value := "1" }]
@@ -2030,7 +2023,7 @@ def testKjAsyncHttpStreamingRequestAndResponse : IO Unit := do
       if chunk.size == 0 then
         done := true
       else
-        received := appendByteArray received chunk
+        received := ByteArray.append received chunk
     assertEqual received responseBody
     response.body.release
     server.release
@@ -2044,7 +2037,7 @@ def testKjAsyncHttpServerStreamingRequestAndResponse : IO Unit := do
     let server ← runtime.httpServerListen "127.0.0.1" 0
     let requestPartA := "server-stream-request-a".toUTF8
     let requestPartB := "-and-b".toUTF8
-    let expectedRequestBody := appendByteArray requestPartA requestPartB
+    let expectedRequestBody := ByteArray.append requestPartA requestPartB
 
     let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
       .post "127.0.0.1" "/lean-http-server-stream" #[{ name := "x-server-stream", value := "1" }]
@@ -2071,7 +2064,7 @@ def testKjAsyncHttpServerStreamingRequestAndResponse : IO Unit := do
       (UInt32.ofNat 202) "Accepted" #[{ name := "x-server-stream-response", value := "1" }]
     let responsePartA := "server-stream-response-a".toUTF8
     let responsePartB := "-and-b".toUTF8
-    let expectedResponseBody := appendByteArray responsePartA responsePartB
+    let expectedResponseBody := ByteArray.append responsePartA responsePartB
     responseBody.write responsePartA
     responseBody.write responsePartB
     responseBody.finish
@@ -2091,7 +2084,7 @@ def testKjAsyncHttpServerStreamingRequestAndResponse : IO Unit := do
       if chunk.size == 0 then
         done := true
       else
-        received := appendByteArray received chunk
+        received := ByteArray.append received chunk
     assertEqual received expectedResponseBody
     response.body.release
     server.release
