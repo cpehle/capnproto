@@ -1301,6 +1301,32 @@ def testKjAsyncTwoWayPipeAsyncReadWritePrimitives : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncBytesRefConnectionPrimitives : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newTwoWayPipe
+    let payload := mkPayload
+
+    let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+    let payloadSize ← Capnp.KjAsync.BytesRef.size payloadRef
+    assertEqual payloadSize (UInt64.ofNat payload.size)
+
+    let writePromise ← left.writeStartRef payloadRef
+    let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
+    writePromise.await
+
+    let readRef ← readPromise.awaitRef
+    let readSize ← Capnp.KjAsync.BytesRef.size readRef
+    assertEqual readSize payloadSize
+    let received ← Capnp.KjAsync.BytesRef.toByteArray readRef
+    assertEqual received payload
+
+    left.release
+    right.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try

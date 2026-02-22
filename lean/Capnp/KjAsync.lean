@@ -34,6 +34,8 @@ structure BytesPromiseRef where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+opaque BytesRef : Type
+
 structure UInt32PromiseRef where
   runtime : Runtime
   handle : UInt32
@@ -253,26 +255,35 @@ opaque ffiRuntimeConnectionPromiseReleaseImpl (runtime : UInt64) (promise : UInt
 @[extern "capnp_lean_kj_async_runtime_release_connection"]
 opaque ffiRuntimeReleaseConnectionImpl (runtime : UInt64) (connection : UInt32) : IO Unit
 
-@[extern "capnp_lean_kj_async_runtime_connection_write"]
-opaque ffiRuntimeConnectionWriteImpl
-    (runtime : UInt64) (connection : UInt32) (bytes : @& ByteArray) : IO Unit
+@[extern "capnp_lean_kj_async_bytes_ref_of_byte_array"]
+opaque ffiBytesRefOfByteArrayImpl (bytes : @& ByteArray) : IO BytesRef
 
-@[extern "capnp_lean_kj_async_runtime_connection_write_start"]
-opaque ffiRuntimeConnectionWriteStartImpl
-    (runtime : UInt64) (connection : UInt32) (bytes : @& ByteArray) : IO UInt32
+@[extern "capnp_lean_kj_async_bytes_ref_to_byte_array"]
+opaque ffiBytesRefToByteArrayImpl (bytes : @& BytesRef) : IO ByteArray
 
-@[extern "capnp_lean_kj_async_runtime_connection_read"]
-opaque ffiRuntimeConnectionReadImpl
+@[extern "capnp_lean_kj_async_bytes_ref_size"]
+opaque ffiBytesRefSizeImpl (bytes : @& BytesRef) : IO UInt64
+
+@[extern "capnp_lean_kj_async_runtime_connection_write_ref"]
+opaque ffiRuntimeConnectionWriteRefImpl
+    (runtime : UInt64) (connection : UInt32) (bytes : @& BytesRef) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_connection_write_start_ref"]
+opaque ffiRuntimeConnectionWriteStartRefImpl
+    (runtime : UInt64) (connection : UInt32) (bytes : @& BytesRef) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_connection_read_ref"]
+opaque ffiRuntimeConnectionReadRefImpl
     (runtime : UInt64) (connection : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
-    IO ByteArray
+    IO BytesRef
 
 @[extern "capnp_lean_kj_async_runtime_connection_read_start"]
 opaque ffiRuntimeConnectionReadStartImpl
     (runtime : UInt64) (connection : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
     IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_bytes_promise_await"]
-opaque ffiRuntimeBytesPromiseAwaitImpl (runtime : UInt64) (promise : UInt32) : IO ByteArray
+@[extern "capnp_lean_kj_async_runtime_bytes_promise_await_ref"]
+opaque ffiRuntimeBytesPromiseAwaitRefImpl (runtime : UInt64) (promise : UInt32) : IO BytesRef
 
 @[extern "capnp_lean_kj_async_runtime_bytes_promise_cancel"]
 opaque ffiRuntimeBytesPromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Unit
@@ -736,6 +747,19 @@ opaque ffiRuntimeNewWebSocketPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
   if runtime.handle != owner.handle then
     throw (IO.userError
       s!"{resource} belongs to a different Capnp.KjAsync runtime")
+
+namespace BytesRef
+
+@[inline] def ofByteArray (bytes : ByteArray) : IO BytesRef :=
+  ffiBytesRefOfByteArrayImpl bytes
+
+@[inline] def toByteArray (bytes : BytesRef) : IO ByteArray :=
+  ffiBytesRefToByteArrayImpl bytes
+
+@[inline] def size (bytes : BytesRef) : IO UInt64 :=
+  ffiBytesRefSizeImpl bytes
+
+end BytesRef
 
 @[inline] private def appendUInt32Le (bytes : ByteArray) (value : UInt32) : ByteArray :=
   bytes.push value.toUInt8
@@ -1212,20 +1236,41 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def connectionWrite (runtime : Runtime) (connection : Connection)
     (bytes : ByteArray) : IO Unit := do
   ensureSameRuntime runtime connection.runtime "Connection"
-  ffiRuntimeConnectionWriteImpl runtime.handle connection.handle bytes
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeConnectionWriteRefImpl runtime.handle connection.handle bytesRef
+
+@[inline] def connectionWriteRef (runtime : Runtime) (connection : Connection)
+    (bytes : BytesRef) : IO Unit := do
+  ensureSameRuntime runtime connection.runtime "Connection"
+  ffiRuntimeConnectionWriteRefImpl runtime.handle connection.handle bytes
 
 @[inline] def connectionWriteStart (runtime : Runtime) (connection : Connection)
     (bytes : ByteArray) : IO PromiseRef := do
   ensureSameRuntime runtime connection.runtime "Connection"
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := runtime
-    handle := (← ffiRuntimeConnectionWriteStartImpl runtime.handle connection.handle bytes)
+    handle := (← ffiRuntimeConnectionWriteStartRefImpl runtime.handle connection.handle bytesRef)
+  }
+
+@[inline] def connectionWriteStartRef (runtime : Runtime) (connection : Connection)
+    (bytes : BytesRef) : IO PromiseRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeConnectionWriteStartRefImpl runtime.handle connection.handle bytes)
   }
 
 @[inline] def connectionRead (runtime : Runtime) (connection : Connection)
     (minBytes maxBytes : UInt32) : IO ByteArray := do
   ensureSameRuntime runtime connection.runtime "Connection"
-  ffiRuntimeConnectionReadImpl runtime.handle connection.handle minBytes maxBytes
+  let bytesRef ← ffiRuntimeConnectionReadRefImpl runtime.handle connection.handle minBytes maxBytes
+  bytesRef.toByteArray
+
+@[inline] def connectionReadRef (runtime : Runtime) (connection : Connection)
+    (minBytes maxBytes : UInt32) : IO BytesRef := do
+  ensureSameRuntime runtime connection.runtime "Connection"
+  ffiRuntimeConnectionReadRefImpl runtime.handle connection.handle minBytes maxBytes
 
 @[inline] def connectionReadStart (runtime : Runtime) (connection : Connection)
     (minBytes maxBytes : UInt32) : IO BytesPromiseRef := do
@@ -1238,7 +1283,12 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 
 @[inline] def bytesPromiseAwait (runtime : Runtime) (promise : BytesPromiseRef) : IO ByteArray := do
   ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
-  ffiRuntimeBytesPromiseAwaitImpl runtime.handle promise.handle
+  let bytesRef ← ffiRuntimeBytesPromiseAwaitRefImpl runtime.handle promise.handle
+  bytesRef.toByteArray
+
+@[inline] def bytesPromiseAwaitRef (runtime : Runtime) (promise : BytesPromiseRef) : IO BytesRef := do
+  ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
+  ffiRuntimeBytesPromiseAwaitRefImpl runtime.handle promise.handle
 
 @[inline] def bytesPromiseCancel (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit := do
   ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
@@ -2659,12 +2709,25 @@ namespace Connection
   ffiRuntimeReleaseConnectionImpl connection.runtime.handle connection.handle
 
 @[inline] def write (connection : Connection) (bytes : ByteArray) : IO Unit :=
-  ffiRuntimeConnectionWriteImpl connection.runtime.handle connection.handle bytes
+  do
+    let bytesRef ← BytesRef.ofByteArray bytes
+    ffiRuntimeConnectionWriteRefImpl connection.runtime.handle connection.handle bytesRef
+
+@[inline] def writeRef (connection : Connection) (bytes : BytesRef) : IO Unit :=
+  ffiRuntimeConnectionWriteRefImpl connection.runtime.handle connection.handle bytes
 
 @[inline] def writeStart (connection : Connection) (bytes : ByteArray) : IO PromiseRef := do
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := connection.runtime
-    handle := (← ffiRuntimeConnectionWriteStartImpl
+    handle := (← ffiRuntimeConnectionWriteStartRefImpl
+      connection.runtime.handle connection.handle bytesRef)
+  }
+
+@[inline] def writeStartRef (connection : Connection) (bytes : BytesRef) : IO PromiseRef := do
+  return {
+    runtime := connection.runtime
+    handle := (← ffiRuntimeConnectionWriteStartRefImpl
       connection.runtime.handle connection.handle bytes)
   }
 
@@ -2677,8 +2740,13 @@ namespace Connection
     IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← connection.writeAsTask bytes))
 
-@[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : IO ByteArray :=
-  ffiRuntimeConnectionReadImpl connection.runtime.handle connection.handle minBytes maxBytes
+@[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : IO ByteArray := do
+  let bytesRef ← ffiRuntimeConnectionReadRefImpl
+    connection.runtime.handle connection.handle minBytes maxBytes
+  BytesRef.toByteArray bytesRef
+
+@[inline] def readRef (connection : Connection) (minBytes maxBytes : UInt32) : IO BytesRef :=
+  ffiRuntimeConnectionReadRefImpl connection.runtime.handle connection.handle minBytes maxBytes
 
 @[inline] def readStart (connection : Connection) (minBytes maxBytes : UInt32) :
     IO BytesPromiseRef := do
@@ -2692,7 +2760,7 @@ namespace Connection
     IO (Task (Except IO.Error ByteArray)) := do
   let pending ← connection.readStart minBytes maxBytes
   IO.asTask do
-    ffiRuntimeBytesPromiseAwaitImpl connection.runtime.handle pending.handle
+    Runtime.bytesPromiseAwait connection.runtime pending
 
 @[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
@@ -2835,8 +2903,12 @@ end ConnectionPromiseRef
 
 namespace BytesPromiseRef
 
-@[inline] def await (promise : BytesPromiseRef) : IO ByteArray :=
-  ffiRuntimeBytesPromiseAwaitImpl promise.runtime.handle promise.handle
+@[inline] def await (promise : BytesPromiseRef) : IO ByteArray := do
+  let bytesRef ← ffiRuntimeBytesPromiseAwaitRefImpl promise.runtime.handle promise.handle
+  BytesRef.toByteArray bytesRef
+
+@[inline] def awaitRef (promise : BytesPromiseRef) : IO BytesRef :=
+  ffiRuntimeBytesPromiseAwaitRefImpl promise.runtime.handle promise.handle
 
 @[inline] def cancel (promise : BytesPromiseRef) : IO Unit :=
   ffiRuntimeBytesPromiseCancelImpl promise.runtime.handle promise.handle
@@ -3554,8 +3626,14 @@ namespace RuntimeM
 @[inline] def write (connection : Connection) (bytes : ByteArray) : RuntimeM Unit := do
   Runtime.connectionWrite (← runtime) connection bytes
 
+@[inline] def writeRef (connection : Connection) (bytes : BytesRef) : RuntimeM Unit := do
+  Runtime.connectionWriteRef (← runtime) connection bytes
+
 @[inline] def writeStart (connection : Connection) (bytes : ByteArray) : RuntimeM PromiseRef := do
   Runtime.connectionWriteStart (← runtime) connection bytes
+
+@[inline] def writeStartRef (connection : Connection) (bytes : BytesRef) : RuntimeM PromiseRef := do
+  Runtime.connectionWriteStartRef (← runtime) connection bytes
 
 @[inline] def writeAsTask (connection : Connection) (bytes : ByteArray) :
     RuntimeM (Task (Except IO.Error Unit)) := do
@@ -3569,6 +3647,9 @@ namespace RuntimeM
 
 @[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
   Runtime.connectionRead (← runtime) connection minBytes maxBytes
+
+@[inline] def readRef (connection : Connection) (minBytes maxBytes : UInt32) : RuntimeM BytesRef := do
+  Runtime.connectionReadRef (← runtime) connection minBytes maxBytes
 
 @[inline] def readStart (connection : Connection) (minBytes maxBytes : UInt32) :
     RuntimeM BytesPromiseRef := do
@@ -3627,6 +3708,9 @@ namespace RuntimeM
 
 @[inline] def awaitBytes (promise : BytesPromiseRef) : RuntimeM ByteArray := do
   promise.await
+
+@[inline] def awaitBytesRef (promise : BytesPromiseRef) : RuntimeM BytesRef := do
+  promise.awaitRef
 
 @[inline] def cancelBytes (promise : BytesPromiseRef) : RuntimeM Unit := do
   promise.cancel

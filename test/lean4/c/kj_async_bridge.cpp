@@ -49,6 +49,21 @@ lean_obj_res mkByteArrayCopy(const uint8_t* data, size_t size) {
   return out;
 }
 
+std::shared_ptr<std::vector<uint8_t>> makeSharedBytes(std::vector<uint8_t>&& bytes) {
+  return std::make_shared<std::vector<uint8_t>>(std::move(bytes));
+}
+
+std::shared_ptr<std::vector<uint8_t>> copyByteArrayToSharedBytes(b_lean_obj_arg bytes) {
+  const auto size = lean_sarray_size(bytes);
+  const auto* data =
+      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
+  auto out = std::make_shared<std::vector<uint8_t>>(size);
+  if (size != 0) {
+    std::memcpy(out->data(), data, size);
+  }
+  return out;
+}
+
 kj::Array<kj::byte> copyByteArrayToKjArray(b_lean_obj_arg bytes) {
   const auto size = lean_sarray_size(bytes);
   const auto* data =
@@ -84,6 +99,41 @@ std::string byteArrayToString(b_lean_obj_arg bytes) {
   const auto* data =
       reinterpret_cast<const char*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
   return std::string(data, size);
+}
+
+struct BytesRefData {
+  std::shared_ptr<std::vector<uint8_t>> bytes;
+};
+
+void bytesRefFinalize(void* data) {
+  delete static_cast<BytesRefData*>(data);
+}
+
+void bytesRefForeach(void*, b_lean_obj_arg) {}
+
+lean_external_class* bytesRefClass() {
+  static lean_external_class* cls =
+      lean_register_external_class(bytesRefFinalize, bytesRefForeach);
+  return cls;
+}
+
+lean_obj_res mkBytesRef(std::shared_ptr<std::vector<uint8_t>> bytes) {
+  if (!bytes) {
+    bytes = std::make_shared<std::vector<uint8_t>>();
+  }
+  return lean_alloc_external(bytesRefClass(), new BytesRefData{std::move(bytes)});
+}
+
+std::shared_ptr<std::vector<uint8_t>> getBytesRefDataOrThrow(b_lean_obj_arg bytesRef) {
+  auto* obj = const_cast<lean_object*>(bytesRef);
+  if (!lean_is_external(obj) || lean_get_external_class(obj) != bytesRefClass()) {
+    throw std::runtime_error("invalid Capnp.KjAsync.BytesRef object");
+  }
+  auto* data = static_cast<BytesRefData*>(lean_get_external_data(obj));
+  if (data == nullptr || !data->bytes) {
+    return std::make_shared<std::vector<uint8_t>>();
+  }
+  return data->bytes;
 }
 
 uint32_t readUint32Le(const uint8_t* data) {
@@ -276,7 +326,7 @@ struct BytesCompletion {
   std::condition_variable cv;
   bool done = false;
   bool ok = false;
-  std::vector<uint8_t> bytes;
+  std::shared_ptr<std::vector<uint8_t>> bytes;
   std::string error;
 };
 
@@ -442,11 +492,11 @@ void completeHandleFailure(const std::shared_ptr<HandleCompletion>& completion,
 }
 
 void completeBytesSuccess(const std::shared_ptr<BytesCompletion>& completion,
-                          std::vector<uint8_t> bytes) {
+                          std::shared_ptr<std::vector<uint8_t>> bytes) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = true;
-    completion->bytes = std::move(bytes);
+    completion->bytes = bytes ? std::move(bytes) : std::make_shared<std::vector<uint8_t>>();
     completion->done = true;
   }
   completion->cv.notify_one();
@@ -872,7 +922,7 @@ class KjAsyncRuntimeLoop {
   }
 
   std::shared_ptr<UnitCompletion> enqueueConnectionWrite(uint32_t connectionId,
-                                                         kj::Array<kj::byte> bytes) {
+                                                         std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -887,7 +937,7 @@ class KjAsyncRuntimeLoop {
   }
 
   std::shared_ptr<PromiseIdCompletion> enqueueConnectionWriteStart(uint32_t connectionId,
-                                                                   kj::Array<kj::byte> bytes) {
+                                                                   std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2323,7 +2373,7 @@ class KjAsyncRuntimeLoop {
   };
 
   struct PendingBytesPromise {
-    PendingBytesPromise(kj::Promise<std::vector<uint8_t>>&& promise,
+    PendingBytesPromise(kj::Promise<std::shared_ptr<std::vector<uint8_t>>>&& promise,
                         kj::Own<kj::Canceler>&& canceler)
         : promise(kj::mv(promise)), canceler(kj::mv(canceler)) {}
 
@@ -2332,7 +2382,7 @@ class KjAsyncRuntimeLoop {
     PendingBytesPromise(const PendingBytesPromise&) = delete;
     PendingBytesPromise& operator=(const PendingBytesPromise&) = delete;
 
-    kj::Promise<std::vector<uint8_t>> promise;
+    kj::Promise<std::shared_ptr<std::vector<uint8_t>>> promise;
     kj::Own<kj::Canceler> canceler;
   };
 
@@ -2657,13 +2707,13 @@ class KjAsyncRuntimeLoop {
 
   struct QueuedConnectionWrite {
     uint32_t connectionId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<UnitCompletion> completion;
   };
 
   struct QueuedConnectionWriteStart {
     uint32_t connectionId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
@@ -3750,14 +3800,19 @@ class KjAsyncRuntimeLoop {
     connectionPromises_.erase(it);
   }
 
-  std::vector<uint8_t> awaitBytesPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
+  std::shared_ptr<std::vector<uint8_t>> awaitBytesPromise(kj::WaitScope& waitScope,
+                                                          uint32_t promiseId) {
     auto it = bytesPromises_.find(promiseId);
     if (it == bytesPromises_.end()) {
       throw std::runtime_error("unknown KJ bytes promise id: " + std::to_string(promiseId));
     }
     auto pending = kj::mv(it->second);
     bytesPromises_.erase(it);
-    return kj::mv(pending.promise).wait(waitScope);
+    auto bytes = kj::mv(pending.promise).wait(waitScope);
+    if (!bytes) {
+      return std::make_shared<std::vector<uint8_t>>();
+    }
+    return bytes;
   }
 
   void cancelBytesPromise(uint32_t promiseId) {
@@ -3977,24 +4032,27 @@ class KjAsyncRuntimeLoop {
     connections_.erase(it);
   }
 
-  uint32_t connectionWriteStart(uint32_t connectionId, kj::Array<kj::byte> bytes) {
+  uint32_t connectionWriteStart(uint32_t connectionId,
+                                std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = connections_.find(connectionId);
     if (it == connections_.end()) {
       throw std::runtime_error("unknown KJ connection id: " + std::to_string(connectionId));
     }
 
     auto canceler = kj::heap<kj::Canceler>();
-    if (bytes.size() == 0) {
+    if (!bytes || bytes->empty()) {
       kj::Promise<void> ready = kj::READY_NOW;
       auto wrapped = canceler->wrap(kj::mv(ready));
       return addPromise(PendingPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
-    auto promise = canceler->wrap(it->second->write(bytes.asPtr()).attach(kj::mv(bytes)));
+    auto ptr = kj::ArrayPtr<const kj::byte>(
+        reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+    auto promise = canceler->wrap(it->second->write(ptr).attach(kj::mv(bytes)));
     return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   void connectionWrite(kj::WaitScope& waitScope, uint32_t connectionId,
-                       kj::Array<kj::byte> bytes) {
+                       std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto promiseId = connectionWriteStart(connectionId, kj::mv(bytes));
     awaitPromise(waitScope, promiseId);
   }
@@ -4012,7 +4070,9 @@ class KjAsyncRuntimeLoop {
     auto canceler = kj::heap<kj::Canceler>();
     if (maxBytes == 0) {
       kj::Promise<void> ready = kj::READY_NOW;
-      auto wrapped = canceler->wrap(kj::mv(ready).then([]() { return std::vector<uint8_t>(); }));
+      auto wrapped = canceler->wrap(kj::mv(ready).then([]() {
+        return std::make_shared<std::vector<uint8_t>>();
+      }));
       return addBytesPromise(PendingBytesPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
 
@@ -4026,13 +4086,14 @@ class KjAsyncRuntimeLoop {
                              if (readCount != 0) {
                                std::memcpy(bytes.data(), buffer.begin(), readCount);
                              }
-                             return bytes;
+                             return makeSharedBytes(std::move(bytes));
                            }));
     return addBytesPromise(PendingBytesPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
-  std::vector<uint8_t> connectionRead(kj::WaitScope& waitScope, uint32_t connectionId,
-                                      uint32_t minBytes, uint32_t maxBytes) {
+  std::shared_ptr<std::vector<uint8_t>> connectionRead(kj::WaitScope& waitScope,
+                                                       uint32_t connectionId, uint32_t minBytes,
+                                                       uint32_t maxBytes) {
     auto promiseId = connectionReadStart(connectionId, minBytes, maxBytes);
     return awaitBytesPromise(waitScope, promiseId);
   }
@@ -4619,7 +4680,9 @@ class KjAsyncRuntimeLoop {
     auto canceler = kj::heap<kj::Canceler>();
     if (maxBytes == 0) {
       kj::Promise<void> ready = kj::READY_NOW;
-      auto wrapped = canceler->wrap(kj::mv(ready).then([]() { return std::vector<uint8_t>(); }));
+      auto wrapped = canceler->wrap(kj::mv(ready).then([]() {
+        return std::make_shared<std::vector<uint8_t>>();
+      }));
       return addBytesPromise(PendingBytesPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
 
@@ -4632,13 +4695,15 @@ class KjAsyncRuntimeLoop {
                                         if (readCount != 0) {
                                           std::memcpy(bytes.data(), buffer.begin(), readCount);
                                         }
-                                        return bytes;
+                                        return makeSharedBytes(std::move(bytes));
                                       }));
     return addBytesPromise(PendingBytesPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
-  std::vector<uint8_t> httpResponseBodyRead(kj::WaitScope& waitScope, uint32_t responseBodyId,
-                                            uint32_t minBytes, uint32_t maxBytes) {
+  std::shared_ptr<std::vector<uint8_t>> httpResponseBodyRead(kj::WaitScope& waitScope,
+                                                             uint32_t responseBodyId,
+                                                             uint32_t minBytes,
+                                                             uint32_t maxBytes) {
     auto promiseId = httpResponseBodyReadStart(responseBodyId, minBytes, maxBytes);
     return awaitBytesPromise(waitScope, promiseId);
   }
@@ -4664,7 +4729,9 @@ class KjAsyncRuntimeLoop {
     auto canceler = kj::heap<kj::Canceler>();
     if (maxBytes == 0) {
       kj::Promise<void> ready = kj::READY_NOW;
-      auto wrapped = canceler->wrap(kj::mv(ready).then([]() { return std::vector<uint8_t>(); }));
+      auto wrapped = canceler->wrap(kj::mv(ready).then([]() {
+        return std::make_shared<std::vector<uint8_t>>();
+      }));
       return addBytesPromise(PendingBytesPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
 
@@ -4677,13 +4744,15 @@ class KjAsyncRuntimeLoop {
                                         if (readCount != 0) {
                                           std::memcpy(bytes.data(), buffer.begin(), readCount);
                                         }
-                                        return bytes;
+                                        return makeSharedBytes(std::move(bytes));
                                       }));
     return addBytesPromise(PendingBytesPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
-  std::vector<uint8_t> httpServerRequestBodyRead(kj::WaitScope& waitScope, uint32_t requestBodyId,
-                                                 uint32_t minBytes, uint32_t maxBytes) {
+  std::shared_ptr<std::vector<uint8_t>> httpServerRequestBodyRead(kj::WaitScope& waitScope,
+                                                                  uint32_t requestBodyId,
+                                                                  uint32_t minBytes,
+                                                                  uint32_t maxBytes) {
     auto promiseId = httpServerRequestBodyReadStart(requestBodyId, minBytes, maxBytes);
     return awaitBytesPromise(waitScope, promiseId);
   }
@@ -7832,15 +7901,51 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_release_connecti
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write(
-    uint64_t runtimeId, uint32_t connectionId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_bytes_ref_of_byte_array(
+    b_lean_obj_arg bytes) {
+  try {
+    return lean_io_result_mk_ok(mkBytesRef(copyByteArrayToSharedBytes(bytes)));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_bytes_ref_of_byte_array");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_bytes_ref_to_byte_array(
+    b_lean_obj_arg bytesRef) {
+  try {
+    auto bytes = getBytesRefDataOrThrow(bytesRef);
+    return lean_io_result_mk_ok(mkByteArrayCopy(bytes->data(), bytes->size()));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_bytes_ref_to_byte_array");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_bytes_ref_size(
+    b_lean_obj_arg bytesRef) {
+  try {
+    auto bytes = getBytesRefDataOrThrow(bytesRef);
+    return lean_io_result_mk_ok(lean_box_uint64(static_cast<uint64_t>(bytes->size())));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_bytes_ref_size");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write_ref(
+    uint64_t runtimeId, uint32_t connectionId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion = runtime->enqueueConnectionWrite(connectionId, copyByteArrayToKjArray(bytes));
+    auto completion =
+        runtime->enqueueConnectionWrite(connectionId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -7856,20 +7961,20 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_write");
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_write_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write_start(
-    uint64_t runtimeId, uint32_t connectionId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write_start_ref(
+    uint64_t runtimeId, uint32_t connectionId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion =
-        runtime->enqueueConnectionWriteStart(connectionId, copyByteArrayToKjArray(bytes));
+    auto completion = runtime->enqueueConnectionWriteStart(connectionId,
+                                                           getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -7884,11 +7989,11 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_write
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_connection_write_start");
+        "unknown exception in capnp_lean_kj_async_runtime_connection_write_start_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_read(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_read_ref(
     uint64_t runtimeId, uint32_t connectionId, uint32_t minBytes, uint32_t maxBytes) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -7903,15 +8008,15 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_read(
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return lean_io_result_mk_ok(
-          mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
+      return lean_io_result_mk_ok(mkBytesRef(std::move(bytes)));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_read");
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_read_ref");
   }
 }
 
@@ -7942,7 +8047,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_read_
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_bytes_promise_await(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_bytes_promise_await_ref(
     uint64_t runtimeId, uint32_t promiseId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -7957,15 +8062,16 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_bytes_promise_aw
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return lean_io_result_mk_ok(
-          mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
+      return lean_io_result_mk_ok(mkBytesRef(std::move(bytes)));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_bytes_promise_await");
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_bytes_promise_await_ref");
   }
 }
 
@@ -10018,7 +10124,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_bo
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return lean_io_result_mk_ok(mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
+      return lean_io_result_mk_ok(mkByteArrayCopy(bytes->data(), bytes->size()));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -10099,8 +10206,9 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_requ
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
+      auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
       return lean_io_result_mk_ok(
-          mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+          mkByteArrayCopy(bytes->data(), bytes->size()));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
