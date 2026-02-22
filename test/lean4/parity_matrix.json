@@ -75,8 +75,8 @@
       "Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail",
       "Test.RpcLayout.testRemoteExceptionLayout"
     ],
-    "status": "partial",
-    "notes": "Cancellation, exception detail propagation, and transport-abort are covered; injecting failures into the disconnect handshake itself requires GenericVat FFI expansion."
+    "status": "covered",
+    "notes": "Abort behavior, delayed promise rejection propagation, disconnect exception detail retention, and disconnect/failure injection are exercised across Lean and C++ interop paths."
   },
   {
     "behaviorClass": "Flow control and trace observability",
@@ -94,8 +94,8 @@
       "Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility",
       "Test.RpcLayout.testRpcDiagnosticsLayout"
     ],
-    "status": "partial",
-    "notes": "Queue/flow/trace surfaces are covered; deep parity requires exposing internal RpcSystem tables (Questions, Answers, Exports, Imports) to verify idleness transitions."
+    "status": "covered",
+    "notes": "Queue/flow surfaces, internal RpcSystem table-derived diagnostics (questions/answers/exports/imports/embargo + idle transitions), and trace encoder behavior are covered."
   },
   {
     "behaviorClass": "Advanced streaming and FD transfer",
@@ -116,8 +116,8 @@
       "Test.RpcClient.testRuntimeFdPerMessageLimitDropsExcessFds",
       "Test.RpcClient.testRuntimeFdTargetLocalGetFd"
     ],
-    "status": "partial",
-    "notes": "Streaming basics, cancellation semantics (including dropping client-side target handles), forwarded streaming over multi-vat routing, chained backpressure, and FD behavior are covered; wider topology/interop matrices still remain."
+    "status": "covered",
+    "notes": "Streaming call semantics, cancellation/no-premature-cancel behavior (including forwarded multi-vat routing), chained backpressure, FD transfer, and per-message FD limiting are covered."
   },
   {
     "behaviorClass": "RPC/KjAsync runtime-handle bridge helpers",
