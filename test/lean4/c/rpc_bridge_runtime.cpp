@@ -2140,6 +2140,22 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<ProtocolMessageCountsCompletion>
+  enqueueMultiVatConnectionResolveDisembargoCounts(uint32_t fromPeerId, uint32_t toPeerId) {
+    auto completion = std::make_shared<ProtocolMessageCountsCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeProtocolMessageCountsFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedMultiVatConnectionResolveDisembargoCounts{fromPeerId, toPeerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   bool isWorkerThread() const {
     return std::this_thread::get_id() == worker_.get_id();
   }
@@ -2924,6 +2940,12 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedMultiVatConnectionResolveDisembargoCounts {
+    uint32_t fromPeerId;
+    uint32_t toPeerId;
+    std::shared_ptr<ProtocolMessageCountsCompletion> completion;
+  };
+
   using QueuedOperation =
       std::variant<QueuedRawCall, QueuedStartPendingCall, QueuedStartStreamingPendingCall,
                    QueuedAwaitPendingCall,
@@ -2981,7 +3003,8 @@ class RuntimeLoop {
                    QueuedMultiVatClearRestorer, QueuedMultiVatPublishSturdyRef,
                    QueuedMultiVatRestoreSturdyRef, QueuedMultiVatGetDiagnostics,
                    QueuedMultiVatConnectionBlock,
-                   QueuedMultiVatConnectionUnblock, QueuedMultiVatConnectionDisconnect>;
+                   QueuedMultiVatConnectionUnblock, QueuedMultiVatConnectionDisconnect,
+                   QueuedMultiVatConnectionResolveDisembargoCounts>;
 
   struct LoopbackPeer {
     kj::Own<kj::AsyncCapabilityStream> clientStream;
@@ -4312,6 +4335,17 @@ class RuntimeLoop {
       ex.setDetail(1, kj::heapArray(detailBytes.data(), detailBytes.size()));
     }
     KJ_ASSERT_NONNULL(conn).disconnect(kj::mv(ex));
+  }
+
+  ProtocolMessageCounts multiVatConnectionResolveDisembargoCounts(uint32_t fromPeerId,
+                                                                   uint32_t toPeerId) {
+    auto& from = requireMultiVatPeer(fromPeerId);
+    auto& to = requireMultiVatPeer(toPeerId);
+    auto conn = from.vat->getConnectionTo(*to.vat);
+    if (conn == kj::none) {
+      throw std::runtime_error("no connection from " + from.name + " to " + to.name);
+    }
+    return KJ_ASSERT_NONNULL(conn).getProtocolMessageCounts();
   }
 
   void multiVatSetRestorer(uint32_t peerId, lean_object* restorer) {
@@ -7377,6 +7411,21 @@ class RuntimeLoop {
             completeUnitFailure(request.completion,
                                 "unknown exception in multiVatConnectionDisconnect");
           }
+        } else if (std::holds_alternative<QueuedMultiVatConnectionResolveDisembargoCounts>(op)) {
+          auto request = std::get<QueuedMultiVatConnectionResolveDisembargoCounts>(std::move(op));
+          try {
+            auto counts =
+                multiVatConnectionResolveDisembargoCounts(request.fromPeerId, request.toPeerId);
+            completeProtocolMessageCountsSuccess(request.completion, counts);
+          } catch (const kj::Exception& e) {
+            completeProtocolMessageCountsFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeProtocolMessageCountsFailure(request.completion, e.what());
+          } catch (...) {
+            completeProtocolMessageCountsFailure(
+                request.completion,
+                "unknown exception in multiVatConnectionResolveDisembargoCounts");
+          }
         } else if (std::holds_alternative<QueuedPump>(op)) {
           auto pump = std::get<QueuedPump>(std::move(op));
           try {
@@ -7721,8 +7770,25 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedMultiVatPublishSturdyRef>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRef>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatRestoreSturdyRef>(op).completion, message);
-      } else {
+      } else if (std::holds_alternative<QueuedMultiVatGetDiagnostics>(op)) {
+        auto& request = std::get<QueuedMultiVatGetDiagnostics>(op);
+        lean_dec(request.targetVatId);
+        completeDiagnosticsFailure(request.completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatConnectionBlock>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatConnectionBlock>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatConnectionUnblock>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatConnectionUnblock>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatConnectionDisconnect>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatConnectionDisconnect>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatConnectionResolveDisembargoCounts>(op)) {
+        completeProtocolMessageCountsFailure(
+            std::get<QueuedMultiVatConnectionResolveDisembargoCounts>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPump>(op)) {
         completeUnitFailure(std::get<QueuedPump>(op).completion, message);
+      } else if (std::holds_alternative<QueuedPumpAsync>(op)) {
+        completeAsyncUnitFailure(std::get<QueuedPumpAsync>(op).completion, message);
+      } else {
+        KJ_FAIL_ASSERT("unhandled runtime queued operation in failPendingCalls");
       }
     }
   }
@@ -8520,6 +8586,12 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionDisconnect(
     std::string message, std::vector<uint8_t> detailBytes) {
   return runtime.enqueueMultiVatConnectionDisconnect(fromPeerId, toPeerId, exceptionTypeTag,
                                                      std::move(message), std::move(detailBytes));
+}
+
+std::shared_ptr<ProtocolMessageCountsCompletion>
+enqueueMultiVatConnectionResolveDisembargoCounts(RuntimeLoop& runtime, uint32_t fromPeerId,
+                                                  uint32_t toPeerId) {
+  return runtime.enqueueMultiVatConnectionResolveDisembargoCounts(fromPeerId, toPeerId);
 }
 
 }  // namespace capnp_lean_rpc

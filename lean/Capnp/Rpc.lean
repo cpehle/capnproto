@@ -86,6 +86,11 @@ structure RpcDiagnostics where
   isIdle : Bool
   deriving Inhabited, BEq, Repr
 
+structure ProtocolMessageCounts where
+  resolveCount : UInt64
+  disembargoCount : UInt64
+  deriving Inhabited, BEq, Repr
+
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
 @[inline] def Client.toCapability (client : Client) : Capnp.Capability := client
@@ -798,6 +803,10 @@ opaque ffiRuntimeMultiVatConnectionDisconnectImpl
     (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) (exceptionTypeTag : UInt8)
     (message : @& String) (detailBytes : @& ByteArray) : IO Unit
 
+@[extern "capnp_lean_rpc_runtime_multivat_connection_resolve_disembargo_counts"]
+opaque ffiRuntimeMultiVatConnectionResolveDisembargoCountsImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO ProtocolMessageCounts
+
 @[extern "capnp_lean_rpc_runtime_multivat_get_diagnostics"]
 opaque ffiRuntimeMultiVatGetDiagnosticsImpl
     (runtime : UInt64) (peerId : UInt32) (targetVatId : @& VatId) : IO RpcDiagnostics
@@ -1325,6 +1334,13 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ffiRuntimeMultiVatConnectionDisconnectImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
     type.toUInt8 message detail
 
+@[inline] def multiVatConnectionResolveDisembargoCounts (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO ProtocolMessageCounts := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatConnectionResolveDisembargoCountsImpl
+    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
   ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.raw
@@ -1737,6 +1753,10 @@ namespace RuntimeVatPeerRef
     (type : RemoteExceptionType) (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit :=
   Runtime.multiVatConnectionDisconnect peer.runtime peer targetPeer type message detail
 
+@[inline] def resolveDisembargoCountsTo (peer : RuntimeVatPeerRef)
+    (targetPeer : RuntimeVatPeerRef) : IO ProtocolMessageCounts :=
+  Runtime.multiVatConnectionResolveDisembargoCounts peer.runtime peer targetPeer
+
 @[inline] def setRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
   Runtime.multiVatSetRestorer peer restorer
@@ -1837,6 +1857,12 @@ namespace VatNetwork
   ensurePeerRuntime network fromPeer "disconnectConnection"
   ensurePeerRuntime network toPeer "disconnectConnection"
   Runtime.multiVatConnectionDisconnect network.runtime fromPeer toPeer type message detail
+
+@[inline] def connectionResolveDisembargoCounts (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO ProtocolMessageCounts := do
+  ensurePeerRuntime network fromPeer "connectionResolveDisembargoCounts"
+  ensurePeerRuntime network toPeer "connectionResolveDisembargoCounts"
+  Runtime.multiVatConnectionResolveDisembargoCounts network.runtime fromPeer toPeer
 
 @[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
   ensurePeerRuntime network peer "releasePeer"
@@ -2292,6 +2318,11 @@ namespace RuntimeM
 @[inline] def multiVatHasConnection (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
     RuntimeM Bool := do
   Runtime.multiVatHasConnection (← runtime) fromPeer toPeer
+
+@[inline] def multiVatConnectionResolveDisembargoCounts
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    RuntimeM ProtocolMessageCounts := do
+  Runtime.multiVatConnectionResolveDisembargoCounts (← runtime) fromPeer toPeer
 
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : RuntimeM Unit := do

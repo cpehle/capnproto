@@ -77,6 +77,7 @@ class GenericVatNetwork {
 class GenericVat final : public GenericVatNetworkBase {
  public:
   using Connection = GenericVatNetworkBase::Connection;
+  using ProtocolMessageCounts = capnp_lean_rpc::ProtocolMessageCounts;
   friend class ConnectionImpl;
   friend class IncomingRpcMessageImpl;
   friend class OutgoingRpcMessageImpl;
@@ -101,6 +102,8 @@ class GenericVat final : public GenericVatNetworkBase {
     void unblock();
     using MessageHandler = kj::Function<bool(::capnp::rpc::Message::Reader)>;
     void onSend(MessageHandler handler);
+    ProtocolMessageCounts getProtocolMessageCounts() const { return protocolMessageCounts_; }
+    void resetProtocolMessageCounts() { protocolMessageCounts_ = {}; }
 
     GenericVatId::Reader getPeerVatId() override;
     kj::Own<capnp::OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentWordSize) override;
@@ -142,6 +145,9 @@ class GenericVat final : public GenericVatNetworkBase {
     kj::Maybe<kj::ForkedPromise<void>> currentBlock_;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> currentBlockFulfiller_;
     kj::Maybe<MessageHandler> onSendHandler_;
+    ProtocolMessageCounts protocolMessageCounts_;
+
+    void recordProtocolMessage(::capnp::rpc::Message::Reader message);
   };
 
   kj::Maybe<kj::Own<Connection>> connect(GenericVatId::Reader hostId) override;

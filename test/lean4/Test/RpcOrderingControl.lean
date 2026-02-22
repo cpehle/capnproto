@@ -113,6 +113,83 @@ def testRuntimeOrderingResolveHooksTrackHeldCount : IO Unit := do
   where bubble (x : UInt64) := x
 
 @[test]
+def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
+  let payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    runtime.orderingSetResolveHold true
+    try
+      let (callOrder, getNextExpected) ← registerEchoFooCallOrderTarget runtime
+      let (promiseCap, fulfiller) ← runtime.newPromiseCapability
+      let pipelinePayload := mkCapabilityPayload promiseCap
+      let bobBootstrap ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+        if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+          throw (IO.userError
+            s!"unexpected method in protocol counter target: {method.interfaceId}/{method.methodId}")
+        let _ := req
+        let deferred ← Capnp.Rpc.Advanced.defer do
+          IO.sleep (UInt32.ofNat 20)
+          fulfiller.fulfill callOrder
+          pure (Capnp.Rpc.Advanced.respond pipelinePayload)
+        pure (Capnp.Rpc.Advanced.setPipeline pipelinePayload deferred))
+
+      let vatNetwork := runtime.vatNetwork
+      let alice ← vatNetwork.newClient "alice-protocol-counts"
+      let bob ← vatNetwork.newServer "bob-protocol-counts" bobBootstrap
+      let aliceToBob ← alice.bootstrapPeer bob
+
+      let pending ← runtime.startCall aliceToBob Echo.fooMethod payload
+      let pipelineCap ← pending.getPipelinedCap
+      let call0Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
+      let call1Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
+
+      let response ← pending.await
+      runtime.releaseCapTable response.capTable
+
+      let rec waitForHeldResolve (attempts : Nat) : IO Unit := do
+        runtime.pump
+        if (← runtime.orderingHeldResolveCount) > 0 then
+          pure ()
+        else
+          match attempts with
+          | 0 =>
+              throw (IO.userError "expected held Resolve before flush in protocol counter test")
+          | attempts + 1 =>
+              IO.sleep (UInt32.ofNat 5)
+              waitForHeldResolve attempts
+      waitForHeldResolve 400
+
+      let flushed ← runtime.orderingFlushResolves
+      if flushed == 0 then
+        throw (IO.userError "expected at least one held Resolve to flush")
+
+      let call0Response ← call0Pending.await
+      let call1Response ← call1Pending.await
+      assertEqual (← readUInt64Payload call0Response) (UInt64.ofNat 0)
+      assertEqual (← readUInt64Payload call1Response) (UInt64.ofNat 1)
+      assertEqual (← getNextExpected) (UInt64.ofNat 2)
+
+      let countsAliceToBob ← alice.resolveDisembargoCountsTo bob
+      let countsBobToAlice ← bob.resolveDisembargoCountsTo alice
+      let totalResolve := countsAliceToBob.resolveCount + countsBobToAlice.resolveCount
+      if totalResolve == 0 then
+        throw (IO.userError
+          s!"expected at least one Resolve message, got alice->bob={repr countsAliceToBob}, bob->alice={repr countsBobToAlice}")
+
+      runtime.releaseTarget pipelineCap
+      runtime.releaseTarget aliceToBob
+      alice.release
+      bob.release
+      runtime.releaseTarget bobBootstrap
+      fulfiller.release
+      runtime.releaseTarget promiseCap
+      runtime.releaseTarget callOrder
+    finally
+      runtime.orderingSetResolveHold false
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeProtocolBlockingOrdering : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try

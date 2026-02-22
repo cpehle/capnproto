@@ -275,6 +275,20 @@ struct DiagnosticsCompletion {
   capnp::_::RpcSystemBase::RpcDiagnostics value;
 };
 
+struct ProtocolMessageCounts {
+  uint64_t resolveCount = 0;
+  uint64_t disembargoCount = 0;
+};
+
+struct ProtocolMessageCountsCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  ProtocolMessageCounts value;
+};
+
 struct AsyncUnitCompletion {
   explicit AsyncUnitCompletion(lean_object* promise): promise(promise) {}
   ~AsyncUnitCompletion() { lean_dec(promise); }
@@ -312,6 +326,12 @@ void completeDiagnosticsSuccess(const std::shared_ptr<DiagnosticsCompletion>& co
                                 capnp::_::RpcSystemBase::RpcDiagnostics value);
 void completeDiagnosticsFailure(const std::shared_ptr<DiagnosticsCompletion>& completion,
                                 std::string message);
+void completeProtocolMessageCountsSuccess(
+    const std::shared_ptr<ProtocolMessageCountsCompletion>& completion,
+    ProtocolMessageCounts value);
+void completeProtocolMessageCountsFailure(
+    const std::shared_ptr<ProtocolMessageCountsCompletion>& completion,
+    std::string message);
 
 void completeAsyncUnitSuccess(const std::shared_ptr<AsyncUnitCompletion>& completion);
 void completeAsyncUnitFailure(const std::shared_ptr<AsyncUnitCompletion>& completion, std::string message);

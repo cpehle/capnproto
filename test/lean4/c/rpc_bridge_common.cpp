@@ -415,6 +415,30 @@ void completeDiagnosticsFailure(const std::shared_ptr<DiagnosticsCompletion>& co
   completion->cv.notify_one();
 }
 
+void completeProtocolMessageCountsSuccess(
+    const std::shared_ptr<ProtocolMessageCountsCompletion>& completion,
+    ProtocolMessageCounts value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = value;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeProtocolMessageCountsFailure(
+    const std::shared_ptr<ProtocolMessageCountsCompletion>& completion,
+    std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
 extern "C" lean_obj_res lean_io_promise_resolve(lean_obj_arg, lean_obj_arg);
 
 void completeAsyncUnitSuccess(const std::shared_ptr<AsyncUnitCompletion>& completion) {

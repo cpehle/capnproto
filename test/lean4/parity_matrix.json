@@ -34,10 +34,11 @@
       "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering",
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHoldControlsDisembargo",
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount",
+      "Test.RpcOrderingControl.testRuntimeProtocolResolveDisembargoMessageCounters",
       "Test.RpcOrderingControl.testRuntimeProtocolBlockingOrdering"
     ],
     "status": "partial",
-    "notes": "Behavioral ordering coverage is high; protocol-level inspection (e.g., verifying specific Disembargo message sequences) requires a ControlledVatNetwork interceptor in the bridge."
+    "notes": "Behavioral ordering coverage is high and includes protocol-level Resolve/Disembargo message counters; exact full-sequence assertions for every edge-case path remain open."
   },
   {
     "behaviorClass": "Transport connect/listen/disconnect lifecycle",

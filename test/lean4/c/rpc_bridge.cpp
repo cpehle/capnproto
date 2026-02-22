@@ -62,6 +62,17 @@ lean_object* mkRpcDiagnosticsObj(const capnp::_::RpcSystemBase::RpcDiagnostics& 
   return out;
 }
 
+lean_object* mkProtocolMessageCountsObj(const rpc::ProtocolMessageCounts& counts) {
+  // Mirror `Capnp.Rpc.ProtocolMessageCounts` (see `lean/Capnp/Rpc.lean`).
+  constexpr unsigned kObjFields = 0;
+  constexpr unsigned kScalarBytes = 16;
+
+  auto out = lean_alloc_ctor(0, kObjFields, kScalarBytes);
+  lean_ctor_set_uint64(out, 0, counts.resolveCount);
+  lean_ctor_set_uint64(out, 8, counts.disembargoCount);
+  return out;
+}
+
 lean_object* mkRemoteExceptionObj(const rpc::RawCallCompletion& completion) {
   // Mirror `Capnp.Rpc.RemoteException` (see `lean/Capnp/Rpc.lean`).
   constexpr unsigned kObjFields = 4;  // description, remoteTrace, detail, fileName
@@ -2906,6 +2917,25 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_connection_d
       return mkIoOkUnit();
     }
   } catch (...) { return mkIoUserError("unknown exception in multiVatConnectionDisconnect"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_rpc_runtime_multivat_connection_resolve_disembargo_counts(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion =
+        rpc::enqueueMultiVatConnectionResolveDisembargoCounts(*runtime, fromPeerId, toPeerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return lean_io_result_mk_ok(mkProtocolMessageCountsObj(completion->value));
+    }
+  } catch (...) {
+    return mkIoUserError("unknown exception in multiVatConnectionResolveDisembargoCounts");
+  }
 }
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_get_diagnostics(

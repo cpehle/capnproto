@@ -271,6 +271,9 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionUnblock(RuntimeLoop& ru
 std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionDisconnect(
     RuntimeLoop& runtime, uint32_t fromPeerId, uint32_t toPeerId, uint8_t exceptionTypeTag,
     std::string message, std::vector<uint8_t> detailBytes);
+std::shared_ptr<ProtocolMessageCountsCompletion>
+enqueueMultiVatConnectionResolveDisembargoCounts(RuntimeLoop& runtime, uint32_t fromPeerId,
+                                                  uint32_t toPeerId);
 
 RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
                              uint16_t methodId, const std::vector<uint8_t>& requestBytes,

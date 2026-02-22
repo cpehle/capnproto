@@ -131,6 +131,19 @@ void GenericVat::ConnectionImpl::onSend(MessageHandler handler) {
   onSendHandler_ = kj::mv(handler);
 }
 
+void GenericVat::ConnectionImpl::recordProtocolMessage(::capnp::rpc::Message::Reader message) {
+  switch (message.which()) {
+    case ::capnp::rpc::Message::RESOLVE:
+      ++protocolMessageCounts_.resolveCount;
+      break;
+    case ::capnp::rpc::Message::DISEMBARGO:
+      ++protocolMessageCounts_.disembargoCount;
+      break;
+    default:
+      break;
+  }
+}
+
 GenericVatId::Reader GenericVat::ConnectionImpl::getPeerVatId() {
   return peerVatIdMessage_.getRoot<GenericVatId>().asReader();
 }
@@ -173,6 +186,7 @@ class OutgoingRpcMessageImpl final : public capnp::OutgoingRpcMessage {
           return;
         }
       }
+      connection_.recordProtocolMessage(reader);
     }
 
     ++connection_.vat_.sent_;
