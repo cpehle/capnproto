@@ -77,6 +77,15 @@ structure MultiVatStats where
   thirdPartyTokenCount : UInt64
   deriving Inhabited, BEq, Repr
 
+structure RpcDiagnostics where
+  questionCount : UInt64
+  answerCount : UInt64
+  exportCount : UInt64
+  importCount : UInt64
+  embargoCount : UInt64
+  isIdle : Bool
+  deriving Inhabited, BEq, Repr
+
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
 @[inline] def Client.toCapability (client : Client) : Capnp.Capability := client
@@ -146,6 +155,8 @@ structure RemoteException where
   description : String
   remoteTrace : String
   detail : ByteArray
+  fileName : String
+  lineNumber : UInt32
   -- `kj::Exception::Type` as a `UInt8` (same encoding as `RemoteExceptionType.toUInt8`).
   typeTag : UInt8
   deriving Inhabited, BEq
@@ -441,6 +452,11 @@ opaque ffiRuntimeStartCallWithCapsImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_start_streaming_call_with_caps"]
+opaque ffiRuntimeStartStreamingCallWithCapsImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (request : @& ByteArray) (requestCaps : @& ByteArray) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_pending_call_await"]
 opaque ffiRuntimePendingCallAwaitImpl
     (runtime : UInt64) (pendingCall : UInt32) : IO (ByteArray × ByteArray)
@@ -451,6 +467,10 @@ opaque ffiRuntimePendingCallAwaitOutcomeImpl
 
 @[extern "capnp_lean_rpc_runtime_pending_call_release"]
 opaque ffiRuntimePendingCallReleaseImpl (runtime : UInt64) (pendingCall : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_pending_call_release_deferred"]
+opaque ffiRuntimePendingCallReleaseDeferredImpl
+    (runtime : UInt64) (pendingCall : UInt32) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_pending_call_get_pipelined_cap"]
 opaque ffiRuntimePendingCallGetPipelinedCapImpl
@@ -482,6 +502,9 @@ opaque ffiRuntimeUnitPromiseReleaseImpl
 
 @[extern "capnp_lean_rpc_runtime_pump"]
 opaque ffiRuntimePumpImpl (runtime : UInt64) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_pump_async"]
+opaque ffiRuntimePumpAsyncImpl (runtime : UInt64) (promise : @& IO.Promise (Except IO.Error Unit)) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_streaming_call_with_caps"]
 opaque ffiRuntimeStreamingCallWithCapsImpl
@@ -556,6 +579,9 @@ opaque ffiRuntimeRegisterFdTargetImpl (runtime : UInt64) (fd : UInt32) : IO UInt
 
 @[extern "capnp_lean_rpc_runtime_release_target"]
 opaque ffiRuntimeReleaseTargetImpl (runtime : UInt64) (target : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_release_target_deferred"]
+opaque ffiRuntimeReleaseTargetDeferredImpl (runtime : UInt64) (target : UInt32) : IO Unit
 
 @[extern "capnp_lean_rpc_runtime_release_targets"]
 opaque ffiRuntimeReleaseTargetsImpl (runtime : UInt64) (targets : @& ByteArray) : IO Unit
@@ -758,6 +784,23 @@ opaque ffiRuntimeMultiVatPublishSturdyRefImpl
 opaque ffiRuntimeMultiVatRestoreSturdyRefImpl
     (runtime : UInt64) (sourcePeer : UInt32) (host : @& String) (unique : UInt8)
     (objectId : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_multivat_connection_block"]
+opaque ffiRuntimeMultiVatConnectionBlockImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_connection_unblock"]
+opaque ffiRuntimeMultiVatConnectionUnblockImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_connection_disconnect"]
+opaque ffiRuntimeMultiVatConnectionDisconnectImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) (exceptionTypeTag : UInt8)
+    (message : @& String) (detailBytes : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_get_diagnostics"]
+opaque ffiRuntimeMultiVatGetDiagnosticsImpl
+    (runtime : UInt64) (peerId : UInt32) (targetVatId : @& VatId) : IO RpcDiagnostics
 
 @[extern "capnp_lean_rpc_cpp_call_one_shot"]
 opaque ffiCppCallOneShotImpl
@@ -1028,6 +1071,9 @@ namespace Runtime
 @[inline] def releaseTarget (runtime : Runtime) (target : Client) : IO Unit :=
   ffiRuntimeReleaseTargetImpl runtime.handle target
 
+@[inline] def releaseTargetDeferred (runtime : Runtime) (target : Client) : IO Unit :=
+  ffiRuntimeReleaseTargetDeferredImpl runtime.handle target
+
 @[inline] def retainTarget (runtime : Runtime) (target : Client) : IO Client :=
   ffiRuntimeRetainTargetImpl runtime.handle target
 
@@ -1254,6 +1300,31 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
   ffiRuntimeMultiVatHasConnectionImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
 
+@[inline] def multiVatGetDiagnostics (runtime : Runtime)
+    (peer : RuntimeVatPeerRef) (targetVatId : VatId) : IO RpcDiagnostics := do
+  ensureSameRuntime runtime peer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatGetDiagnosticsImpl runtime.handle peer.handle.raw targetVatId
+
+@[inline] def multiVatConnectionBlock (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatConnectionBlockImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+
+@[inline] def multiVatConnectionUnblock (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatConnectionUnblockImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+
+@[inline] def multiVatConnectionDisconnect (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef)
+    (type : RemoteExceptionType) (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatConnectionDisconnectImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+    type.toUInt8 message detail
+
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
   ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.raw
@@ -1346,6 +1417,18 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     }
   }
 
+@[inline] def startStreamingCall (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
+  let requestBytes := payload.toBytes
+  let requestCaps := CapTable.toBytes payload.capTable
+  return {
+    runtime := runtime
+    handle := {
+      raw := (← ffiRuntimeStartStreamingCallWithCapsImpl runtime.handle target method.interfaceId
+        method.methodId requestBytes requestCaps)
+    }
+  }
+
 @[inline] def startCallAsTask (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Task (Except IO.Error Payload)) := do
   let pending ← runtime.startCall target method payload
@@ -1376,6 +1459,9 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : IO Unit :=
   ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle.raw
+
+@[inline] def pendingCallReleaseDeferred (pendingCall : RuntimePendingCallRef) : IO Unit :=
+  ffiRuntimePendingCallReleaseDeferredImpl pendingCall.runtime.handle pendingCall.handle.raw
 
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client := do
@@ -1449,6 +1535,12 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def pump (runtime : Runtime) : IO Unit :=
   ffiRuntimePumpImpl runtime.handle
 
+@[inline] def pumpAsTask (runtime : Runtime) : IO (Task (Except IO.Error Unit)) := do
+  IO.asTask (ffiRuntimePumpImpl runtime.handle)
+
+@[inline] def pumpAsPromise (runtime : Runtime) : IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.pumpAsTask))
+
 @[inline] def enableTraceEncoder (runtime : Runtime) : IO Unit :=
   ffiRuntimeEnableTraceEncoderImpl runtime.handle
 
@@ -1494,6 +1586,12 @@ namespace RuntimeClientRef
 @[inline] def release (client : RuntimeClientRef) : IO Unit :=
   ffiRuntimeReleaseClientImpl client.runtime.handle client.handle.raw
 
+@[inline] def withRelease (client : RuntimeClientRef) (action : RuntimeClientRef -> IO α) : IO α := do
+  try
+    action client
+  finally
+    client.release
+
 @[inline] def bootstrap (client : RuntimeClientRef) : IO Client :=
   ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle.raw
 
@@ -1533,6 +1631,12 @@ namespace RuntimeServerRef
 
 @[inline] def release (server : RuntimeServerRef) : IO Unit :=
   ffiRuntimeReleaseServerImpl server.runtime.handle server.handle.raw
+
+@[inline] def withRelease (server : RuntimeServerRef) (action : RuntimeServerRef -> IO α) : IO α := do
+  try
+    action server
+  finally
+    server.release
 
 @[inline] def listen (server : RuntimeServerRef) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
@@ -1607,12 +1711,31 @@ namespace RuntimeVatPeerRef
 @[inline] def release (peer : RuntimeVatPeerRef) : IO Unit :=
   Runtime.releaseMultiVatPeer peer
 
+@[inline] def withRelease (peer : RuntimeVatPeerRef) (action : RuntimeVatPeerRef -> IO α) : IO α := do
+  try
+    action peer
+  finally
+    peer.release
+
 @[inline] def bootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) : IO Client :=
   Runtime.multiVatBootstrap peer vatId
 
 @[inline] def bootstrapPeer (peer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
     (unique : Bool := false) : IO Client :=
   Runtime.multiVatBootstrapPeer peer.runtime peer targetPeer unique
+
+@[inline] def getDiagnostics (peer : RuntimeVatPeerRef) (targetVatId : VatId) : IO RpcDiagnostics :=
+  Runtime.multiVatGetDiagnostics peer.runtime peer targetVatId
+
+@[inline] def blockConnectionTo (peer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.multiVatConnectionBlock peer.runtime peer targetPeer
+
+@[inline] def unblockConnectionTo (peer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.multiVatConnectionUnblock peer.runtime peer targetPeer
+
+@[inline] def disconnectConnectionTo (peer : RuntimeVatPeerRef) (targetPeer : RuntimeVatPeerRef)
+    (type : RemoteExceptionType) (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit :=
+  Runtime.multiVatConnectionDisconnect peer.runtime peer targetPeer type message detail
 
 @[inline] def setRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
@@ -1691,6 +1814,30 @@ namespace VatNetwork
   ensurePeerRuntime network toPeer "hasConnection"
   Runtime.multiVatHasConnection network.runtime fromPeer toPeer
 
+@[inline] def getDiagnostics (network : VatNetwork)
+    (peer : RuntimeVatPeerRef) (targetVatId : VatId) : IO RpcDiagnostics := do
+  ensurePeerRuntime network peer "getDiagnostics"
+  Runtime.multiVatGetDiagnostics network.runtime peer targetVatId
+
+@[inline] def blockConnection (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network fromPeer "blockConnection"
+  ensurePeerRuntime network toPeer "blockConnection"
+  Runtime.multiVatConnectionBlock network.runtime fromPeer toPeer
+
+@[inline] def unblockConnection (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network fromPeer "unblockConnection"
+  ensurePeerRuntime network toPeer "unblockConnection"
+  Runtime.multiVatConnectionUnblock network.runtime fromPeer toPeer
+
+@[inline] def disconnectConnection (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef)
+    (type : RemoteExceptionType) (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit := do
+  ensurePeerRuntime network fromPeer "disconnectConnection"
+  ensurePeerRuntime network toPeer "disconnectConnection"
+  Runtime.multiVatConnectionDisconnect network.runtime fromPeer toPeer type message detail
+
 @[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
   ensurePeerRuntime network peer "releasePeer"
   Runtime.releaseMultiVatPeer peer
@@ -1711,6 +1858,35 @@ namespace RuntimePendingCallRef
 
 @[inline] def release (pendingCall : RuntimePendingCallRef) : IO Unit :=
   Runtime.pendingCallRelease pendingCall
+
+@[inline] def releaseDeferred (pendingCall : RuntimePendingCallRef) : IO Unit :=
+  Runtime.pendingCallReleaseDeferred pendingCall
+
+@[inline] def withRelease (pendingCall : RuntimePendingCallRef)
+    (action : RuntimePendingCallRef -> IO α) : IO α := do
+  try
+    action pendingCall
+  finally
+    pendingCall.release
+
+@[inline] def awaitAndRelease (pendingCall : RuntimePendingCallRef) : IO Payload := do
+  try
+    pendingCall.await
+  finally
+    pendingCall.release
+
+@[inline] def awaitOutcomeAndRelease (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome := do
+  try
+    pendingCall.awaitOutcome
+  finally
+    pendingCall.release
+
+@[inline] def awaitResultAndRelease (pendingCall : RuntimePendingCallRef) :
+    IO (Except RemoteException Payload) := do
+  try
+    pendingCall.awaitResult
+  finally
+    pendingCall.release
 
 @[inline] def getPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client :=
@@ -1747,11 +1923,24 @@ namespace RuntimeRegisterPromiseRef
 @[inline] def release (promise : RuntimeRegisterPromiseRef) : IO Unit :=
   Runtime.registerPromiseRelease promise
 
+@[inline] def withRelease (promise : RuntimeRegisterPromiseRef)
+    (action : RuntimeRegisterPromiseRef -> IO α) : IO α := do
+  try
+    action promise
+  finally
+    promise.release
+
 @[inline] def awaitAndRelease (promise : RuntimeRegisterPromiseRef) : IO UInt32 := do
-  promise.await
+  try
+    promise.await
+  finally
+    promise.release
 
 @[inline] def awaitTarget (promise : RuntimeRegisterPromiseRef) : IO Client :=
   promise.await
+
+@[inline] def awaitTargetAndRelease (promise : RuntimeRegisterPromiseRef) : IO Client :=
+  promise.awaitAndRelease
 
 @[inline] def awaitClient (promise : RuntimeRegisterPromiseRef) : IO RuntimeClientRef := do
   return {
@@ -1759,13 +1948,28 @@ namespace RuntimeRegisterPromiseRef
     handle := { raw := (← promise.await) }
   }
 
+@[inline] def awaitClientAndRelease (promise : RuntimeRegisterPromiseRef) : IO RuntimeClientRef := do
+  return {
+    runtime := promise.runtime
+    handle := { raw := (← promise.awaitAndRelease) }
+  }
+
 @[inline] def awaitListener (promise : RuntimeRegisterPromiseRef) : IO Listener := do
   return { runtimeHandle := promise.runtime.handle, raw := (← promise.await) }
+
+@[inline] def awaitListenerAndRelease (promise : RuntimeRegisterPromiseRef) : IO Listener := do
+  return { runtimeHandle := promise.runtime.handle, raw := (← promise.awaitAndRelease) }
 
 @[inline] def awaitServer (promise : RuntimeRegisterPromiseRef) : IO RuntimeServerRef := do
   return {
     runtime := promise.runtime
     handle := { raw := (← promise.await) }
+  }
+
+@[inline] def awaitServerAndRelease (promise : RuntimeRegisterPromiseRef) : IO RuntimeServerRef := do
+  return {
+    runtime := promise.runtime
+    handle := { raw := (← promise.awaitAndRelease) }
   }
 
 instance : Capnp.Async.Awaitable RuntimeRegisterPromiseRef UInt32 where
@@ -1802,8 +2006,18 @@ namespace RuntimeUnitPromiseRef
 @[inline] def release (promise : RuntimeUnitPromiseRef) : IO Unit :=
   Runtime.unitPromiseRelease promise
 
+@[inline] def withRelease (promise : RuntimeUnitPromiseRef)
+    (action : RuntimeUnitPromiseRef -> IO α) : IO α := do
+  try
+    action promise
+  finally
+    promise.release
+
 @[inline] def awaitAndRelease (promise : RuntimeUnitPromiseRef) : IO Unit := do
-  promise.await
+  try
+    promise.await
+  finally
+    promise.release
 
 instance : Capnp.Async.Awaitable RuntimeUnitPromiseRef Unit where
   await := RuntimeUnitPromiseRef.await
@@ -1839,6 +2053,13 @@ namespace RuntimePromiseCapabilityFulfillerRef
 
 @[inline] def release (fulfiller : RuntimePromiseCapabilityFulfillerRef) : IO Unit :=
   Runtime.promiseCapabilityRelease fulfiller
+
+@[inline] def withRelease (fulfiller : RuntimePromiseCapabilityFulfillerRef)
+    (action : RuntimePromiseCapabilityFulfillerRef -> IO α) : IO α := do
+  try
+    action fulfiller
+  finally
+    fulfiller.release
 
 end RuntimePromiseCapabilityFulfillerRef
 
@@ -1910,6 +2131,9 @@ namespace RuntimeM
 
 @[inline] def releaseTarget (target : Client) : RuntimeM Unit := do
   Runtime.releaseTarget (← runtime) target
+
+@[inline] def releaseTargetDeferred (target : Client) : RuntimeM Unit := do
+  Runtime.releaseTargetDeferred (← runtime) target
 
 @[inline] def retainTarget (target : Client) : RuntimeM Client := do
   Runtime.retainTarget (← runtime) target
@@ -2290,6 +2514,32 @@ namespace RuntimeM
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallRelease pendingCall
 
+@[inline] def pendingCallReleaseDeferred (pendingCall : RuntimePendingCallRef) : RuntimeM Unit := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  Runtime.pendingCallReleaseDeferred pendingCall
+
+@[inline] def withPendingCall (pendingCall : RuntimePendingCallRef)
+    (action : RuntimePendingCallRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  try
+    action pendingCall
+  finally
+    Runtime.pendingCallRelease pendingCall
+
+@[inline] def pendingCallAwaitAndRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
+  withPendingCall pendingCall fun call =>
+    Runtime.pendingCallAwait call
+
+@[inline] def pendingCallAwaitOutcomeAndRelease
+    (pendingCall : RuntimePendingCallRef) : RuntimeM RawCallOutcome := do
+  withPendingCall pendingCall fun call =>
+    Runtime.pendingCallAwaitOutcome call
+
+@[inline] def pendingCallAwaitResultAndRelease
+    (pendingCall : RuntimePendingCallRef) : RuntimeM (Except RemoteException Payload) := do
+  withPendingCall pendingCall fun call =>
+    Runtime.pendingCallAwaitResult call
+
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : RuntimeM Client := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
@@ -2307,6 +2557,19 @@ namespace RuntimeM
   ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
   Runtime.registerPromiseRelease promise
 
+@[inline] def withRegisterPromise (promise : RuntimeRegisterPromiseRef)
+    (action : RuntimeRegisterPromiseRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
+  try
+    action promise
+  finally
+    Runtime.registerPromiseRelease promise
+
+@[inline] def registerPromiseAwaitAndRelease (promise : RuntimeRegisterPromiseRef) :
+    RuntimeM UInt32 :=
+  withRegisterPromise promise fun p =>
+    Runtime.registerPromiseAwait p
+
 @[inline] def unitPromiseAwait (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
   ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
   Runtime.unitPromiseAwait promise
@@ -2318,6 +2581,18 @@ namespace RuntimeM
 @[inline] def unitPromiseRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
   ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
   Runtime.unitPromiseRelease promise
+
+@[inline] def withUnitPromise (promise : RuntimeUnitPromiseRef)
+    (action : RuntimeUnitPromiseRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
+  try
+    action promise
+  finally
+    Runtime.unitPromiseRelease promise
+
+@[inline] def unitPromiseAwaitAndRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit :=
+  withUnitPromise promise fun p =>
+    Runtime.unitPromiseAwait p
 
 @[inline] def streamingCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Unit := do

@@ -199,48 +199,55 @@ def testKjAsyncSharedAsyncHelpers : IO Unit := do
       left.release
       right.release
 
-    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
     try
-      let connectTask ←
-        runtime.webSocketConnectAsTask "127.0.0.1" "/lean-ws-task-helper" server.boundPort
-      let requestA ← waitForHttpServerRequest runtime server
-      assertEqual requestA.path "/lean-ws-task-helper"
-      assertEqual requestA.webSocketRequested true
-      let serverWsA ← runtime.httpServerRespondWebSocket server requestA.requestId
-      let clientWsA ←
-        match (← IO.wait connectTask) with
-        | .ok webSocket => pure webSocket
-        | .error err =>
-          throw (IO.userError s!"Runtime.webSocketConnectAsTask failed: {err}")
-      (← clientWsA.sendTextAsPromise "task-connect-payload").await
-      match (← serverWsA.receive) with
-      | .text value =>
-        assertEqual value "task-connect-payload"
-      | _ =>
-        throw (IO.userError "expected text websocket message for connect task helper")
-      clientWsA.release
-      serverWsA.release
+      let server ← serverRuntime.httpServerListen "127.0.0.1" 0
+      try
+        let connectTask ←
+          clientRuntime.webSocketConnectAsTask "127.0.0.1" "/lean-ws-task-helper"
+            server.boundPort
+        let requestA ← waitForHttpServerRequest serverRuntime server
+        assertEqual requestA.path "/lean-ws-task-helper"
+        assertEqual requestA.webSocketRequested true
+        let serverWsA ← serverRuntime.httpServerRespondWebSocket server requestA.requestId
+        let clientWsA ←
+          match (← IO.wait connectTask) with
+          | .ok webSocket => pure webSocket
+          | .error err =>
+            throw (IO.userError s!"Runtime.webSocketConnectAsTask failed: {err}")
+        (← clientWsA.sendTextAsPromise "task-connect-payload").await
+        match (← serverWsA.receive) with
+        | .text value =>
+          assertEqual value "task-connect-payload"
+        | _ =>
+          throw (IO.userError "expected text websocket message for connect task helper")
+        clientWsA.release
+        serverWsA.release
 
-      let connectPromise ← runtime.webSocketConnectWithHeadersAsPromise
-        "127.0.0.1" "/lean-ws-promise-helper"
-        #[{ name := "x-ws-helper", value := "1" }] server.boundPort
-      let requestB ← waitForHttpServerRequest runtime server
-      assertEqual requestB.path "/lean-ws-promise-helper"
-      assertTrue
-        (requestB.headers.any (fun h => h.name == "x-ws-helper" && h.value == "1"))
-        "expected x-ws-helper request header for promise helper"
-      let serverWsB ← runtime.httpServerRespondWebSocket server requestB.requestId
-      let clientWsB ← connectPromise.await
-      (← serverWsB.sendTextAsPromise "promise-connect-payload").await
-      match (← clientWsB.receive) with
-      | .text value =>
-        assertEqual value "promise-connect-payload"
-      | _ =>
-        throw (IO.userError "expected text websocket message for connect promise helper")
-      clientWsB.release
-      serverWsB.release
+        let connectPromise ← clientRuntime.webSocketConnectWithHeadersAsPromise
+          "127.0.0.1" "/lean-ws-promise-helper"
+          #[{ name := "x-ws-helper", value := "1" }] server.boundPort
+        let requestB ← waitForHttpServerRequest serverRuntime server
+        assertEqual requestB.path "/lean-ws-promise-helper"
+        assertTrue
+          (requestB.headers.any (fun h => h.name == "x-ws-helper" && h.value == "1"))
+          "expected x-ws-helper request header for promise helper"
+        let serverWsB ← serverRuntime.httpServerRespondWebSocket server requestB.requestId
+        let clientWsB ← connectPromise.await
+        (← serverWsB.sendTextAsPromise "promise-connect-payload").await
+        match (← clientWsB.receive) with
+        | .text value =>
+          assertEqual value "promise-connect-payload"
+        | _ =>
+          throw (IO.userError "expected text websocket message for connect promise helper")
+        clientWsB.release
+        serverWsB.release
+      finally
+        server.release
     finally
-      server.release
+      clientRuntime.shutdown
+      serverRuntime.shutdown
   finally
     runtime.shutdown
 

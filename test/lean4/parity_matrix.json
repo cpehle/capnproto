@@ -36,7 +36,7 @@
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount"
     ],
     "status": "partial",
-    "notes": "Behavioral ordering coverage exists and direct resolve-hold/flush controls are now exposed in Lean runtime APIs; parity remains partial pending broader protocol-level inspection/control coverage."
+    "notes": "Behavioral ordering coverage is high; protocol-level inspection (e.g., verifying specific Disembargo message sequences) requires a ControlledVatNetwork interceptor in the bridge."
   },
   {
     "behaviorClass": "Transport connect/listen/disconnect lifecycle",
@@ -65,12 +65,15 @@
     ],
     "leanTests": [
       "Test.RpcClient.testRuntimeParityCancelDisconnectSequencing",
+      "Test.RpcReliability.testRuntimeParityPromisedCapabilityDelayedRejectPropagatesToPendingCalls",
+      "Test.RpcReliability.testRuntimeParityPromisedCapabilityCancelBeforeRejectSequencing",
+      "Test.RpcReliability.testRuntimeTransportAbortPendingCall",
       "Test.RpcClient.testInteropLeanClientCancelsPendingCallToCppDelayedServer",
       "Test.RpcClient.testInteropLeanPendingCallOutcomeCapturesCppException",
       "Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail"
     ],
     "status": "partial",
-    "notes": "Cancellation and exception propagation are covered; explicit abort-path parity scenarios still need expansion."
+    "notes": "Cancellation, exception detail propagation, and transport-abort are covered; injecting failures into the disconnect handshake itself requires GenericVat FFI expansion."
   },
   {
     "behaviorClass": "Flow control and trace observability",
@@ -87,7 +90,7 @@
       "Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility"
     ],
     "status": "partial",
-    "notes": "Queue/flow/trace surfaces are covered, but deeper C++-internal diagnostics parity is still limited."
+    "notes": "Queue/flow/trace surfaces are covered; deep parity requires exposing internal RpcSystem tables (Questions, Answers, Exports, Imports) to verify idleness transitions."
   },
   {
     "behaviorClass": "Advanced streaming and FD transfer",
@@ -100,11 +103,15 @@
     "leanTests": [
       "Test.RpcClient.testRuntimeStreamingCall",
       "Test.RpcClient.testRuntimeRegisterStreamingHandlerTarget",
+      "Test.RpcClient.testRuntimeStreamingCancellation",
+      "Test.RpcClient.testRuntimeStreamingNoPrematureCancellationWhenTargetDropped",
+      "Test.RpcClient.testRuntimeStreamingChainedBackpressure",
       "Test.RpcClient.testRuntimeFdPassingOverNetwork",
+      "Test.RpcClient.testRuntimeFdPerMessageLimitDropsExcessFds",
       "Test.RpcClient.testRuntimeFdTargetLocalGetFd"
     ],
     "status": "partial",
-    "notes": "Baseline streaming and FD passing exist; FD-limit and broader platform-gated coverage remain."
+    "notes": "Streaming basics, cancellation semantics (including dropping client-side target handles), chained backpressure, and FD behavior are covered; broader forwarded-streaming parity across multi-vat topologies remains."
   },
   {
     "behaviorClass": "RPC/KjAsync runtime-handle bridge helpers",
@@ -122,9 +129,10 @@
       "Test.KjAsync.testRpcRuntimeMWithKjAsyncRuntimeHelpers",
       "Test.RpcClient.testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime",
       "Test.RpcClient.testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread",
-      "Test.RpcClient.testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers"
+      "Test.RpcClient.testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers",
+      "Test.RpcClient.testRuntimeAsyncFFIPump"
     ],
     "status": "partial",
-    "notes": "Lean runtime-handle bridge helpers are covered for promises/tasks/fd primitives and worker-thread safety."
+    "notes": "Lean runtime-handle bridge helpers are covered for promises/tasks/fd primitives, runtime pump task integration, and worker-thread safety."
   }
 ]

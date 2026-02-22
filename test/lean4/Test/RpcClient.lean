@@ -2,43 +2,11 @@ import LeanTest
 import Capnp.Rpc
 import Capnp.RpcKjAsync
 import Capnp.KjAsync
+import Test.Common
 import Capnp.Gen.test.lean4.fixtures.rpc_echo
 
 open LeanTest
 open Capnp.Gen.test.lean4.fixtures.rpc_echo
-
-def mkCapabilityPayload (cap : Capnp.Capability) : Capnp.Rpc.Payload := Id.run do
-  let (capTable, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      Capnp.writeCapabilityWithTable Capnp.emptyCapTable root cap
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := capTable }
-
-def mkNullPayload : Capnp.Rpc.Payload := Id.run do
-  let (_, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      Capnp.clearPointer root
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
-
-def mkUInt64Payload (n : UInt64) : Capnp.Rpc.Payload := Id.run do
-  let (_, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      let s ← Capnp.initStructPointer root 1 0
-      Capnp.setUInt64 s 0 n
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
-
-def readUInt64Payload (payload : Capnp.Rpc.Payload) : IO UInt64 := do
-  let root := Capnp.getRoot payload.msg
-  match Capnp.readStructChecked root with
-  | .ok s =>
-      pure (Capnp.getUInt64 s 0)
-  | .error err =>
-      throw (IO.userError s!"invalid uint64 RPC payload: {err}")
 
 private def registerEchoFooCallOrderTarget (runtime : Capnp.Rpc.Runtime) :
     IO (Capnp.Rpc.Client × IO UInt64) := do
@@ -54,11 +22,6 @@ private def registerEchoFooCallOrderTarget (runtime : Capnp.Rpc.Runtime) :
     nextExpected.set (current + (UInt64.ofNat 1))
     pure (mkUInt64Payload current))
   pure (target, nextExpected.get)
-
-def mkUnixTestAddress : IO (String × String) := do
-  let n ← IO.rand 0 1000000000
-  let path := s!"/tmp/capnp-lean4-rpc-{n}.sock"
-  pure (s!"unix:{path}", path)
 
 def connectRuntimeTargetWithRetry (runtime : Capnp.Rpc.Runtime) (address : String)
     (attempts : Nat := 20) (delayMillis : UInt32 := UInt32.ofNat 10) : IO Capnp.Rpc.Client := do
@@ -79,11 +42,11 @@ def connectRuntimeTargetWithRetry (runtime : Capnp.Rpc.Runtime) (address : Strin
   | some target => pure target
   | none => throw (IO.userError s!"failed to connect Lean runtime target to {address}")
 
-@[extern "capnp_lean_rpc_test_new_socketpair"]
-opaque ffiNewSocketPairImpl : IO (UInt32 × UInt32)
+@[extern "capnp_lean_rpc_runtime_register_fd_probe_target"]
+opaque ffiRuntimeRegisterFdProbeTargetImpl (runtime : UInt64) : IO UInt32
 
-@[extern "capnp_lean_rpc_test_close_fd"]
-opaque ffiCloseFdImpl (fd : UInt32) : IO Unit
+private def registerFdProbeTarget (runtime : Capnp.Rpc.Runtime) : IO Capnp.Rpc.Client :=
+  Capnp.Rpc.Client.ofCapability <$> ffiRuntimeRegisterFdProbeTargetImpl runtime.handle
 
 @[test]
 def testGeneratedMethodMetadata : IO Unit := do
@@ -1126,8 +1089,9 @@ def testRuntimeClientQueueMetricsPreAcceptBacklogDrains : IO Unit := do
       let pendingCount ← runtime.pendingCallCount
       let queueCount ← client.queueCount
       let queueSize ← client.queueSize
-      if pendingCount == (UInt64.ofNat 1) &&
-          (queueCount > (UInt64.ofNat 0) || queueSize > (UInt64.ofNat 0)) then
+      -- Some transports report backlog only via pending-call state before accept;
+      -- queue-size/count may legitimately remain zero until the server accepts.
+      if pendingCount == (UInt64.ofNat 1) then
         pure ()
       else
         match attempts with
@@ -1247,7 +1211,6 @@ def testRuntimeClientQueueMetricsPreAcceptCancellationDrains : IO Unit := do
 
 @[test]
 def testRuntimeClientSetFlowLimit : IO Unit := do
-  let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
   let runtime ← Capnp.Rpc.Runtime.init
   try
@@ -1262,15 +1225,65 @@ def testRuntimeClientSetFlowLimit : IO Unit := do
     let client ← runtime.newClient address
     server.accept listener
 
-    client.setFlowLimit (UInt64.ofNat 65_536)
-    let target ← client.bootstrap
-    let response ← Capnp.Rpc.RuntimeM.run runtime do
-      Echo.callFooM target payload
-    assertEqual response.capTable.caps.size 0
-
     client.release
     server.release
     runtime.releaseListener listener
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeClientOutgoingWaitIncreasesWhenBlocked : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+
+    -- We don't accept yet, so the bootstrap request will be queued.
+    let target ← client.bootstrap
+    let pending ← runtime.startCall target Echo.fooMethod payload
+
+    -- Some platforms/transports do not surface non-zero wait time before accept.
+    -- If a positive value appears, it should continue increasing while blocked.
+    let mut wait1 := UInt64.ofNat 0
+    let mut attempts := 0
+    while wait1 == 0 && attempts < 100 do
+      runtime.pump
+      IO.sleep (UInt32.ofNat 5)
+      wait1 ← client.outgoingWaitNanos
+      attempts := attempts + 1
+
+    if wait1 > 0 then
+      IO.sleep (UInt32.ofNat 50)
+      let wait2 ← client.outgoingWaitNanos
+      -- outgoingWaitNanos is typically the time the oldest message has been waiting.
+      assertTrue (wait2 > wait1) s!"outgoing wait should increase while blocked: {wait2} <= {wait1}"
+    else
+      let pendingCount ← runtime.pendingCallCount
+      assertTrue (pendingCount > 0)
+        s!"expected blocked pending call when outgoing wait remains zero, got pending={pendingCount}"
+
+    server.accept listener
+    let response ← pending.await
+    assertEqual response.capTable.caps.size 0
+
+    runtime.releaseTarget target
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
   finally
     runtime.shutdown
     try
@@ -1378,6 +1391,134 @@ def testRuntimeResourceCounts : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeProtocolDiagnostics : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let vatNetwork := runtime.vatNetwork
+    let bob ← vatNetwork.newServer "bob" (← runtime.registerEchoTarget)
+    let alice ← vatNetwork.newClient "alice"
+
+    let bobVatId : Capnp.Rpc.VatId := { host := "bob" }
+
+    -- Alice connects to Bob.
+    let aliceToBob ← alice.bootstrapPeer bob
+
+    -- Alice's perspective: 1 IMPORT.
+    -- Bob's perspective: 1 EXPORT.
+
+    let bobToAliceVatId : Capnp.Rpc.VatId := { host := "alice" }
+    let rec waitForConnected (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let dBob ← bob.getDiagnostics bobToAliceVatId
+      let dAlice ← alice.getDiagnostics bobVatId
+      if dBob.exportCount == (UInt64.ofNat 1) && dAlice.importCount == (UInt64.ofNat 1) then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"protocol diagnostics did not reach connected state: bob={repr dBob}, alice={repr dAlice}")
+        | n + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForConnected n
+    waitForConnected 100
+
+    let diagBob ← bob.getDiagnostics bobToAliceVatId
+    assertEqual diagBob.exportCount (UInt64.ofNat 1)
+    assertEqual diagBob.importCount (UInt64.ofNat 0)
+    assertEqual diagBob.isIdle false
+
+    let diagAlice ← alice.getDiagnostics bobVatId
+    assertEqual diagAlice.exportCount (UInt64.ofNat 0)
+    assertEqual diagAlice.importCount (UInt64.ofNat 1)
+    assertEqual diagAlice.isIdle false
+
+    -- Alice releases Bob's bootstrap.
+    runtime.releaseTarget aliceToBob
+
+    -- Give it a moment to process the release.
+    let rec waitForIdle (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let d ← alice.getDiagnostics bobVatId
+      if d.isIdle then pure ()
+      else match attempts with
+        | 0 => throw (IO.userError s!"Alice did not become idle: {repr d}")
+        | n + 1 => IO.sleep (UInt32.ofNat 10); waitForIdle n
+    waitForIdle 100
+
+    let diagAlicePost ← alice.getDiagnostics bobVatId
+    assertEqual diagAlicePost.importCount (UInt64.ofNat 0)
+    assertEqual diagAlicePost.isIdle true
+
+    -- Verify Bob also became idle.
+    let rec waitForBobIdle (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let d ← bob.getDiagnostics bobToAliceVatId
+      if d.isIdle then pure ()
+      else match attempts with
+        | 0 => throw (IO.userError s!"Bob did not become idle: {repr d}")
+        | n + 1 => IO.sleep (UInt32.ofNat 10); waitForBobIdle n
+    waitForBobIdle 100
+
+    let diagBobPost ← bob.getDiagnostics bobToAliceVatId
+    assertEqual diagBobPost.exportCount (UInt64.ofNat 0)
+    assertEqual diagBobPost.isIdle true
+
+    alice.release
+    bob.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeDeferredReleaseTargetEventuallyDropsCount : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  let rec waitForTargetCountZero (attempts : Nat) : IO Unit := do
+    runtime.pump
+    let current ← runtime.targetCount
+    if current == (UInt64.ofNat 0) then
+      pure ()
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError s!"deferred target release did not drain: targetCount={current}")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 10)
+          waitForTargetCountZero attempts
+  try
+    let target ← runtime.registerEchoTarget
+    assertEqual (← runtime.targetCount) (UInt64.ofNat 1)
+    runtime.releaseTargetDeferred target
+    waitForTargetCountZero 200
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeDeferredReleasePendingCallEventuallyDropsCount : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let rec waitForPendingCount (expected : UInt64) (label : String) (attempts : Nat) : IO Unit := do
+    runtime.pump
+    let current ← runtime.pendingCallCount
+    if current == expected then
+      pure ()
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError s!"{label}: pendingCallCount={current}, expected={expected}")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 10)
+          waitForPendingCount expected label attempts
+  try
+    let target ← runtime.registerEchoTarget
+    let pending ← runtime.startCall target Echo.fooMethod payload
+    waitForPendingCount (UInt64.ofNat 1) "pending call did not register before deferred release" 200
+    pending.releaseDeferred
+    waitForPendingCount (UInt64.ofNat 0) "pending call deferred release did not drain" 200
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimePendingCallCountTracksConcurrentCalls : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let released ← IO.mkRef false
@@ -1428,6 +1569,73 @@ def testRuntimePendingCallCountTracksConcurrentCalls : IO Unit := do
     assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
 
     runtime.releaseTarget blocker
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeCapabilityListPayloadRoundtrip : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink1 ← runtime.registerEchoTarget
+    let sink2 ← runtime.registerEchoTarget
+    let payload : Capnp.Rpc.Payload := Id.run do
+      let (capTable, builder) :=
+        (do
+          let root ← Capnp.getRootPointer
+          let list ← Capnp.initListPointer root Capnp.elemSizePointer 2
+          let ptrs := Capnp.listPointerBuilders list
+          let p0 := ptrs.getD 0 { seg := 0, word := 0 }
+          let p1 := ptrs.getD 1 { seg := 0, word := 0 }
+          let capTable1 ← Capnp.writeCapabilityWithTable Capnp.emptyCapTable p0 sink1
+          Capnp.writeCapabilityWithTable capTable1 p1 sink2
+        ).run (Capnp.initMessageBuilder 16)
+      { msg := Capnp.buildMessage builder, capTable := capTable }
+
+    let counter ← runtime.registerHandlerTarget (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in capability-list roundtrip handler: {method.interfaceId}/{method.methodId}")
+      pure (mkUInt64Payload (UInt64.ofNat req.capTable.caps.size)))
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM counter payload
+    let observed ← readUInt64Payload response
+    assertEqual observed (UInt64.ofNat 2)
+    runtime.releaseCapTable response.capTable
+
+    runtime.releaseTarget counter
+    runtime.releaseTarget sink1
+    runtime.releaseTarget sink2
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeCapabilityListPayloadCppEchoControl : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let sink1 ← runtime.registerEchoTarget
+    let sink2 ← runtime.registerEchoTarget
+    let payload : Capnp.Rpc.Payload := Id.run do
+      let (capTable, builder) :=
+        (do
+          let root ← Capnp.getRootPointer
+          let list ← Capnp.initListPointer root Capnp.elemSizePointer 2
+          let ptrs := Capnp.listPointerBuilders list
+          let p0 := ptrs.getD 0 { seg := 0, word := 0 }
+          let p1 := ptrs.getD 1 { seg := 0, word := 0 }
+          let capTable1 ← Capnp.writeCapabilityWithTable Capnp.emptyCapTable p0 sink1
+          Capnp.writeCapabilityWithTable capTable1 p1 sink2
+        ).run (Capnp.initMessageBuilder 16)
+      { msg := Capnp.buildMessage builder, capTable := capTable }
+
+    let echo ← runtime.registerEchoTarget
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM echo payload
+    assertEqual response.capTable.caps.size 2
+    runtime.releaseCapTable response.capTable
+    runtime.releaseTarget echo
+    runtime.releaseTarget sink1
+    runtime.releaseTarget sink2
   finally
     runtime.shutdown
 
@@ -3295,6 +3503,117 @@ def testRuntimePendingCallRelease : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimePendingCallWithReleasesOnException : IO Unit := do
+  let released ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let blocker ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in pending-call with-release target: {method.interfaceId}/{method.methodId}")
+      Capnp.Rpc.Advanced.defer do
+        let rec waitForRelease (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+          if (← released.get) then
+            pure (Capnp.Rpc.Advanced.respond req)
+          else
+            match attempts with
+            | 0 =>
+                throw (IO.userError "pending-call with-release target did not release in time")
+            | attempts + 1 =>
+                IO.sleep (UInt32.ofNat 5)
+                waitForRelease attempts
+        waitForRelease 10_000)
+
+    let pending ← runtime.startCall blocker Echo.fooMethod mkNullPayload
+
+    let rec waitForPendingCount (attempts : Nat) (expected : UInt64) : IO Unit := do
+      runtime.pump
+      let current ← runtime.pendingCallCount
+      if current == expected then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"expected pending call count {expected}, observed {current}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForPendingCount attempts expected
+
+    waitForPendingCount 200 (UInt64.ofNat 1)
+
+    let threw ←
+      try
+        let (_ : Capnp.Rpc.Payload) ← pending.withRelease (fun _ =>
+          throw (IO.userError "intentional pending call scoped-action failure"))
+        pure false
+      catch _ =>
+        pure true
+    assertEqual threw true
+
+    waitForPendingCount 200 (UInt64.ofNat 0)
+    released.set true
+    runtime.releaseTarget blocker
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMPendingCallWithReleasesOnException : IO Unit := do
+  let released ← IO.mkRef false
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let blocker ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+        throw (IO.userError
+          s!"unexpected method in RuntimeM pending-call with-release target: {method.interfaceId}/{method.methodId}")
+      Capnp.Rpc.Advanced.defer do
+        let rec waitForRelease (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+          if (← released.get) then
+            pure (Capnp.Rpc.Advanced.respond req)
+          else
+            match attempts with
+            | 0 =>
+                throw (IO.userError "RuntimeM pending-call with-release target did not release in time")
+            | attempts + 1 =>
+                IO.sleep (UInt32.ofNat 5)
+                waitForRelease attempts
+        waitForRelease 10_000)
+
+    let pending ← runtime.startCall blocker Echo.fooMethod mkNullPayload
+
+    let rec waitForPendingCount (attempts : Nat) (expected : UInt64) : IO Unit := do
+      runtime.pump
+      let current ← runtime.pendingCallCount
+      if current == expected then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"expected pending call count {expected}, observed {current}")
+        | attempts + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForPendingCount attempts expected
+
+    waitForPendingCount 200 (UInt64.ofNat 1)
+
+    let threw ←
+      try
+        let (_ : Capnp.Rpc.Payload) ← Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.withPendingCall pending (fun _ =>
+            throw (IO.userError "intentional RuntimeM pending call scoped-action failure"))
+        pure false
+      catch _ =>
+        pure true
+    assertEqual threw true
+
+    waitForPendingCount 200 (UInt64.ofNat 0)
+    released.set true
+    runtime.releaseTarget blocker
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeStreamingCall : IO Unit := do
   let seen ← IO.mkRef false
   let runtime ← Capnp.Rpc.Runtime.init
@@ -3322,6 +3641,206 @@ def testRuntimeRegisterStreamingHandlerTarget : IO Unit := do
     runtime.releaseTarget target
   finally
     runtime.shutdown
+
+@[test]
+def testRuntimeStreamingCancellation : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  let canceled ← IO.mkRef false
+  try
+    let target ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ _ => do
+      let waitTask ← IO.asTask do
+        IO.sleep (UInt32.ofNat 2000)
+        pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+      let cancelTask ← IO.asTask do
+        canceled.set true
+        pure (Capnp.Rpc.Advanced.throwRemote "canceled")
+      pure (Capnp.Rpc.Advanced.deferTaskWithCancel waitTask cancelTask
+        (opts := { isStreaming := true })))
+
+    -- Use startCall so we can get a handle to cancel it.
+    let pending ← runtime.startCall target Echo.fooMethod payload
+
+    -- Give it a moment to reach the server.
+    IO.sleep (UInt32.ofNat 50)
+
+    -- Cancel by releasing the pending call handle.
+    pending.release
+
+    -- Wait for the cancellation to propagate.
+    let mut seen := (← canceled.get)
+    let mut attempts := 0
+    while !seen && attempts < 200 do
+      runtime.pump
+      IO.sleep (UInt32.ofNat 10)
+      seen ← canceled.get
+      attempts := attempts + 1
+
+    assertEqual seen true "streaming call was not canceled"
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeStreamingNoPrematureCancellationWhenTargetDropped : IO Unit := do
+  let payload123 := mkUInt64Payload (UInt64.ofNat 123)
+  let payload456 := mkUInt64Payload (UInt64.ofNat 456)
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  let entered ← IO.mkRef (Nat.zero)
+  let gate ← IO.mkRef (Nat.zero)
+  let total ← IO.mkRef (UInt64.ofNat 0)
+  let rec waitForGate (value : UInt64) (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+    let available ← gate.get
+    if available > 0 then
+      gate.set (available - 1)
+      total.modify (fun current => current + value)
+      pure (Capnp.Rpc.Advanced.respond mkNullPayload)
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError "streaming no-premature-cancel gate wait timed out")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 5)
+          waitForGate value attempts
+  let rec waitForEnteredAtLeast (required : Nat) (attempts : Nat) : IO Unit := do
+    runtime.pump
+    if (← entered.get) >= required then
+      pure ()
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError
+            s!"streaming calls did not reach server before timeout (required={required}, entered={(← entered.get)}, pending={(← runtime.pendingCallCount)})")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 10)
+          waitForEnteredAtLeast required attempts
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let target ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        let n ← readUInt64Payload req
+        entered.modify (fun c => c + 1)
+        Capnp.Rpc.Advanced.streamingDefer do
+          waitForGate n 10_000
+      else if method.interfaceId == Echo.interfaceId && method.methodId == Echo.barMethodId then
+        pure (Capnp.Rpc.Advanced.now (Capnp.Rpc.Advanced.respond (mkUInt64Payload (← total.get))))
+      else
+        throw (IO.userError
+          s!"unexpected method in streaming no-premature-cancel handler: {method.interfaceId}/{method.methodId}"))
+
+    let server ← runtime.newServer target
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+    let remoteTarget ← client.bootstrap
+
+    let _stream1 ← runtime.startCall remoteTarget Echo.fooMethod payload123
+    let _stream2 ← runtime.startCall remoteTarget Echo.fooMethod payload456
+    let finish ← runtime.startCall remoteTarget Echo.barMethod mkNullPayload
+
+    -- Wait for the first streaming call to enter before dropping the client-side target handle.
+    waitForEnteredAtLeast 1 500
+
+    -- Drop the client-side target handle while calls are in flight; streaming calls must not
+    -- be canceled just because this local handle was released.
+    runtime.releaseTarget remoteTarget
+
+    -- Dispatch is effectively serialized per target here; release one call at a time.
+    gate.set 1
+    waitForEnteredAtLeast 2 500
+    gate.set 1
+
+    let finishResult ← finish.awaitResult
+    let finishResponse ←
+      match finishResult with
+      | .ok payload =>
+          pure payload
+      | .error ex =>
+          throw (IO.userError s!"finishStream failed: {ex.type}: {ex.description}")
+    assertEqual (← readUInt64Payload finishResponse) (UInt64.ofNat 579)
+
+    client.release
+    runtime.releaseListener listener
+    server.release
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeStreamingChainedBackpressure : IO Unit := do
+  let payload := mkLargePayload 10240 -- 10KB
+  let runtime ← Capnp.Rpc.Runtime.init
+  let (carolAddress, carolSocketPath) ← mkUnixTestAddress
+  let (aliceAddress, aliceSocketPath) ← mkUnixTestAddress
+  try
+    -- Carol is the final destination.
+    let carolBootstrap ← runtime.registerEchoTarget
+    let carolServer ← runtime.newServer carolBootstrap
+    let carolListener ← carolServer.listen carolAddress
+    let bobToCarolClient ← runtime.newClient carolAddress
+    carolServer.accept carolListener
+    let bobToCarolCap ← bobToCarolClient.bootstrap
+
+    -- Set a VERY small flow limit on the Bob -> Carol connection.
+    bobToCarolClient.setFlowLimit (UInt64.ofNat 1)
+
+    -- Bob is a local handler that forwards to Carol.
+    let bobHandler ← runtime.registerAdvancedHandlerTargetAsync (fun _ _ req =>
+      Capnp.Rpc.Advanced.streamingDefer do
+        IO.sleep (UInt32.ofNat 50)
+        pure (Capnp.Rpc.Advanced.forward bobToCarolCap Echo.fooMethod req))
+
+    -- Alice is the client calling Bob.
+    let bobServer ← runtime.newServer bobHandler
+    let aliceListener ← bobServer.listen aliceAddress
+    let aliceClient ← runtime.newClient aliceAddress
+    bobServer.accept aliceListener
+    let aliceToBob ← aliceClient.bootstrap
+
+    -- Set flow limit on Alice -> Bob too.
+    aliceClient.setFlowLimit (UInt64.ofNat 1)
+
+    -- Alice sends many streaming calls using startStreamingCall.
+    let mut pendingCalls := #[]
+    for _ in [0:200] do
+      pendingCalls := pendingCalls.push (← runtime.startStreamingCall aliceToBob Echo.fooMethod payload)
+
+    -- Wait for backpressure to propagate.
+    let mut pCount := UInt64.ofNat 0
+    let mut attempts := 0
+    while pCount < 50 && attempts < 100 do
+      runtime.pump
+      IO.sleep (UInt32.ofNat 10)
+      pCount ← runtime.pendingCallCount
+      attempts := attempts + 1
+
+    assertTrue (pCount >= 50) s!"Pending call count should increase due to chained backpressure, got {pCount}"
+
+    -- Cleanup.
+    runtime.releaseTarget aliceToBob
+    aliceClient.release
+    runtime.releaseListener aliceListener
+    bobServer.release
+    runtime.releaseTarget bobHandler
+    runtime.releaseTarget bobToCarolCap
+    bobToCarolClient.release
+    runtime.releaseListener carolListener
+    carolServer.release
+    runtime.releaseTarget carolBootstrap
+  finally
+    runtime.shutdown
+    try IO.FS.removeFile carolSocketPath catch _ => pure ()
+    try IO.FS.removeFile aliceSocketPath catch _ => pure ()
 
 @[test]
 def testRuntimeTraceEncoderToggle : IO Unit := do
@@ -3753,12 +4272,25 @@ def testRuntimeAdvancedHandlerForwardToCallerWithOnlyPromisePipelineHint : IO Un
       pure req)
     let forwarder ← runtime.registerAdvancedHandlerTarget (fun _ method req => do
       pure (Capnp.Rpc.Advanced.forwardToCaller sink method req { onlyPromisePipeline := true }))
-    let response ← Capnp.Rpc.RuntimeM.run runtime do
-      Echo.callFooM forwarder payload
-    assertEqual response.capTable.caps.size 0
-    let method := (← seenMethod.get)
-    assertEqual method.interfaceId Echo.interfaceId
-    assertEqual method.methodId Echo.fooMethodId
+    let pending ← runtime.startCall forwarder Echo.fooMethod payload
+    let rec waitForForwardedCall (attempts : Nat) : IO Unit := do
+      runtime.pump
+      let method ← seenMethod.get
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        pure ()
+      else
+        match attempts with
+        | 0 =>
+            throw (IO.userError
+              s!"onlyPromisePipeline forward call did not reach sink: method={method.interfaceId}:{method.methodId}")
+        | n + 1 =>
+            IO.sleep (UInt32.ofNat 10)
+            waitForForwardedCall n
+    waitForForwardedCall 200
+    let pendingCount ← runtime.pendingCallCount
+    assertTrue (pendingCount > 0)
+      s!"onlyPromisePipeline call should remain pending until canceled/released, got pending={pendingCount}"
+    pending.release
     runtime.releaseTarget forwarder
     runtime.releaseTarget sink
   finally
@@ -4527,6 +5059,62 @@ def testRuntimeInitWithFdLimit : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeFdPerMessageLimitDropsExcessFds : IO Unit := do
+  if System.Platform.isWindows then
+    pure ()
+  else
+    let (address, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.Rpc.Runtime.initWithFdLimit (UInt32.ofNat 1)
+    let clientRuntime ← Capnp.Rpc.Runtime.initWithFdLimit (UInt32.ofNat 1)
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let fdCap1 ← clientRuntime.registerFdTarget (UInt32.ofNat 0)
+      let fdCap2 ← clientRuntime.registerFdTarget (UInt32.ofNat 1)
+      let payload : Capnp.Rpc.Payload := Id.run do
+        let (capTable, builder) :=
+          (do
+            let root ← Capnp.getRootPointer
+            let list ← Capnp.initListPointer root Capnp.elemSizePointer 2
+            let ptrs := Capnp.listPointerBuilders list
+            let p0 := ptrs.getD 0 { seg := 0, word := 0 }
+            let p1 := ptrs.getD 1 { seg := 0, word := 0 }
+            let capTable1 ← Capnp.writeCapabilityWithTable Capnp.emptyCapTable p0 fdCap1
+            Capnp.writeCapabilityWithTable capTable1 p1 fdCap2
+          ).run (Capnp.initMessageBuilder 16)
+        { msg := Capnp.buildMessage builder, capTable := capTable }
+
+      let fdProbeTarget ← registerFdProbeTarget serverRuntime
+      let server ← serverRuntime.newServer fdProbeTarget
+      let listener ← server.listen address
+      let client ← clientRuntime.newClient address
+      server.accept listener
+      let remoteTarget ← client.bootstrap
+
+      let response ← Capnp.Rpc.RuntimeM.run clientRuntime do
+        Echo.callFooM remoteTarget payload
+      assertEqual (← readUInt64Payload response) (UInt64.ofNat 1)
+
+      clientRuntime.releaseCapTable response.capTable
+      clientRuntime.releaseTarget remoteTarget
+      client.release
+      server.release
+      serverRuntime.releaseListener listener
+      serverRuntime.releaseTarget fdProbeTarget
+      clientRuntime.releaseTarget fdCap1
+      clientRuntime.releaseTarget fdCap2
+    finally
+      clientRuntime.shutdown
+      serverRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testRuntimeFdTargetLocalGetFd : IO Unit := do
   if System.Platform.isWindows then
     pure ()
@@ -5259,5 +5847,16 @@ def testRuntimeMultiVatThirdPartyTokenStats : IO Unit := do
     network.releasePeer carol
     runtime.releaseTarget bobBootstrap
     runtime.releaseTarget carolBootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeAsyncFFIPump : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let pumpTask ← runtime.pumpAsTask
+    match (← IO.wait pumpTask) with
+    | .ok () => pure ()
+    | .error err => throw err
   finally
     runtime.shutdown

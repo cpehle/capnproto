@@ -17,7 +17,10 @@ import Test.Checked
 import Test.KjAsync
 import Test.Rpc
 import Test.RpcClient
+import Test.RpcReliability
 import Test.RpcOrderingControl
+import Test.RpcLayout
+import Test.AsyncBridge
 
 /-- Driver options layered over LeanTest.RunConfig. -/
 structure DriverConfig where
@@ -44,6 +47,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRuntimeTwoHopPipelinedResolveOrdering,
   `testRuntimeOrderingResolveHoldControlsDisembargo,
   `testRuntimeOrderingResolveHooksTrackHeldCount,
+  `testRuntimeProtocolBlockingOrdering,
 
   -- Lifecycle and disconnect visibility.
   `testRuntimeAsyncClientLifecyclePrimitives,
@@ -53,6 +57,10 @@ private def parityCriticalTests : Array Lean.Name := #[
 
   -- Failure propagation and cancellation sequencing.
   `testRuntimeParityCancelDisconnectSequencing,
+  `testRuntimeParityPromisedCapabilityDelayedRejectPropagatesToPendingCalls,
+  `testRuntimeParityPromisedCapabilityCancelBeforeRejectSequencing,
+  `testRuntimeTransportAbortPendingCall,
+  `testRuntimeProtocolDisconnectDetail,
   `testInteropLeanClientCancelsPendingCallToCppDelayedServer,
   `testInteropLeanPendingCallOutcomeCapturesCppException,
   `testInteropLeanClientReceivesCppExceptionDetail,
@@ -60,6 +68,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   -- Flow control and trace observability.
   `testRuntimeClientQueueMetrics,
   `testRuntimeClientQueueMetricsPreAcceptBacklogDrains,
+  `testRuntimeProtocolDiagnostics,
   `testRuntimeClientSetFlowLimit,
   `testRuntimeTraceEncoderToggle,
   `testRuntimeSetTraceEncoderOnExistingConnection,
@@ -68,7 +77,11 @@ private def parityCriticalTests : Array Lean.Name := #[
   -- Streaming and FD transfer behavior.
   `testRuntimeStreamingCall,
   `testRuntimeRegisterStreamingHandlerTarget,
+  `testRuntimeStreamingCancellation,
+  `testRuntimeStreamingNoPrematureCancellationWhenTargetDropped,
+  `testRuntimeStreamingChainedBackpressure,
   `testRuntimeFdPassingOverNetwork,
+  `testRuntimeFdPerMessageLimitDropsExcessFds,
   `testRuntimeFdTargetLocalGetFd,
 
   -- RPC/KjAsync bridge-critical checks.
@@ -80,7 +93,12 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRpcRuntimeMWithKjAsyncRuntimeHelpers,
   `testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime,
   `testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread,
-  `testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers
+  `testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers,
+  `testRuntimeAsyncFFIPump,
+
+  -- FFI Layout Validation
+  `testRpcDiagnosticsLayout,
+  `testRemoteExceptionLayout
 ]
 
 /-- Resolve deterministic parity-critical test declarations from discovered tests. -/
@@ -117,6 +135,7 @@ private unsafe def runSelectedTestsAndExit (env : Lean.Environment) (opts : Lean
 
   for entry in tests do
     let name := LeanTest.getTestName entry
+    IO.println s!"starting {name}"
     let result ← LeanTest.runSingleTest env opts entry
     IO.println (LeanTest.formatResult name result)
     results := results.push (entry.declName, result)
@@ -190,12 +209,14 @@ unsafe def main (args : List String) : IO UInt32 := do
     #[{ module := `LeanTest }, { module := `Test.Runtime }, { module := `Test.Generated },
       { module := `Test.Builder }, { module := `Test.Capability }, { module := `Test.Packed },
       { module := `Test.Checked }, { module := `Test.KjAsync }, { module := `Test.Rpc },
-      { module := `Test.RpcClient }, { module := `Test.RpcOrderingControl }]
+      { module := `Test.RpcClient }, { module := `Test.RpcReliability },
+      { module := `Test.RpcOrderingControl }, { module := `Test.RpcLayout },
+      { module := `Test.AsyncBridge }]
     {}
 
+  let allTests := LeanTest.getTests env
   if driverConfig.parityCritical then
-    let allTests := LeanTest.getTests env
     let selected ← selectParityCriticalTests allTests
     runSelectedTestsAndExit env {} selected driverConfig.runConfig
   else
-    LeanTest.runTestsAndExit env {} driverConfig.runConfig
+    runSelectedTestsAndExit env {} allTests driverConfig.runConfig
