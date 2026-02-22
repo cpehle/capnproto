@@ -929,15 +929,13 @@ namespace TypedPayload
 
 end TypedPayload
 
-structure RuntimeRegisterPromiseRef where
+structure RuntimePromiseRef (α : Type) where
   runtime : Runtime
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
-structure RuntimeUnitPromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
+abbrev RuntimeRegisterPromiseRef := RuntimePromiseRef UInt32
+abbrev RuntimeUnitPromiseRef := RuntimePromiseRef Unit
 
 structure RuntimePromiseCapabilityFulfillerRef where
   runtime : Runtime
