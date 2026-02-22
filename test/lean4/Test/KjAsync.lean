@@ -112,6 +112,24 @@ private partial def waitForHttpServerRequest (runtime : Capnp.KjAsync.Runtime)
   | none =>
     pure request
 
+private partial def waitForHttpServerRequestAcrossRuntimes
+    (serverRuntime clientRuntime : Capnp.KjAsync.Runtime) (server : Capnp.KjAsync.HttpServer)
+    (attempts : Nat := 400) : IO Capnp.KjAsync.HttpServerRequest := do
+  if attempts == 0 then
+    throw (IO.userError "timed out waiting for HTTP server request")
+  clientRuntime.pump
+  match (← serverRuntime.httpServerPollRequestStreaming? server) with
+  | some request =>
+    match request.bodyStream? with
+    | some requestBody =>
+      let body ← readHttpServerRequestBodyAll requestBody
+      pure { request with body := body, bodyStream? := none }
+    | none =>
+      pure request
+  | none =>
+    serverRuntime.pump
+    waitForHttpServerRequestAcrossRuntimes serverRuntime clientRuntime server (attempts - 1)
+
 @[test]
 def testKjAsyncRuntimeLifecycle : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
@@ -1402,6 +1420,39 @@ def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
       server.release
   finally
     runtime.shutdown
+
+@[test]
+def testKjAsyncBytesRefHttpRequestStartCrossRuntimeWithPump : IO Unit := do
+  let serverRuntime ← Capnp.KjAsync.Runtime.init
+  let clientRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← serverRuntime.httpServerListen "127.0.0.1" 0
+    try
+      let requestBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 13))
+      let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
+      let responseBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 14))
+
+      let responsePromise ←
+        clientRuntime.httpRequestStartRef
+          .post "127.0.0.1" "/bytesref-http-cross" requestBodyRef server.boundPort
+      let request ←
+        waitForHttpServerRequestAcrossRuntimes serverRuntime clientRuntime server
+      assertEqual request.path "/bytesref-http-cross"
+      assertEqual request.body requestBody
+
+      serverRuntime.httpServerRespond
+        server request.requestId (UInt32.ofNat 202) "Accepted" #[] responseBody
+      serverRuntime.pump
+
+      let response ← responsePromise.awaitRef
+      assertEqual response.status (UInt32.ofNat 202)
+      let receivedBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
+      assertEqual receivedBody responseBody
+    finally
+      server.release
+  finally
+    clientRuntime.shutdown
+    serverRuntime.shutdown
 
 @[test]
 def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do

@@ -1691,8 +1691,9 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 
 @[inline] def httpRequestRef (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseRef := do
-  let response ← runtime.httpRequest method address path (← body.toByteArray) portHint
-  return { status := response.status, body := (← BytesRef.ofByteArray response.body) }
+  let (status, responseBody) ←
+    ffiRuntimeHttpRequestRefImpl runtime.handle (httpMethodToTag method) address portHint path body
+  return { status := status, body := responseBody }
 
 @[inline] def httpRequestWithResponseLimit (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (responseBodyLimit : UInt64)
@@ -1705,10 +1706,10 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestWithResponseLimitRef (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (responseBodyLimit : UInt64)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseRef := do
-  let response ←
-    runtime.httpRequestWithResponseLimit method address path responseBodyLimit
-      (← body.toByteArray) portHint
-  return { status := response.status, body := (← BytesRef.ofByteArray response.body) }
+  let (status, responseBody) ←
+    ffiRuntimeHttpRequestWithResponseLimitRefImpl runtime.handle (httpMethodToTag method) address
+      portHint path body responseBodyLimit
+  return { status := status, body := responseBody }
 
 @[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeaders (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
@@ -1726,13 +1727,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeadersRef (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
-  let response ← runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeaders method
-    address path requestHeaders (← body.toByteArray) portHint
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersRefImpl runtime.handle (httpMethodToTag method) address
+      portHint path requestHeaders body
   return {
-    status := response.status
-    statusText := response.statusText
-    encodedHeaders := response.encodedHeaders
-    body := (← BytesRef.ofByteArray response.body)
+    status := status
+    statusText := statusText
+    encodedHeaders := responseHeaderBytes
+    body := responseBody
   }
 
 @[inline] def httpRequestWithEncodedHeaders (runtime : Runtime) (method : HttpMethod)
@@ -1775,13 +1777,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecureRef (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
-  let response ← runtime.httpRequestWithEncodedHeadersAndEncodedResponseHeadersSecure method
-    address path requestHeaders (← body.toByteArray) portHint
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersSecureRefImpl runtime.handle (httpMethodToTag method) address
+      portHint path requestHeaders body
   return {
-    status := response.status
-    statusText := response.statusText
-    encodedHeaders := response.encodedHeaders
-    body := (← BytesRef.ofByteArray response.body)
+    status := status
+    statusText := statusText
+    encodedHeaders := responseHeaderBytes
+    body := responseBody
   }
 
 @[inline] def httpRequestWithEncodedHeadersSecure (runtime : Runtime) (method : HttpMethod)
@@ -1828,13 +1831,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (runtime : Runtime) (method : HttpMethod) (address : String) (path : String)
     (requestHeaders : ByteArray) (responseBodyLimit : UInt64)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
-  let response ← runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeaders
-    method address path requestHeaders responseBodyLimit (← body.toByteArray) portHint
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersWithResponseLimitRefImpl runtime.handle
+      (httpMethodToTag method) address portHint path requestHeaders body responseBodyLimit
   return {
-    status := response.status
-    statusText := response.statusText
-    encodedHeaders := response.encodedHeaders
-    body := (← BytesRef.ofByteArray response.body)
+    status := status
+    statusText := statusText
+    encodedHeaders := responseHeaderBytes
+    body := responseBody
   }
 
 @[inline] def httpRequestWithEncodedHeadersWithResponseLimit (runtime : Runtime)
@@ -1886,13 +1890,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (runtime : Runtime) (method : HttpMethod) (address : String) (path : String)
     (requestHeaders : ByteArray) (responseBodyLimit : UInt64)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
-  let response ← runtime.httpRequestWithEncodedHeadersWithResponseLimitAndEncodedResponseHeadersSecure
-    method address path requestHeaders responseBodyLimit (← body.toByteArray) portHint
+  let (status, statusText, responseHeaderBytes, responseBody) ←
+    ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureRefImpl runtime.handle
+      (httpMethodToTag method) address portHint path requestHeaders body responseBodyLimit
   return {
-    status := response.status
-    statusText := response.statusText
-    encodedHeaders := response.encodedHeaders
-    body := (← BytesRef.ofByteArray response.body)
+    status := status
+    statusText := statusText
+    encodedHeaders := responseHeaderBytes
+    body := responseBody
   }
 
 @[inline] def httpRequestWithEncodedHeadersWithResponseLimitSecure (runtime : Runtime)
@@ -1937,7 +1942,11 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestStartRef (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (body : BytesRef) (portHint : UInt32 := 0) :
     IO HttpResponsePromiseRef := do
-  runtime.httpRequestStart method address path (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path body)
+  }
 
 @[inline] def httpRequestStartWithResponseLimit (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (responseBodyLimit : UInt64)
@@ -1953,8 +1962,11 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (address : String) (path : String) (responseBodyLimit : UInt64)
     (body : BytesRef) (portHint : UInt32 := 0) :
     IO HttpResponsePromiseRef := do
-  runtime.httpRequestStartWithResponseLimit
-    method address path responseBodyLimit (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithResponseLimitRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path body responseBodyLimit)
+  }
 
 @[inline] def httpRequestStartWithEncodedHeaders (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : ByteArray)
@@ -1968,8 +1980,11 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestStartWithEncodedHeadersRef (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponsePromiseRef := do
-  runtime.httpRequestStartWithEncodedHeaders
-    method address path requestHeaders (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+  }
 
 @[inline] def httpRequestStartWithHeaders (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -1997,8 +2012,11 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestStartWithEncodedHeadersSecureRef (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponsePromiseRef := do
-  runtime.httpRequestStartWithEncodedHeadersSecure
-    method address path requestHeaders (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersSecureRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+  }
 
 @[inline] def httpRequestStartWithHeadersSecure (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (requestHeaders : Array HttpHeader)
@@ -2070,8 +2088,12 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (responseBodyLimit : UInt64) (body : BytesRef)
     (portHint : UInt32 := 0) : IO HttpResponsePromiseRef := do
-  runtime.httpRequestStartWithEncodedHeadersWithResponseLimit
-    method address path requestHeaders responseBodyLimit (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      responseBodyLimit)
+  }
 
 @[inline] def httpRequestStartWithHeadersWithResponseLimit (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String)
@@ -2104,8 +2126,12 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (responseBodyLimit : UInt64) (body : BytesRef)
     (portHint : UInt32 := 0) : IO HttpResponsePromiseRef := do
-  runtime.httpRequestStartWithEncodedHeadersWithResponseLimitSecure
-    method address path requestHeaders responseBodyLimit (← body.toByteArray) portHint
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitSecureRefImpl
+      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      responseBodyLimit)
+  }
 
 @[inline] def httpRequestStartWithHeadersWithResponseLimitSecure (runtime : Runtime)
     (method : HttpMethod) (address : String) (path : String)

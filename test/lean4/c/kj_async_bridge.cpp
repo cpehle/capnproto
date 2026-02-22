@@ -53,14 +53,6 @@ std::shared_ptr<std::vector<uint8_t>> makeSharedBytes(std::vector<uint8_t>&& byt
   return std::make_shared<std::vector<uint8_t>>(std::move(bytes));
 }
 
-std::shared_ptr<std::vector<uint8_t>> cloneSharedBytes(
-    const std::shared_ptr<std::vector<uint8_t>>& bytes) {
-  if (!bytes) {
-    return std::make_shared<std::vector<uint8_t>>();
-  }
-  return std::make_shared<std::vector<uint8_t>>(*bytes);
-}
-
 std::shared_ptr<std::vector<uint8_t>> copyByteArrayToSharedBytes(b_lean_obj_arg bytes) {
   const auto size = lean_sarray_size(bytes);
   const auto* data =
@@ -9346,7 +9338,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_ref
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+        getBytesRefDataOrThrow(bodyRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9416,7 +9408,7 @@ capnp_lean_kj_async_runtime_http_request_with_response_limit_ref(
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9481,7 +9473,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_sta
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+        getBytesRefDataOrThrow(bodyRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9545,7 +9537,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_response_limit_ref(
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9737,7 +9729,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+        getBytesRefDataOrThrow(bodyRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9821,7 +9813,7 @@ capnp_lean_kj_async_runtime_http_request_with_headers_secure_ref(
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true);
+        getBytesRefDataOrThrow(bodyRef), true);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9908,7 +9900,7 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_ref(
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9995,7 +9987,7 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), true, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10069,7 +10061,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_ref(
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+        getBytesRefDataOrThrow(bodyRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10132,7 +10124,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_secure_ref(
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true);
+        getBytesRefDataOrThrow(bodyRef), true);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10265,7 +10257,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10330,7 +10322,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint,
         std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
-        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true, responseBodyLimit);
+        getBytesRefDataOrThrow(bodyRef), true, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
