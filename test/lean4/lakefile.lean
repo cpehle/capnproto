@@ -139,3 +139,7 @@ lean_exe test_full where
 lean_exe test where
   root := `TestDriverRpc
   supportInterpreter := true
+
+lean_exe kj_async_bench where
+  root := `Bench.KjAsyncBench
+  supportInterpreter := true

@@ -3200,9 +3200,18 @@ namespace Connection
   let pending ← connection.writeStart bytes
   pending.awaitAsTask
 
+@[inline] def writeAsTaskRef (connection : Connection) (bytes : BytesRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let pending ← connection.writeStartRef bytes
+  pending.awaitAsTask
+
 @[inline] def writeAsPromise (connection : Connection) (bytes : ByteArray) :
     IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← connection.writeAsTask bytes))
+
+@[inline] def writeAsPromiseRef (connection : Connection) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.writeAsTaskRef bytes))
 
 @[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : IO ByteArray := do
   let bytesRef ← ffiRuntimeConnectionReadRefImpl
@@ -3771,9 +3780,18 @@ namespace HttpRequestBody
   let promise ← requestBody.writeStart bytes
   promise.awaitAsTask
 
+@[inline] def writeAsTaskRef (requestBody : HttpRequestBody) (bytes : BytesRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← requestBody.writeStartRef bytes
+  promise.awaitAsTask
+
 @[inline] def writeAsPromise (requestBody : HttpRequestBody) (bytes : ByteArray) :
     IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← requestBody.writeAsTask bytes))
+
+@[inline] def writeAsPromiseRef (requestBody : HttpRequestBody) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← requestBody.writeAsTaskRef bytes))
 
 @[inline] def write (requestBody : HttpRequestBody) (bytes : ByteArray) : IO Unit := do
   let bytesRef ← BytesRef.ofByteArray bytes
@@ -3901,9 +3919,18 @@ namespace HttpServerResponseBody
   let promise ← responseBody.writeStart bytes
   promise.awaitAsTask
 
+@[inline] def writeAsTaskRef (responseBody : HttpServerResponseBody) (bytes : BytesRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← responseBody.writeStartRef bytes
+  promise.awaitAsTask
+
 @[inline] def writeAsPromise (responseBody : HttpServerResponseBody) (bytes : ByteArray) :
     IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← responseBody.writeAsTask bytes))
+
+@[inline] def writeAsPromiseRef (responseBody : HttpServerResponseBody) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← responseBody.writeAsTaskRef bytes))
 
 @[inline] def write (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO Unit := do
   let bytesRef ← BytesRef.ofByteArray bytes
@@ -3984,9 +4011,18 @@ namespace WebSocket
   let promise ← webSocket.sendBinaryStart bytes
   promise.awaitAsTask
 
+@[inline] def sendBinaryAsTaskRef (webSocket : WebSocket) (bytes : BytesRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← webSocket.sendBinaryStartRef bytes
+  promise.awaitAsTask
+
 @[inline] def sendBinaryAsPromise (webSocket : WebSocket) (bytes : ByteArray) :
     IO (Capnp.Async.Promise Unit) := do
   pure (Capnp.Async.Promise.ofTask (← webSocket.sendBinaryAsTask bytes))
+
+@[inline] def sendBinaryAsPromiseRef (webSocket : WebSocket) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.sendBinaryAsTaskRef bytes))
 
 @[inline] def sendBinary (webSocket : WebSocket) (bytes : ByteArray) : IO Unit := do
   let bytesRef ← BytesRef.ofByteArray bytes
@@ -4198,10 +4234,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.writeAsTask bytes
 
+@[inline] def writeAsTaskRef (connection : Connection) (bytes : BytesRef) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.writeAsTaskRef bytes
+
 @[inline] def writeAsPromise (connection : Connection) (bytes : ByteArray) :
     RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.writeAsPromise bytes
+
+@[inline] def writeAsPromiseRef (connection : Connection) (bytes : BytesRef) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.writeAsPromiseRef bytes
 
 @[inline] def read (connection : Connection) (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
   Runtime.connectionRead (← runtime) connection minBytes maxBytes
@@ -4913,43 +4959,6 @@ namespace RuntimeM
 @[inline] def httpResponsePromiseRelease (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
   Runtime.httpResponsePromiseRelease (← runtime) promise
 
-@[inline] def awaitHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM HttpResponse := do
-  promise.await
-
-@[inline] def awaitHttpResponseRef (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseRef := do
-  promise.awaitRef
-
-@[inline] def awaitHttpResponseWithEncodedHeaders (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseEncoded := do
-  promise.awaitWithEncodedHeaders
-
-@[inline] def awaitHttpResponseWithEncodedHeadersRef (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseEncodedRef := do
-  promise.awaitWithEncodedHeadersRef
-
-@[inline] def awaitHttpResponseWithHeaders (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseEx := do
-  promise.awaitWithHeaders
-
-@[inline] def awaitHttpResponseWithHeadersRef (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseExRef := do
-  promise.awaitWithHeadersRef
-
-@[inline] def awaitHttpResponseStreamingWithEncodedHeaders (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseStreamingEncoded := do
-  promise.awaitStreamingWithEncodedHeaders
-
-@[inline] def awaitHttpResponseStreamingWithHeaders (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponseStreaming := do
-  promise.awaitStreamingWithHeaders
-
-@[inline] def cancelHttpResponse (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
-  promise.cancel
-
-@[inline] def releaseHttpResponsePromise (promise : HttpResponsePromiseRef) : RuntimeM Unit := do
-  promise.release
-
 @[inline] def httpRequestBodyWriteStart (requestBody : HttpRequestBody) (bytes : ByteArray) :
     RuntimeM PromiseRef := do
   Runtime.httpRequestBodyWriteStart (← runtime) requestBody bytes
@@ -4963,10 +4972,21 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
   requestBody.writeAsTask bytes
 
+@[inline] def httpRequestBodyWriteAsTaskRef (requestBody : HttpRequestBody) (bytes : BytesRef) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.writeAsTaskRef bytes
+
 @[inline] def httpRequestBodyWriteAsPromise (requestBody : HttpRequestBody) (bytes : ByteArray) :
     RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
   requestBody.writeAsPromise bytes
+
+@[inline] def httpRequestBodyWriteAsPromiseRef
+    (requestBody : HttpRequestBody) (bytes : BytesRef) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpRequestBody"
+  requestBody.writeAsPromiseRef bytes
 
 @[inline] def httpRequestBodyWrite (requestBody : HttpRequestBody) (bytes : ByteArray) :
     RuntimeM Unit := do
@@ -5152,10 +5172,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
   responseBody.writeAsTask bytes
 
+@[inline] def httpServerResponseBodyWriteAsTaskRef (responseBody : HttpServerResponseBody)
+    (bytes : BytesRef) : RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.writeAsTaskRef bytes
+
 @[inline] def httpServerResponseBodyWriteAsPromise (responseBody : HttpServerResponseBody)
     (bytes : ByteArray) : RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
   responseBody.writeAsPromise bytes
+
+@[inline] def httpServerResponseBodyWriteAsPromiseRef (responseBody : HttpServerResponseBody)
+    (bytes : BytesRef) : RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpServerResponseBody"
+  responseBody.writeAsPromiseRef bytes
 
 @[inline] def httpServerResponseBodyWrite (responseBody : HttpServerResponseBody)
     (bytes : ByteArray) : RuntimeM Unit := do
@@ -5300,10 +5330,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.sendBinaryAsTask bytes
 
+@[inline] def webSocketSendBinaryAsTaskRef (webSocket : WebSocket) (bytes : BytesRef) :
+    RuntimeM (Task (Except IO.Error Unit)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendBinaryAsTaskRef bytes
+
 @[inline] def webSocketSendBinaryAsPromise (webSocket : WebSocket) (bytes : ByteArray) :
     RuntimeM (Capnp.Async.Promise Unit) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.sendBinaryAsPromise bytes
+
+@[inline] def webSocketSendBinaryAsPromiseRef (webSocket : WebSocket) (bytes : BytesRef) :
+    RuntimeM (Capnp.Async.Promise Unit) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.sendBinaryAsPromiseRef bytes
 
 @[inline] def webSocketSendBinary (webSocket : WebSocket) (bytes : ByteArray) : RuntimeM Unit := do
   webSocket.sendBinary bytes

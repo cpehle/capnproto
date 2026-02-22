@@ -317,6 +317,71 @@ def testKjAsyncRuntimeMRunWithNewRuntime : IO Unit := do
   assertEqual alive true
 
 @[test]
+def testKjAsyncRuntimeMBytesRefAndHttpPromiseHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    Capnp.KjAsync.RuntimeM.run runtime do
+      let runtimeHandle ← Capnp.KjAsync.RuntimeM.runtime
+
+      let (left, right) ← Capnp.KjAsync.RuntimeM.newTwoWayPipe
+      try
+        let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 79))
+        let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+        match (← IO.wait (← Capnp.KjAsync.RuntimeM.writeAsTaskRef left payloadRef)) with
+        | .ok () => pure ()
+        | .error err =>
+          throw (IO.userError s!"RuntimeM.writeAsTaskRef failed: {err}")
+        let receivedA ← Capnp.KjAsync.RuntimeM.read right (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        assertEqual receivedA payload
+
+        (← Capnp.KjAsync.RuntimeM.writeAsPromiseRef left payloadRef).await
+        let receivedB ← Capnp.KjAsync.RuntimeM.read right (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        assertEqual receivedB payload
+      finally
+        left.release
+        right.release
+
+      let server ← Capnp.KjAsync.RuntimeM.httpServerListen "127.0.0.1" 0
+      try
+        let requestBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 80))
+        let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
+        let responseBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 81))
+        let responseBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray responseBody
+
+        let responsePromise ←
+          Capnp.KjAsync.RuntimeM.httpRequestStartRef
+            .post "127.0.0.1" "/runtimem-bytesref" requestBodyRef server.boundPort
+        let request ← waitForHttpServerRequest runtimeHandle server
+        assertEqual request.path "/runtimem-bytesref"
+        assertEqual request.body requestBody
+
+        Capnp.KjAsync.RuntimeM.httpServerRespondRef
+          server request.requestId (UInt32.ofNat 201) "Created" #[] responseBodyRef
+        Capnp.KjAsync.RuntimeM.pump
+        let response ← Capnp.KjAsync.RuntimeM.httpResponsePromiseAwaitRef responsePromise
+        assertEqual response.status (UInt32.ofNat 201)
+        let receivedResponseBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
+        assertEqual receivedResponseBody responseBody
+
+        let canceledPromise ←
+          Capnp.KjAsync.RuntimeM.httpRequestStart
+            .get "127.0.0.1" "/runtimem-cancel" ByteArray.empty server.boundPort
+        let canceledRequest ← waitForHttpServerRequestRaw runtimeHandle server
+        assertEqual canceledRequest.path "/runtimem-cancel"
+        Capnp.KjAsync.RuntimeM.httpResponsePromiseCancel canceledPromise
+        let canceled ←
+          try
+            let _ ← Capnp.KjAsync.RuntimeM.httpResponsePromiseAwait canceledPromise
+            pure false
+          catch _ =>
+            pure true
+        assertEqual canceled true
+      finally
+        Capnp.KjAsync.RuntimeM.httpServerRelease server
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
   let rpcRuntime ← Capnp.Rpc.Runtime.init
   let runtime := rpcRuntime.asKjAsyncRuntime
@@ -1393,6 +1458,54 @@ def testKjAsyncBytesRefDatagramAndWebSocketPrimitives : IO Unit := do
     wsRuntime.shutdown
 
 @[test]
+def testKjAsyncBytesRefConnectionAndWebSocketTaskPromiseHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← runtime.newTwoWayPipe
+    try
+      let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 77))
+      let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+
+      match (← IO.wait (← left.writeAsTaskRef payloadRef)) with
+      | .ok () => pure ()
+      | .error err =>
+        throw (IO.userError s!"Connection.writeAsTaskRef failed: {err}")
+      let receivedA ← right.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      assertEqual receivedA payload
+
+      (← left.writeAsPromiseRef payloadRef).await
+      let receivedB ← right.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      assertEqual receivedB payload
+    finally
+      left.release
+      right.release
+
+    let (wsLeft, wsRight) ← runtime.newWebSocketPipe
+    try
+      let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 78))
+      let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+
+      let recvA ← wsRight.receiveStart
+      match (← IO.wait (← wsLeft.sendBinaryAsTaskRef payloadRef)) with
+      | .ok () => pure ()
+      | .error err =>
+        throw (IO.userError s!"WebSocket.sendBinaryAsTaskRef failed: {err}")
+      match (← recvA.await) with
+      | .binary bytes => assertEqual bytes payload
+      | _ => throw (IO.userError "expected binary websocket payload from sendBinaryAsTaskRef")
+
+      let recvB ← wsRight.receiveStart
+      (← wsLeft.sendBinaryAsPromiseRef payloadRef).await
+      match (← recvB.await) with
+      | .binary bytes => assertEqual bytes payload
+      | _ => throw (IO.userError "expected binary websocket payload from sendBinaryAsPromiseRef")
+    finally
+      wsLeft.release
+      wsRight.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -1455,6 +1568,31 @@ def testKjAsyncBytesRefHttpRequestStartCrossRuntimeWithPump : IO Unit := do
   finally
     clientRuntime.shutdown
     serverRuntime.shutdown
+
+@[test]
+def testKjAsyncHttpResponsePromiseCancelBeforeAwait : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    try
+      let responsePromise ←
+        runtime.httpRequestStart .get "127.0.0.1" "/cancel-before-await" ByteArray.empty
+          server.boundPort
+      let request ← waitForHttpServerRequestRaw runtime server
+      assertEqual request.path "/cancel-before-await"
+
+      runtime.httpResponsePromiseCancel responsePromise
+      let canceled ←
+        try
+          let _ ← runtime.httpResponsePromiseAwait responsePromise
+          pure false
+        catch _ =>
+          pure true
+      assertEqual canceled true
+    finally
+      server.release
+  finally
+    runtime.shutdown
 
 @[test]
 def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do
@@ -2318,6 +2456,73 @@ def testKjAsyncHttpStreamingRequestAndResponse : IO Unit := do
         received := ByteArray.append received chunk
     assertEqual received responseBody
     response.body.release
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpersRef : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let requestPartA := "stream-helper-ref-request-a".toUTF8
+    let requestPartB := "-and-b".toUTF8
+    let requestPartARef ← Capnp.KjAsync.BytesRef.ofByteArray requestPartA
+    let requestPartBRef ← Capnp.KjAsync.BytesRef.ofByteArray requestPartB
+    let expectedRequestBody := ByteArray.append requestPartA requestPartB
+    let (requestBody?, responsePromise) ← runtime.httpRequestStartStreamingWithHeaders
+      .post "127.0.0.1" "/lean-http-stream-helper-ref"
+      #[{ name := "x-stream-helper-ref", value := "1" }] server.boundPort
+    let requestBody ←
+      match requestBody? with
+      | some body => pure body
+      | none => throw (IO.userError "expected streaming HTTP request body handle")
+
+    match (← IO.wait (← requestBody.writeAsTaskRef requestPartARef)) with
+    | .ok () => pure ()
+    | .error err =>
+      throw (IO.userError s!"HttpRequestBody.writeAsTaskRef failed: {err}")
+    (← requestBody.writeAsPromiseRef requestPartBRef).await
+    requestBody.finish
+
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/lean-http-stream-helper-ref"
+    assertEqual request.body expectedRequestBody
+
+    let responseBody ← runtime.httpServerRespondStartStreaming server request.requestId
+      (UInt32.ofNat 203) "Non-Authoritative Information"
+      #[{ name := "x-stream-helper-ref-response", value := "1" }]
+    let responsePartA := "stream-helper-ref-response-a".toUTF8
+    let responsePartB := "-and-b".toUTF8
+    let responsePartARef ← Capnp.KjAsync.BytesRef.ofByteArray responsePartA
+    let responsePartBRef ← Capnp.KjAsync.BytesRef.ofByteArray responsePartB
+    let expectedResponseBody := ByteArray.append responsePartA responsePartB
+    match (← IO.wait (← responseBody.writeAsTaskRef responsePartARef)) with
+    | .ok () => pure ()
+    | .error err =>
+      throw (IO.userError s!"HttpServerResponseBody.writeAsTaskRef failed: {err}")
+    (← responseBody.writeAsPromiseRef responsePartBRef).await
+    responseBody.finish
+
+    let response ← responsePromise.awaitStreamingWithHeaders
+    assertEqual response.status (UInt32.ofNat 203)
+    assertEqual response.statusText "Non-Authoritative Information"
+    assertTrue
+      (response.headers.any
+        (fun h => h.name == "x-stream-helper-ref-response" && h.value == "1"))
+      "expected x-stream-helper-ref-response header"
+
+    let mut receivedResponseBody := ByteArray.empty
+    let mut done := false
+    while !done do
+      let chunk ← response.body.read (UInt32.ofNat 1) (UInt32.ofNat 64)
+      if chunk.size == 0 then
+        done := true
+      else
+        receivedResponseBody := ByteArray.append receivedResponseBody chunk
+    response.body.release
+    assertEqual receivedResponseBody expectedResponseBody
+
     server.release
   finally
     runtime.shutdown
