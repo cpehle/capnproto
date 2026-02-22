@@ -9,7 +9,7 @@ structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
 
-structure PromiseRef where
+structure PromiseRef (α : Type := Unit) where
   runtime : Runtime
   handle : UInt32
   deriving Inhabited, BEq, Repr
@@ -24,22 +24,7 @@ structure Connection where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
-structure ConnectionPromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
-
-structure BytesPromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
-
 opaque BytesRef : Type
-
-structure UInt32PromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
 
 structure TaskSetRef where
   runtime : Runtime
@@ -55,11 +40,6 @@ structure DatagramPeer where
   port : DatagramPort
   remoteAddress : String
   remotePort : UInt32
-  deriving Inhabited, BEq, Repr
-
-structure DatagramReceivePromiseRef where
-  runtime : Runtime
-  handle : UInt32
   deriving Inhabited, BEq, Repr
 
 structure HttpHeader where
@@ -122,11 +102,6 @@ structure HttpResponseEncodedRef where
   encodedHeaders : ByteArray
   body : BytesRef
 
-structure HttpResponsePromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
-
 structure HttpRequestBody where
   runtime : Runtime
   handle : UInt32
@@ -186,21 +161,19 @@ structure WebSocket where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
-structure WebSocketPromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
-
-structure WebSocketMessagePromiseRef where
-  runtime : Runtime
-  handle : UInt32
-  deriving Inhabited, BEq, Repr
-
 inductive WebSocketMessage where
   | text (value : String)
   | binary (value : ByteArray)
   | close (code : UInt16) (reason : String)
   deriving Inhabited, BEq
+
+abbrev ConnectionPromiseRef := PromiseRef Connection
+abbrev BytesPromiseRef := PromiseRef BytesRef
+abbrev UInt32PromiseRef := PromiseRef UInt32
+abbrev DatagramReceivePromiseRef := PromiseRef (String × BytesRef)
+abbrev HttpResponsePromiseRef := PromiseRef HttpResponseRef
+abbrev WebSocketPromiseRef := PromiseRef WebSocket
+abbrev WebSocketMessagePromiseRef := PromiseRef WebSocketMessage
 
 @[extern "capnp_lean_kj_async_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
