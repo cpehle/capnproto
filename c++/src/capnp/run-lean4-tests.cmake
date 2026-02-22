@@ -15,9 +15,11 @@ set(SCHEMAS
   "${SOURCE_ROOT}/test/lean4/addressbook.capnp"
   "${SOURCE_ROOT}/test/lean4/fixtures/defaults.capnp"
   "${SOURCE_ROOT}/test/lean4/fixtures/capability.capnp"
+  "${SOURCE_ROOT}/test/lean4/fixtures/rpc_echo.capnp"
   "${SOURCE_ROOT}/c++/src/capnp/test.capnp"
   "${SOURCE_ROOT}/c++/src/capnp/rpc.capnp"
   "${SOURCE_ROOT}/c++/src/capnp/rpc-twoparty.capnp"
+  "${SOURCE_ROOT}/c++/src/capnp/stream.capnp"
 )
 
 message(STATUS "Regenerating Lean4 schema output for test suite")
@@ -67,6 +69,26 @@ if(NOT compare_result EQUAL 0)
     "Expected: ${GOLDEN_EXPECTED}\n"
     "Actual:   ${GOLDEN_ACTUAL}\n"
     "Regenerate and inspect the diff in test/lean4/expected and test/lean4/out.")
+endif()
+
+find_program(PYTHON3_EXECUTABLE NAMES python3 python)
+if(NOT PYTHON3_EXECUTABLE)
+  message(FATAL_ERROR "Unable to find a Python interpreter for parity matrix validation")
+endif()
+
+message(STATUS "Validating Lean4 RPC parity matrix")
+execute_process(
+  COMMAND "${PYTHON3_EXECUTABLE}" "${TEST_ROOT}/scripts/validate_parity_matrix.py"
+  WORKING_DIRECTORY "${SOURCE_ROOT}"
+  RESULT_VARIABLE parity_result
+  OUTPUT_VARIABLE parity_stdout
+  ERROR_VARIABLE parity_stderr
+)
+if(NOT parity_result EQUAL 0)
+  message(FATAL_ERROR
+    "Parity matrix validation failed with exit code ${parity_result}\n"
+    "stdout:\n${parity_stdout}\n"
+    "stderr:\n${parity_stderr}")
 endif()
 
 message(STATUS "Running Lean4 tests via lake")

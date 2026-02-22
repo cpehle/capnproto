@@ -89,6 +89,9 @@ std::shared_ptr<RawCallCompletion> enqueueRawCall(
 std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
+std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCall(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
 std::shared_ptr<RawCallCompletion> enqueueAwaitPendingCall(RuntimeLoop& runtime,
                                                            uint32_t pendingCallId);
 std::shared_ptr<UnitCompletion> enqueueReleasePendingCall(RuntimeLoop& runtime,
@@ -200,6 +203,7 @@ std::shared_ptr<RegisterTargetCompletion> enqueueRegisterTailCallHandlerTarget(R
 std::shared_ptr<RegisterTargetCompletion> enqueueRegisterTailCallTarget(RuntimeLoop& runtime,
                                                                         uint32_t target);
 std::shared_ptr<RegisterTargetCompletion> enqueueRegisterFdTarget(RuntimeLoop& runtime, uint32_t fd);
+std::shared_ptr<RegisterTargetCompletion> enqueueRegisterFdProbeTarget(RuntimeLoop& runtime);
 
 std::shared_ptr<RawCallCompletion> enqueueCppCallWithAccept(
     RuntimeLoop& runtime, uint32_t serverId, uint32_t listenerId, std::string address,
@@ -221,6 +225,7 @@ std::shared_ptr<UnitCompletion> enqueueCancelUnitPromise(RuntimeLoop& runtime, u
 std::shared_ptr<UnitCompletion> enqueueReleaseUnitPromise(RuntimeLoop& runtime, uint32_t promiseId);
 
 std::shared_ptr<UnitCompletion> enqueuePump(RuntimeLoop& runtime);
+std::shared_ptr<AsyncUnitCompletion> enqueuePumpAsync(RuntimeLoop& runtime, lean_object* promise);
 
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatNewClient(RuntimeLoop& runtime,
                                                                    std::string name);
@@ -255,6 +260,17 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& run
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
     RuntimeLoop& runtime, uint32_t sourcePeerId, std::string host, bool unique,
     LeanByteArrayRef objectId);
+std::shared_ptr<DiagnosticsCompletion> enqueueMultiVatGetDiagnostics(
+    RuntimeLoop& runtime, uint32_t peerId, b_lean_obj_arg targetVatId);
+std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionBlock(RuntimeLoop& runtime,
+                                                               uint32_t fromPeerId,
+                                                               uint32_t toPeerId);
+std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionUnblock(RuntimeLoop& runtime,
+                                                                 uint32_t fromPeerId,
+                                                                 uint32_t toPeerId);
+std::shared_ptr<UnitCompletion> enqueueMultiVatConnectionDisconnect(
+    RuntimeLoop& runtime, uint32_t fromPeerId, uint32_t toPeerId, uint8_t exceptionTypeTag,
+    std::string message, std::vector<uint8_t> detailBytes);
 
 RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint64_t interfaceId,
                              uint16_t methodId, const std::vector<uint8_t>& requestBytes,

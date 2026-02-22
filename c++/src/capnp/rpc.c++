@@ -212,6 +212,10 @@ public:
     return slots.size() == freeIds.size() && highSlots.size() == 0;
   }
 
+  size_t size() {
+    return slots.size() - freeIds.size() + highSlots.size();
+  }
+
   bool isHigh(Id& id) {
     return (id & highBit<Id>()) != 0;
   }
@@ -310,6 +314,16 @@ class ImportTable {
 public:
   bool empty() {
     return presenceBits == 0 && high.size() == 0;
+  }
+
+  size_t size() {
+    size_t result = high.size();
+    uint32_t bits = presenceBits;
+    while (bits > 0) {
+      if (bits & 1) ++result;
+      bits >>= 1;
+    }
+    return result;
   }
 
   T& findOrCreate(Id id) {
@@ -443,6 +457,17 @@ public:
     auto pipeline = kj::refcounted<RpcPipeline>(*this, kj::mv(questionRef), kj::mv(paf.promise));
 
     return pipeline->getPipelinedCap(kj::Array<const PipelineOp>(nullptr));
+  }
+
+  RpcDiagnostics getDiagnostics() {
+    return {
+      questions.size(),
+      answers.size(),
+      exports.size(),
+      imports.size(),
+      embargoes.size(),
+      allTablesEmpty()
+    };
   }
 
   void taskFailed(kj::Exception&& exception) override {
@@ -4624,6 +4649,15 @@ public:
 
   kj::Promise<void> run() { return kj::mv(acceptLoopPromise); }
 
+  RpcDiagnostics getDiagnostics(AnyStruct::Reader vatId) {
+    KJ_IF_SOME(connection, network.baseConnect(vatId)) {
+      auto& state = getConnectionState(kj::mv(connection));
+      return state.getDiagnostics();
+    } else {
+      return { 0, 0, 0, 0, 0, true };
+    }
+  }
+
   void dropConnection(VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
     connections.erase(&connection);
     tasks.add(kj::mv(shutdownTask));
@@ -4703,6 +4737,10 @@ void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&
 
 kj::Promise<void> RpcSystemBase::run() {
   return impl->run();
+}
+
+RpcSystemBase::RpcDiagnostics RpcSystemBase::getDiagnostics(AnyStruct::Reader vatId) {
+  return impl->getDiagnostics(vatId);
 }
 
 void RpcSystemBase::dropConnection(RpcSystemBase::Impl& impl,

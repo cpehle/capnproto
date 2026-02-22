@@ -19,7 +19,8 @@ capnp compile \
   test/lean4/fixtures/rpc_echo.capnp \
   c++/src/capnp/test.capnp \
   c++/src/capnp/rpc.capnp \
-  c++/src/capnp/rpc-twoparty.capnp
+  c++/src/capnp/rpc-twoparty.capnp \
+  c++/src/capnp/stream.capnp
 
 diff -u \
   test/lean4/expected/Capnp/Gen/test/lean4/addressbook.lean \

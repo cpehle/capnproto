@@ -33,7 +33,8 @@
       "Test.RpcClient.testRuntimeParityAdvancedDeferredSetPipelineOrdering",
       "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering",
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHoldControlsDisembargo",
-      "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount"
+      "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount",
+      "Test.RpcOrderingControl.testRuntimeProtocolBlockingOrdering"
     ],
     "status": "partial",
     "notes": "Behavioral ordering coverage is high; protocol-level inspection (e.g., verifying specific Disembargo message sequences) requires a ControlledVatNetwork interceptor in the bridge."
@@ -68,9 +69,11 @@
       "Test.RpcReliability.testRuntimeParityPromisedCapabilityDelayedRejectPropagatesToPendingCalls",
       "Test.RpcReliability.testRuntimeParityPromisedCapabilityCancelBeforeRejectSequencing",
       "Test.RpcReliability.testRuntimeTransportAbortPendingCall",
+      "Test.RpcReliability.testRuntimeProtocolDisconnectDetail",
       "Test.RpcClient.testInteropLeanClientCancelsPendingCallToCppDelayedServer",
       "Test.RpcClient.testInteropLeanPendingCallOutcomeCapturesCppException",
-      "Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail"
+      "Test.RpcClient.testInteropLeanClientReceivesCppExceptionDetail",
+      "Test.RpcLayout.testRemoteExceptionLayout"
     ],
     "status": "partial",
     "notes": "Cancellation, exception detail propagation, and transport-abort are covered; injecting failures into the disconnect handshake itself requires GenericVat FFI expansion."
@@ -84,10 +87,12 @@
     "leanTests": [
       "Test.RpcClient.testRuntimeClientQueueMetrics",
       "Test.RpcClient.testRuntimeClientQueueMetricsPreAcceptBacklogDrains",
+      "Test.RpcClient.testRuntimeProtocolDiagnostics",
       "Test.RpcClient.testRuntimeClientSetFlowLimit",
       "Test.RpcClient.testRuntimeTraceEncoderToggle",
       "Test.RpcClient.testRuntimeSetTraceEncoderOnExistingConnection",
-      "Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility"
+      "Test.RpcClient.testRuntimeTraceEncoderCallResultVisibility",
+      "Test.RpcLayout.testRpcDiagnosticsLayout"
     ],
     "status": "partial",
     "notes": "Queue/flow/trace surfaces are covered; deep parity requires exposing internal RpcSystem tables (Questions, Answers, Exports, Imports) to verify idleness transitions."

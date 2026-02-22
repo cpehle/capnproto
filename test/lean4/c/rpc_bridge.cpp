@@ -45,11 +45,28 @@ lean_obj_res mkIoOkRawCallResult(const rpc::RawCallResult& result) {
   return lean_io_result_mk_ok(out);
 }
 
+lean_object* mkRpcDiagnosticsObj(const capnp::_::RpcSystemBase::RpcDiagnostics& diag) {
+  // Mirror `Capnp.Rpc.RpcDiagnostics` (see `lean/Capnp/Rpc.lean`).
+  // questionCount, answerCount, exportCount, importCount, embargoCount : UInt64
+  // isIdle : Bool
+  constexpr unsigned kObjFields = 0;
+  constexpr unsigned kScalarBytes = 48; // 5 * 8 + 1, rounded up to 8-byte alignment
+
+  auto out = lean_alloc_ctor(0, kObjFields, kScalarBytes);
+  lean_ctor_set_uint64(out, 0, diag.questionCount);
+  lean_ctor_set_uint64(out, 8, diag.answerCount);
+  lean_ctor_set_uint64(out, 16, diag.exportCount);
+  lean_ctor_set_uint64(out, 24, diag.importCount);
+  lean_ctor_set_uint64(out, 32, diag.embargoCount);
+  lean_ctor_set_uint8(out, 40, diag.isIdle ? 1 : 0);
+  return out;
+}
+
 lean_object* mkRemoteExceptionObj(const rpc::RawCallCompletion& completion) {
   // Mirror `Capnp.Rpc.RemoteException` (see `lean/Capnp/Rpc.lean`).
-  constexpr unsigned kObjFields = 3;  // description, remoteTrace, detail
-  constexpr unsigned kScalarBytes = 8;  // enough for a UInt8 with conservative padding
-  constexpr unsigned kTypeOffset = sizeof(void*) * kObjFields;
+  constexpr unsigned kObjFields = 4;  // description, remoteTrace, detail, fileName
+  constexpr unsigned kScalarBytes = 8;  // 4 (line) + 1 (tag) + padding
+  constexpr unsigned kScalarStart = sizeof(void*) * kObjFields;
 
   auto ex = lean_alloc_ctor(0, kObjFields, kScalarBytes);
   lean_ctor_set(ex, 0, lean_mk_string(completion.exceptionDescription.c_str()));
@@ -57,7 +74,10 @@ lean_object* mkRemoteExceptionObj(const rpc::RawCallCompletion& completion) {
   const auto detailSize = completion.detailBytes.size();
   const auto* detailData = detailSize == 0 ? nullptr : completion.detailBytes.data();
   lean_ctor_set(ex, 2, mkByteArrayCopy(detailData, detailSize));
-  lean_ctor_set_uint8(ex, kTypeOffset, completion.exceptionTypeTag);
+  lean_ctor_set(ex, 3, lean_mk_string(completion.fileName.c_str()));
+
+  lean_ctor_set_uint32(ex, kScalarStart, completion.lineNumber);
+  lean_ctor_set_uint8(ex, kScalarStart + 4, completion.exceptionTypeTag);
   return ex;
 }
 
@@ -223,6 +243,36 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_caps(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_start_call_with_caps");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_streaming_call_with_caps(
+    uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto requestCapIds = decodeCapTable(requestCaps);
+    auto completion =
+        rpc::enqueueStartStreamingPendingCall(*runtime, target, interfaceId, methodId,
+                                              retainByteArrayForQueue(request), std::move(requestCapIds));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_start_streaming_call_with_caps");
   }
 }
 
@@ -529,6 +579,30 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pump(uint64_t runtime
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pump");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pump_async(uint64_t runtimeId,
+                                                                      b_lean_obj_arg promise) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto* prom = const_cast<lean_object*>(promise);
+    lean_mark_mt(prom);
+    lean_inc(prom);
+    rpc::enqueuePumpAsync(*runtime, prom);
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pump_async");
   }
 }
 
@@ -2027,6 +2101,33 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_is_alive(uint64_t run
   return lean_io_result_mk_ok(lean_box(isRuntimeAlive(runtimeId) ? 1 : 0));
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_get_diagnostics(uint64_t runtimeId,
+                                                                           uint32_t peerId,
+                                                                           b_lean_obj_arg targetVatId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = rpc::enqueueMultiVatGetDiagnostics(*runtime, peerId, targetVatId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(mkRpcDiagnosticsObj(completion->value));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_get_diagnostics");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_echo_target(
     uint64_t runtimeId) {
   auto runtime = getRuntime(runtimeId);
@@ -2783,6 +2884,128 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_new_socketpair() {
     return mkIoUserError("unknown exception in capnp_lean_rpc_test_new_socketpair");
   }
 #endif
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_connection_block(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueMultiVatConnectionBlock(*runtime, fromPeerId, toPeerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return mkIoOkUnit();
+    }
+  } catch (...) { return mkIoUserError("unknown exception in multiVatConnectionBlock"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_connection_unblock(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueMultiVatConnectionUnblock(*runtime, fromPeerId, toPeerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return mkIoOkUnit();
+    }
+  } catch (...) { return mkIoUserError("unknown exception in multiVatConnectionUnblock"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_connection_disconnect(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId, uint8_t exceptionTypeTag,
+    b_lean_obj_arg message, b_lean_obj_arg detailBytes) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueMultiVatConnectionDisconnect(
+        *runtime, fromPeerId, toPeerId, exceptionTypeTag,
+        std::string(lean_string_cstr(message)),
+        rpc::copyByteArray(detailBytes));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return mkIoOkUnit();
+    }
+  } catch (...) { return mkIoUserError("unknown exception in multiVatConnectionDisconnect"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_get_diagnostics(
+    uint64_t runtimeId, uint32_t peerId, b_lean_obj_arg targetVatId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueMultiVatGetDiagnostics(*runtime, peerId, targetVatId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return lean_io_result_mk_ok(mkRpcDiagnosticsObj(completion->value));
+    }
+  } catch (...) { return mkIoUserError("unknown exception in multiVatGetDiagnostics"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_fd_probe_target(
+    uint64_t runtimeId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueRegisterFdProbeTarget(*runtime);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+  } catch (...) { return mkIoUserError("unknown exception in registerFdProbeTarget"); }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_verify_rpc_diagnostics_layout(b_lean_obj_arg d) {
+  uint64_t questionCount = lean_ctor_get_uint64(d, 0);
+  uint64_t answerCount = lean_ctor_get_uint64(d, 8);
+  uint64_t exportCount = lean_ctor_get_uint64(d, 16);
+  uint64_t importCount = lean_ctor_get_uint64(d, 24);
+  uint64_t embargoCount = lean_ctor_get_uint64(d, 32);
+  uint8_t isIdle = lean_ctor_get_uint8(d, 40);
+
+  bool ok = true;
+  ok &= (questionCount == 0x0101010101010101);
+  ok &= (answerCount   == 0x0202020202020202);
+  ok &= (exportCount   == 0x0303030303030303);
+  ok &= (importCount   == 0x0404040404040404);
+  ok &= (embargoCount  == 0x0505050505050505);
+  ok &= (isIdle        == 1);
+
+  return lean_io_result_mk_ok(lean_box(ok));
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_verify_remote_exception_layout(b_lean_obj_arg e) {
+  constexpr unsigned kObjFields = 4;
+  constexpr unsigned kScalarStart = sizeof(void*) * kObjFields;
+
+  lean_object* description = lean_ctor_get(e, 0);
+  lean_object* remoteTrace = lean_ctor_get(e, 1);
+  lean_object* detail = lean_ctor_get(e, 2);
+  lean_object* fileName = lean_ctor_get(e, 3);
+  
+  uint32_t lineNumber = lean_ctor_get_uint32(e, kScalarStart);
+  uint8_t type = lean_ctor_get_uint8(e, kScalarStart + 4);
+
+  bool ok = true;
+  ok &= (std::string(lean_string_cstr(description)) == "description");
+  ok &= (std::string(lean_string_cstr(remoteTrace)) == "trace");
+  ok &= (lean_sarray_size(detail) == 3);
+  if (ok) ok &= (lean_sarray_cptr(detail)[0] == 1);
+  ok &= (std::string(lean_string_cstr(fileName)) == "file.cpp");
+  ok &= (lineNumber == 123);
+  ok &= (type == 2); 
+
+  return lean_io_result_mk_ok(lean_box(ok));
 }
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_close_fd(uint32_t fd) {

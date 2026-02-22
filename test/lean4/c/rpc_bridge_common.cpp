@@ -209,6 +209,8 @@ void completeFailureKj(const std::shared_ptr<RawCallCompletion>& completion,
     KJ_IF_SOME(detail, e.getDetail(1)) {
       completion->detailBytes.assign(detail.begin(), detail.end());
     }
+    completion->fileName = e.getFile();
+    completion->lineNumber = e.getLine();
     completion->done = true;
   }
   completion->cv.notify_one();
@@ -389,6 +391,54 @@ void completeKjPromiseIdFailure(const std::shared_ptr<KjPromiseIdCompletion>& co
     completion->done = true;
   }
   completion->cv.notify_one();
+}
+
+void completeDiagnosticsSuccess(const std::shared_ptr<DiagnosticsCompletion>& completion,
+                                capnp::_::RpcSystemBase::RpcDiagnostics value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = value;
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeDiagnosticsFailure(const std::shared_ptr<DiagnosticsCompletion>& completion,
+                                std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+extern "C" lean_obj_res lean_io_promise_resolve(lean_obj_arg, lean_obj_arg);
+
+void completeAsyncUnitSuccess(const std::shared_ptr<AsyncUnitCompletion>& completion) {
+  // Except.ok ()
+  lean_object* except = lean_alloc_ctor(0, 1, 0);
+  lean_ctor_set(except, 0, lean_box(0));
+  lean_io_promise_resolve(except, completion->promise);
+}
+
+void completeAsyncUnitFailure(const std::shared_ptr<AsyncUnitCompletion>& completion, std::string message) {
+  // Resolve with Except.error (handled by Task completion in Lean)
+  // Actually, IO.Promise expects the type α.
+  // If the promise is IO.Promise (Except IO.Error Unit), we need to resolve with the Except.
+  // I will use lean_mk_io_user_error + lean_io_result_mk_error pattern if needed, 
+  // but Lean Promises usually resolve with the raw value.
+  
+  // Assuming Promise (Except IO.Error Unit):
+  // .error is constructor 1 of Except.
+  lean_object* msg = lean_mk_string(message.c_str());
+  lean_object* err = lean_mk_io_user_error(msg);
+  lean_object* except = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(except, 0, err);
+  
+  lean_io_promise_resolve(except, completion->promise);
 }
 
 } // namespace capnp_lean_rpc

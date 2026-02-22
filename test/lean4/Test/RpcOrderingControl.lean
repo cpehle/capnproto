@@ -1,42 +1,10 @@
 import LeanTest
 import Capnp.Rpc
+import Test.Common
 import Capnp.Gen.test.lean4.fixtures.rpc_echo
 
 open LeanTest
 open Capnp.Gen.test.lean4.fixtures.rpc_echo
-
-private def mkCapabilityPayload (cap : Capnp.Capability) : Capnp.Rpc.Payload := Id.run do
-  let (capTable, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      Capnp.writeCapabilityWithTable Capnp.emptyCapTable root cap
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := capTable }
-
-private def mkNullPayload : Capnp.Rpc.Payload := Id.run do
-  let (_, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      Capnp.clearPointer root
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
-
-private def mkUInt64Payload (n : UInt64) : Capnp.Rpc.Payload := Id.run do
-  let (_, builder) :=
-    (do
-      let root ← Capnp.getRootPointer
-      let s ← Capnp.initStructPointer root 1 0
-      Capnp.setUInt64 s 0 n
-    ).run (Capnp.initMessageBuilder 16)
-  { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
-
-private def readUInt64Payload (payload : Capnp.Rpc.Payload) : IO UInt64 := do
-  let root := Capnp.getRoot payload.msg
-  match Capnp.readStructChecked root with
-  | .ok s =>
-      pure (Capnp.getUInt64 s 0)
-  | .error err =>
-      throw (IO.userError s!"invalid uint64 RPC payload: {err}")
 
 private def registerEchoFooCallOrderTarget (runtime : Capnp.Rpc.Runtime) :
     IO (Capnp.Rpc.Client × IO UInt64) := do
@@ -61,6 +29,7 @@ private def pumpUntil (runtime : Capnp.Rpc.Runtime) (label : String) (attempts :
     if (← check) then
       return ()
     remaining := remaining - 1
+    IO.sleep (UInt32.ofNat 5)
   throw (IO.userError s!"{label}: timeout")
 
 @[test]
@@ -80,7 +49,7 @@ def testRuntimeOrderingResolveHoldControlsDisembargo : IO Unit := do
       pure (Capnp.Rpc.Advanced.setPipeline promisedPayload deferred))
 
     runtime.orderingSetResolveHold true
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
+    assertEqual (bubble (← runtime.orderingHeldResolveCount)) (UInt64.ofNat 0)
 
     let pending ← runtime.startCall responder Echo.fooMethod payload
     let pipelineCap ← pending.getPipelinedCap
@@ -89,10 +58,10 @@ def testRuntimeOrderingResolveHoldControlsDisembargo : IO Unit := do
     let call1Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
 
     fulfiller.fulfill callOrder
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 1)
+    assertEqual (bubble (← runtime.orderingHeldResolveCount)) (UInt64.ofNat 1)
 
-    assertEqual (← runtime.orderingFlushResolves) (UInt64.ofNat 1)
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
+    assertEqual (bubble (← runtime.orderingFlushResolves)) (UInt64.ofNat 1)
+    assertEqual (bubble (← runtime.orderingHeldResolveCount)) (UInt64.ofNat 0)
     pumpUntil runtime "pipelined capability resolve/disembargo" 128 do
       runtime.targetWhenResolvedPoll pipelineCap
     assertEqual (← runtime.targetWhenResolvedPoll pipelineCap) true
@@ -113,6 +82,7 @@ def testRuntimeOrderingResolveHoldControlsDisembargo : IO Unit := do
     runtime.orderingSetResolveHold false
   finally
     runtime.shutdown
+  where bubble (x : UInt64) := x
 
 @[test]
 def testRuntimeOrderingResolveHooksTrackHeldCount : IO Unit := do
@@ -121,15 +91,15 @@ def testRuntimeOrderingResolveHooksTrackHeldCount : IO Unit := do
     let echo ← runtime.registerEchoTarget
     let (promiseCap, fulfiller) ← runtime.newPromiseCapability
     runtime.orderingSetResolveHold true
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
+    assertEqual (bubble (← runtime.orderingHeldResolveCount)) (UInt64.ofNat 0)
     assertEqual (← runtime.targetWhenResolvedPoll promiseCap) false
 
     fulfiller.fulfill echo
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 1)
+    assertEqual (bubble (← runtime.orderingHeldResolveCount)) (UInt64.ofNat 1)
     assertEqual (← runtime.targetWhenResolvedPoll promiseCap) false
 
-    assertEqual (← runtime.orderingFlushResolves) (UInt64.ofNat 1)
-    assertEqual (← runtime.orderingHeldResolveCount) (UInt64.ofNat 0)
+    assertEqual (bubble (← runtime.orderingFlushResolves)) (UInt64.ofNat 1)
+    assertEqual (bubble (bubble (← runtime.orderingHeldResolveCount))) (UInt64.ofNat 0)
     pumpUntil runtime "promise capability resolve poll" 64 do
       runtime.targetWhenResolvedPoll promiseCap
     assertEqual (← runtime.targetWhenResolvedPoll promiseCap) true
@@ -140,3 +110,55 @@ def testRuntimeOrderingResolveHooksTrackHeldCount : IO Unit := do
     runtime.orderingSetResolveHold false
   finally
     runtime.shutdown
+  where bubble (x : UInt64) := x
+
+@[test]
+def testRuntimeProtocolBlockingOrdering : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let vatNetwork := runtime.vatNetwork
+    
+    -- Setup callOrder target locally.
+    let (callOrder, getNextExpected) ← registerEchoFooCallOrderTarget runtime
+
+    -- Bob is a server that uses callOrder as its bootstrap.
+    let bob ← vatNetwork.newServer "bob" callOrder
+
+    -- Alice is a client.
+    let alice ← vatNetwork.newClient "alice"
+    let aliceToBob ← alice.bootstrapPeer bob
+
+    -- Block Alice -> Bob.
+    alice.blockConnectionTo bob
+
+    -- Alice starts calls to Bob.
+    let call0Pending ← runtime.startCall aliceToBob Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
+    let call1Pending ← runtime.startCall aliceToBob Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
+
+    -- Verify they are indeed blocked.
+    let mut attempts := 0
+    while (bubble (← getNextExpected)) == 0 && attempts < 50 do
+      runtime.pump
+      IO.sleep (UInt32.ofNat 5)
+      attempts := attempts + 1
+    assertEqual (bubble (← getNextExpected)) (UInt64.ofNat 0)
+
+    -- Now unblock Alice -> Bob.
+    alice.unblockConnectionTo bob
+
+    -- Wait for the calls to reach Bob and trigger the callOrder handler.
+    pumpUntil runtime "wait for blocked calls after unblock" 200 do
+      return (bubble (← getNextExpected)) == 2
+
+    let res0 ← call0Pending.await
+    let res1 ← call1Pending.await
+    assertEqual (bubble (← readUInt64Payload res0)) (UInt64.ofNat 0)
+    assertEqual (bubble (bubble (← readUInt64Payload res1))) (UInt64.ofNat 1)
+
+    runtime.releaseTarget aliceToBob
+    runtime.releaseTarget callOrder
+    alice.release
+    bob.release
+  finally
+    runtime.shutdown
+  where bubble (x : UInt64) := x

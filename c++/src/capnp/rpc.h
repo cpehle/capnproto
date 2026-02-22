@@ -90,6 +90,10 @@ public:
   Capability::Client bootstrap(typename VatId::Reader vatId);
   // Connect to the given vat and return its bootstrap interface.
 
+  RpcDiagnostics getDiagnostics(typename VatId::Reader vatId) {
+    return RpcSystemBase::getDiagnostics(_::PointerHelpers<VatId>::getInternalReader(vatId));
+  }
+
   void setFlowLimit(size_t words);
   // Sets the incoming call flow limit. If more than `words` worth of call messages have not yet
   // received responses, the RpcSystem will not read further messages from the stream. This can be

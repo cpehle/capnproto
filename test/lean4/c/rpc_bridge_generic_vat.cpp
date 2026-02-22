@@ -11,6 +11,14 @@ LeanVatId decodeLeanVatId(capnp_test::TestSturdyRefHostId::Reader data) {
   return vatId;
 }
 
+LeanVatId decodeLeanVatId(lean_object* data) {
+  // Mirror `Capnp.Rpc.VatId` (see `lean/Capnp/Rpc.lean`).
+  LeanVatId vatId;
+  vatId.host = std::string(lean_string_cstr(lean_ctor_get(data, 0)));
+  vatId.unique = lean_ctor_get_uint8(data, sizeof(void*)) != 0;
+  return vatId;
+}
+
 void setLeanVatId(capnp_test::TestSturdyRefHostId::Builder builder, const LeanVatId& vatId) {
   builder.setHost(vatId.host.c_str());
   builder.setUnique(vatId.unique);
@@ -70,7 +78,7 @@ GenericVat::ConnectionImpl::ConnectionImpl(GenericVat& vat, GenericVat& peerVat,
   if (!unique_) {
     vat_.connections_[&peerVat_] = this;
   }
-  tasks_ = kj::heap<kj::TaskSet>(*this);
+  tasks_ = kj::heap<kj::TaskSet>(*static_cast<kj::TaskSet::ErrorHandler*>(this));
 }
 
 GenericVat::ConnectionImpl::~ConnectionImpl() noexcept(false) {
@@ -103,6 +111,24 @@ void GenericVat::ConnectionImpl::disconnect(kj::Exception&& exception) {
   messageQueue_.rejectAll(kj::cp(exception));
   networkException_ = kj::mv(exception);
   tasks_ = nullptr;
+}
+
+void GenericVat::ConnectionImpl::block() {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  currentBlock_ = paf.promise.fork();
+  currentBlockFulfiller_ = kj::mv(paf.fulfiller);
+}
+
+void GenericVat::ConnectionImpl::unblock() {
+  KJ_IF_SOME(f, currentBlockFulfiller_) {
+    f->fulfill();
+  }
+  currentBlock_ = kj::none;
+  currentBlockFulfiller_ = kj::none;
+}
+
+void GenericVat::ConnectionImpl::onSend(MessageHandler handler) {
+  onSendHandler_ = kj::mv(handler);
 }
 
 GenericVatId::Reader GenericVat::ConnectionImpl::getPeerVatId() {
@@ -139,11 +165,29 @@ class OutgoingRpcMessageImpl final : public capnp::OutgoingRpcMessage {
     if (connection_.networkException_ != kj::none) {
       return;
     }
+
+    {
+      auto reader = message_.getRoot<::capnp::rpc::Message>().asReader();
+      KJ_IF_SOME(handler, connection_.onSendHandler_) {
+        if (!handler(reader)) {
+          return;
+        }
+      }
+    }
+
     ++connection_.vat_.sent_;
     auto incoming = kj::heap<IncomingRpcMessageImpl>(capnp::messageToFlatArray(message_));
     auto* connectionPtr = &connection_;
+
+    kj::Promise<void> promise = kj::READY_NOW;
+    KJ_IF_SOME(block, connection_.currentBlock_) {
+      promise = block.addBranch();
+    } else {
+      promise = kj::evalLater([]() {});
+    }
+
     connection_.tasks_->add(
-        kj::yield().then([connectionPtr, incomingMsg = kj::mv(incoming)]() mutable {
+        promise.then([connectionPtr, incomingMsg = kj::mv(incoming)]() mutable {
           KJ_IF_SOME(partner, connectionPtr->partner_) {
             partner.messageQueue_.push(kj::Own<capnp::IncomingRpcMessage>(kj::mv(incomingMsg)));
           }
@@ -330,14 +374,14 @@ kj::Maybe<kj::Own<GenericVat::Connection>> GenericVat::connectByVatId(const Lean
   if (!hostId.unique) {
     auto existingIt = connections_.find(destination);
     if (existingIt != connections_.end()) {
-      return kj::Own<Connection>(kj::addRef(*existingIt->second));
+      return kj::addRef(*existingIt->second);
     }
   }
   auto local = kj::refcounted<ConnectionImpl>(*this, *destination, hostId.unique);
   auto remote = kj::refcounted<ConnectionImpl>(*destination, *this, hostId.unique);
   local->attach(*remote);
-  destination->acceptQueue_.push(kj::mv(remote));
-  return kj::Own<Connection>(kj::mv(local));
+  destination->acceptQueue_.push(kj::addRef(*remote));
+  return kj::addRef(*local);
 }
 
 GenericVat& GenericVatNetwork::add(const std::string& name) {

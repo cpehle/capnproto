@@ -3,6 +3,7 @@
 #include <lean/lean.h>
 #include <kj/common.h>
 #include <kj/exception.h>
+#include <capnp/rpc-prelude.h>
 #include <vector>
 #include <string>
 #include <atomic>
@@ -187,6 +188,8 @@ struct RawCallCompletion {
   std::string exceptionDescription;
   std::string remoteTrace;
   std::vector<uint8_t> detailBytes;
+  std::string fileName;
+  uint32_t lineNumber = 0;
   RawCallResult result;
 };
 
@@ -263,6 +266,21 @@ struct KjPromiseIdCompletion {
   uint32_t promiseId = 0;
 };
 
+struct DiagnosticsCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  capnp::_::RpcSystemBase::RpcDiagnostics value;
+};
+
+struct AsyncUnitCompletion {
+  explicit AsyncUnitCompletion(lean_object* promise): promise(promise) {}
+  ~AsyncUnitCompletion() { lean_dec(promise); }
+  lean_object* promise;
+};
+
 class RuntimeLoop;
 
 // Shared runtime id generator used by both the RPC and KjAsync test runtimes to avoid collisions
@@ -290,5 +308,12 @@ void completeRegisterPairSuccess(const std::shared_ptr<RegisterPairCompletion>& 
 void completeRegisterPairFailure(const std::shared_ptr<RegisterPairCompletion>& completion, std::string message);
 void completeKjPromiseIdSuccess(const std::shared_ptr<KjPromiseIdCompletion>& completion, uint32_t promiseId);
 void completeKjPromiseIdFailure(const std::shared_ptr<KjPromiseIdCompletion>& completion, std::string message);
+void completeDiagnosticsSuccess(const std::shared_ptr<DiagnosticsCompletion>& completion,
+                                capnp::_::RpcSystemBase::RpcDiagnostics value);
+void completeDiagnosticsFailure(const std::shared_ptr<DiagnosticsCompletion>& completion,
+                                std::string message);
+
+void completeAsyncUnitSuccess(const std::shared_ptr<AsyncUnitCompletion>& completion);
+void completeAsyncUnitFailure(const std::shared_ptr<AsyncUnitCompletion>& completion, std::string message);
 
 } // namespace capnp_lean_rpc

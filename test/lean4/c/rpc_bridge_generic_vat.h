@@ -2,6 +2,7 @@
 
 #include "rpc_bridge_common.h"
 #include <capnp/rpc.h>
+#include <capnp/rpc.capnp.h>
 #include <capnp/serialize.h>
 #include <capnp/message.h>
 #include <capnp/test.capnp.h>
@@ -27,6 +28,7 @@ struct LeanThirdPartyContact {
 };
 
 LeanVatId decodeLeanVatId(capnp_test::TestSturdyRefHostId::Reader data);
+LeanVatId decodeLeanVatId(lean_object* data);
 void setLeanVatId(capnp_test::TestSturdyRefHostId::Builder builder, const LeanVatId& vatId);
 
 using GenericVatId = capnp_test::TestSturdyRefHostId;
@@ -95,6 +97,11 @@ class GenericVat final : public GenericVatNetworkBase {
     void initiateIdleShutdown();
     void disconnect(kj::Exception&& exception);
 
+    void block();
+    void unblock();
+    using MessageHandler = kj::Function<bool(::capnp::rpc::Message::Reader)>;
+    void onSend(MessageHandler handler);
+
     GenericVatId::Reader getPeerVatId() override;
     kj::Own<capnp::OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentWordSize) override;
     kj::Promise<kj::Maybe<kj::Own<capnp::IncomingRpcMessage>>> receiveIncomingMessage() override;
@@ -131,6 +138,10 @@ class GenericVat final : public GenericVatNetworkBase {
     bool idle_ = true;
     bool initiatedIdleShutdown_ = false;
     kj::Own<kj::TaskSet> tasks_;
+
+    kj::Maybe<kj::ForkedPromise<void>> currentBlock_;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> currentBlockFulfiller_;
+    kj::Maybe<MessageHandler> onSendHandler_;
   };
 
   kj::Maybe<kj::Own<Connection>> connect(GenericVatId::Reader hostId) override;

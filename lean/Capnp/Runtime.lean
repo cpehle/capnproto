@@ -1594,8 +1594,9 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
 
 @[inline] def readCapability (p : AnyPointer) : Capability :=
   let w := readWord p.msg p.seg p.word
-  if (w &&& 0x3) == 3 then
-    ((shr64 w 2) &&& 0x3fffffff).toUInt32
+  -- Canonical cap pointers have low 32 bits equal to 3 and index in high 32 bits.
+  if (w &&& 0xffffffff) == 3 then
+    (shr64 w 32).toUInt32
   else
     0
 
@@ -1603,8 +1604,8 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   let w ← readWordChecked p.msg p.seg p.word
   if w == 0 then
     return 0
-  if (w &&& 0x3) == 3 then
-    return ((shr64 w 2) &&& 0x3fffffff).toUInt32
+  if (w &&& 0xffffffff) == 3 then
+    return (shr64 w 32).toUInt32
   throw "capability pointer kind mismatch"
 
 @[inline] def readAnyPointerChecked (p : AnyPointer) : Except String AnyPointer := do
@@ -2117,8 +2118,8 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   writeWordLE p.seg p.word 0
 
 @[inline] def encodeCapabilityPointer (index : Capability) : UInt64 :=
-  let v := (UInt64.ofNat (index.toNat &&& 0x3fffffff)) <<< 2
-  (3 : UInt64) ||| v
+  -- Cap'n Proto wire format: low 32 bits are exactly 3, high 32 bits store cap index.
+  (3 : UInt64) ||| ((UInt64.ofNat index.toNat) <<< 32)
 
 @[inline] def writeCapability (p : AnyPointerBuilder) (cap : Capability) : BuilderM Unit :=
   writeWordLE p.seg p.word (encodeCapabilityPointer cap)

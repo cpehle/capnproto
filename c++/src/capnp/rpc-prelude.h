@@ -103,6 +103,15 @@ public:
 
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
 
+  struct RpcDiagnostics {
+    size_t questionCount;
+    size_t answerCount;
+    size_t exportCount;
+    size_t importCount;
+    size_t embargoCount;
+    bool isIdle;
+  };
+
   kj::Promise<void> run();
 
 private:
@@ -111,6 +120,7 @@ private:
 
   Capability::Client baseBootstrap(AnyStruct::Reader vatId);
   void baseSetFlowLimit(size_t words);
+  RpcDiagnostics getDiagnostics(AnyStruct::Reader vatId);
 
   class RpcConnectionState;
 
