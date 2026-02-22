@@ -2101,33 +2101,6 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_is_alive(uint64_t run
   return lean_io_result_mk_ok(lean_box(isRuntimeAlive(runtimeId) ? 1 : 0));
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_get_diagnostics(uint64_t runtimeId,
-                                                                           uint32_t peerId,
-                                                                           b_lean_obj_arg targetVatId) {
-  auto runtime = getRuntime(runtimeId);
-  if (!runtime) {
-    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
-  }
-
-  try {
-    auto completion = rpc::enqueueMultiVatGetDiagnostics(*runtime, peerId, targetVatId);
-    {
-      std::unique_lock<std::mutex> lock(completion->mutex);
-      completion->cv.wait(lock, [&completion]() { return completion->done; });
-      if (!completion->ok) {
-        return mkIoUserError(completion->error);
-      }
-      return lean_io_result_mk_ok(mkRpcDiagnosticsObj(completion->value));
-    }
-  } catch (const kj::Exception& e) {
-    return mkIoUserError(describeKjException(e));
-  } catch (const std::exception& e) {
-    return mkIoUserError(e.what());
-  } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_get_diagnostics");
-  }
-}
-
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_register_echo_target(
     uint64_t runtimeId) {
   auto runtime = getRuntime(runtimeId);
