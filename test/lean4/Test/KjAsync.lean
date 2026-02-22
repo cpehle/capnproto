@@ -1401,6 +1401,7 @@ def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
       let requestBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 11))
       let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
       let responseBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 12))
+      let responseBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray responseBody
 
       let responsePromise ←
         runtime.httpRequestStartRef
@@ -1409,8 +1410,8 @@ def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
       assertEqual request.path "/bytesref-http"
       assertEqual request.body requestBody
 
-      runtime.httpServerRespond
-        server request.requestId (UInt32.ofNat 201) "Created" #[] responseBody
+      runtime.httpServerRespondRef
+        server request.requestId (UInt32.ofNat 201) "Created" #[] responseBodyRef
       runtime.pump
       let response ← responsePromise.awaitRef
       assertEqual response.status (UInt32.ofNat 201)
@@ -1431,6 +1432,7 @@ def testKjAsyncBytesRefHttpRequestStartCrossRuntimeWithPump : IO Unit := do
       let requestBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 13))
       let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
       let responseBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 14))
+      let responseBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray responseBody
 
       let responsePromise ←
         clientRuntime.httpRequestStartRef
@@ -1440,8 +1442,8 @@ def testKjAsyncBytesRefHttpRequestStartCrossRuntimeWithPump : IO Unit := do
       assertEqual request.path "/bytesref-http-cross"
       assertEqual request.body requestBody
 
-      serverRuntime.httpServerRespond
-        server request.requestId (UInt32.ofNat 202) "Accepted" #[] responseBody
+      serverRuntime.httpServerRespondRef
+        server request.requestId (UInt32.ofNat 202) "Accepted" #[] responseBodyRef
       serverRuntime.pump
 
       let response ← responsePromise.awaitRef
@@ -2033,8 +2035,9 @@ def testKjAsyncHttpEncodedResponseRequestApi : IO Unit := do
     let request ← waitForHttpServerRequest serverRuntime server
     assertEqual request.path "/lean-http-encoded-raw"
     assertEqual request.body requestBody
-    serverRuntime.httpServerRespondWithEncodedHeaders server request.requestId
-      (UInt32.ofNat 200) "OK" encodedResponseHeaders requestBody
+    let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
+    serverRuntime.httpServerRespondWithEncodedHeadersRef server request.requestId
+      (UInt32.ofNat 200) "OK" encodedResponseHeaders requestBodyRef
     serverRuntime.pump
 
     let encodedResponse ←

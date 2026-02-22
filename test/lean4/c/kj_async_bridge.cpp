@@ -64,17 +64,6 @@ std::shared_ptr<std::vector<uint8_t>> copyByteArrayToSharedBytes(b_lean_obj_arg 
   return out;
 }
 
-kj::Array<kj::byte> copyByteArrayToKjArray(b_lean_obj_arg bytes) {
-  const auto size = lean_sarray_size(bytes);
-  const auto* data =
-      reinterpret_cast<const uint8_t*>(lean_sarray_cptr(const_cast<lean_object*>(bytes)));
-  auto out = kj::heapArray<kj::byte>(size);
-  if (size != 0) {
-    std::memcpy(out.begin(), data, size);
-  }
-  return out;
-}
-
 std::vector<uint8_t> copyByteArray(b_lean_obj_arg bytes) {
   const auto size = lean_sarray_size(bytes);
   const auto* data =
@@ -2200,7 +2189,7 @@ class KjAsyncRuntimeLoop {
                                                            uint32_t statusCode,
                                                            std::string statusText,
                                                            std::vector<uint8_t> responseHeaders,
-                                                           kj::Array<kj::byte> body) {
+                                                           std::shared_ptr<std::vector<uint8_t>> body) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2418,7 +2407,7 @@ class KjAsyncRuntimeLoop {
     uint32_t statusCode = 200;
     std::string statusText = "OK";
     std::vector<std::pair<std::string, std::string>> headers;
-    kj::Array<kj::byte> body;
+    std::shared_ptr<std::vector<uint8_t>> body;
     std::shared_ptr<HandleCompletion> webSocketCompletion;
     std::shared_ptr<HandleCompletion> streamingCompletion;
   };
@@ -3122,7 +3111,7 @@ class KjAsyncRuntimeLoop {
     uint32_t statusCode;
     std::string statusText;
     std::vector<uint8_t> responseHeaders;
-    kj::Array<kj::byte> body;
+    std::shared_ptr<std::vector<uint8_t>> body;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -4895,7 +4884,7 @@ class KjAsyncRuntimeLoop {
   void httpServerRespond(uint32_t serverId, uint32_t requestId, uint32_t statusCode,
                          std::string statusText,
                          std::vector<std::pair<std::string, std::string>> responseHeaders,
-                         kj::Array<kj::byte> body) {
+                         std::shared_ptr<std::vector<uint8_t>> body) {
     auto serverIt = httpServers_.find(serverId);
     if (serverIt == httpServers_.end()) {
       throw std::runtime_error("unknown KJ HTTP server id: " + std::to_string(serverId));
@@ -7248,13 +7237,16 @@ kj::Promise<void> KjAsyncRuntimeLoop::RuntimeHttpService::request(
 
         kj::HttpHeaders responseHeaders(*state_.headerTable);
         applyHeadersFromPairs(responseHeaders, command.headers);
+        const size_t bodySize = (command.body ? command.body->size() : 0);
         auto output =
             response.send(command.statusCode, command.statusText.c_str(), responseHeaders,
-                          kj::Maybe<uint64_t>(static_cast<uint64_t>(command.body.size())));
-        if (command.body.size() == 0) {
+                          kj::Maybe<uint64_t>(static_cast<uint64_t>(bodySize)));
+        if (bodySize == 0) {
           return kj::READY_NOW;
         }
-        return output->write(command.body.asPtr()).attach(kj::mv(command.body), kj::mv(output));
+        auto bodyPtr = kj::ArrayPtr<const kj::byte>(
+            reinterpret_cast<const kj::byte*>(command.body->data()), bodySize);
+        return output->write(bodyPtr).attach(kj::mv(command.body), kj::mv(output));
       });
   return kj::mv(responsePromise).attach(kj::mv(cleanup));
 }
@@ -11033,7 +11025,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_resp
   try {
     auto completion = runtime->enqueueHttpServerRespond(
         serverId, requestId, statusCode, std::string(lean_string_cstr(statusText)),
-        copyByteArray(responseHeaders), copyByteArrayToKjArray(body));
+        copyByteArray(responseHeaders), copyByteArrayToSharedBytes(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -11050,6 +11042,38 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_resp
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_server_respond");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_respond_ref(
+    uint64_t runtimeId, uint32_t serverId, uint32_t requestId, uint32_t statusCode,
+    b_lean_obj_arg statusText, b_lean_obj_arg responseHeaders, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpServerRespond(
+        serverId, requestId, statusCode, std::string(lean_string_cstr(statusText)),
+        copyByteArray(responseHeaders), getBytesRefDataOrThrow(bodyRef));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_respond_ref");
   }
 }
 
