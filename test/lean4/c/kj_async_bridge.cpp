@@ -423,19 +423,6 @@ struct WebSocketMessageCompletion {
   std::string error;
 };
 
-lean_obj_res mkIoWebSocketMessageResult(const WebSocketMessageCompletion& completion) {
-  auto pairInner = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(pairInner, 0, lean_mk_string(completion.text.c_str()));
-  lean_ctor_set(pairInner, 1, mkByteArrayCopy(completion.bytes.data(), completion.bytes.size()));
-  auto pairMid = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(pairMid, 0, lean_box_uint32(completion.closeCode));
-  lean_ctor_set(pairMid, 1, pairInner);
-  auto pairOuter = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(pairOuter, 0, lean_box_uint32(completion.tag));
-  lean_ctor_set(pairOuter, 1, pairMid);
-  return lean_io_result_mk_ok(pairOuter);
-}
-
 template <typename T>
 void completeFailureWithError(const std::shared_ptr<T>& completion, std::string message) {
   {
@@ -1352,9 +1339,9 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<UInt32Completion> enqueueDatagramSend(uint32_t portId, std::string address,
-                                                        uint32_t portHint,
-                                                        kj::Array<kj::byte> bytes) {
+  std::shared_ptr<UInt32Completion> enqueueDatagramSend(
+      uint32_t portId, std::string address, uint32_t portHint,
+      std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<UInt32Completion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1369,9 +1356,9 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<PromiseIdCompletion> enqueueDatagramSendStart(uint32_t portId, std::string address,
-                                                                uint32_t portHint,
-                                                                kj::Array<kj::byte> bytes) {
+  std::shared_ptr<PromiseIdCompletion> enqueueDatagramSendStart(
+      uint32_t portId, std::string address, uint32_t portHint,
+      std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1668,7 +1655,7 @@ class KjAsyncRuntimeLoop {
   }
 
   std::shared_ptr<PromiseIdCompletion> enqueueHttpRequestBodyWriteStart(
-      uint32_t requestBodyId, kj::Array<kj::byte> bytes) {
+      uint32_t requestBodyId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1684,7 +1671,7 @@ class KjAsyncRuntimeLoop {
   }
 
   std::shared_ptr<UnitCompletion> enqueueHttpRequestBodyWrite(
-      uint32_t requestBodyId, kj::Array<kj::byte> bytes) {
+      uint32_t requestBodyId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1959,8 +1946,8 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<PromiseIdCompletion> enqueueWebSocketSendBinaryStart(uint32_t webSocketId,
-                                                                        kj::Array<kj::byte> bytes) {
+  std::shared_ptr<PromiseIdCompletion> enqueueWebSocketSendBinaryStart(
+      uint32_t webSocketId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1975,8 +1962,8 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<UnitCompletion> enqueueWebSocketSendBinary(uint32_t webSocketId,
-                                                             kj::Array<kj::byte> bytes) {
+  std::shared_ptr<UnitCompletion> enqueueWebSocketSendBinary(
+      uint32_t webSocketId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2270,7 +2257,7 @@ class KjAsyncRuntimeLoop {
   }
 
   std::shared_ptr<PromiseIdCompletion> enqueueHttpServerResponseBodyWriteStart(
-      uint32_t responseBodyId, kj::Array<kj::byte> bytes) {
+      uint32_t responseBodyId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2285,8 +2272,8 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<UnitCompletion> enqueueHttpServerResponseBodyWrite(uint32_t responseBodyId,
-                                                                     kj::Array<kj::byte> bytes) {
+  std::shared_ptr<UnitCompletion> enqueueHttpServerResponseBodyWrite(
+      uint32_t responseBodyId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto completion = std::make_shared<UnitCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2855,7 +2842,7 @@ class KjAsyncRuntimeLoop {
     uint32_t portId;
     std::string address;
     uint32_t portHint;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<UInt32Completion> completion;
   };
 
@@ -2863,7 +2850,7 @@ class KjAsyncRuntimeLoop {
     uint32_t portId;
     std::string address;
     uint32_t portHint;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
@@ -2982,13 +2969,13 @@ class KjAsyncRuntimeLoop {
 
   struct QueuedHttpRequestBodyWriteStart {
     uint32_t requestBodyId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
   struct QueuedHttpRequestBodyWrite {
     uint32_t requestBodyId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -3097,13 +3084,13 @@ class KjAsyncRuntimeLoop {
 
   struct QueuedWebSocketSendBinaryStart {
     uint32_t webSocketId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
   struct QueuedWebSocketSendBinary {
     uint32_t webSocketId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -3163,13 +3150,13 @@ class KjAsyncRuntimeLoop {
 
   struct QueuedHttpServerResponseBodyWriteStart {
     uint32_t responseBodyId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
   struct QueuedHttpServerResponseBodyWrite {
     uint32_t responseBodyId;
-    kj::Array<kj::byte> bytes;
+    std::shared_ptr<std::vector<uint8_t>> bytes;
     std::shared_ptr<UnitCompletion> completion;
   };
 
@@ -4210,13 +4197,16 @@ class KjAsyncRuntimeLoop {
 
   uint32_t datagramSendStart(kj::AsyncIoProvider& ioProvider, uint32_t portId,
                              const std::string& address, uint32_t portHint,
-                             kj::Array<kj::byte> bytes) {
+                             std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = datagramPorts_.find(portId);
     if (it == datagramPorts_.end()) {
       throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
     }
 
     auto canceler = kj::heap<kj::Canceler>();
+    if (!bytes) {
+      bytes = std::make_shared<std::vector<uint8_t>>();
+    }
     auto promise = canceler->wrap(
         ioProvider.getNetwork()
             .parseAddress(address.c_str(), portHint)
@@ -4226,7 +4216,9 @@ class KjAsyncRuntimeLoop {
               if (portIt == datagramPorts_.end()) {
                 throw std::runtime_error("unknown KJ datagram port id: " + std::to_string(portId));
               }
-              return portIt->second->send(bytes.asPtr(), *addr)
+              auto ptr = kj::ArrayPtr<const kj::byte>(
+                  reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+              return portIt->second->send(ptr, *addr)
                   .attach(kj::mv(bytes))
                   .then([](size_t sent) {
                     if (sent > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
@@ -4240,7 +4232,7 @@ class KjAsyncRuntimeLoop {
 
   uint32_t datagramSend(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope, uint32_t portId,
                         const std::string& address, uint32_t portHint,
-                        kj::Array<kj::byte> bytes) {
+                        std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto promiseId = datagramSendStart(ioProvider, portId, address, portHint, kj::mv(bytes));
     return awaitUInt32Promise(waitScope, promiseId);
   }
@@ -4617,24 +4609,27 @@ class KjAsyncRuntimeLoop {
     return awaitHttpResponsePromise(waitScope, promiseId);
   }
 
-  uint32_t httpRequestBodyWriteStart(uint32_t requestBodyId, kj::Array<kj::byte> bytes) {
+  uint32_t httpRequestBodyWriteStart(uint32_t requestBodyId,
+                                     std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = httpRequestBodies_.find(requestBodyId);
     if (it == httpRequestBodies_.end()) {
       throw std::runtime_error("unknown KJ HTTP request body id: " +
                                std::to_string(requestBodyId));
     }
     auto canceler = kj::heap<kj::Canceler>();
-    if (bytes.size() == 0) {
+    if (!bytes || bytes->empty()) {
       kj::Promise<void> ready = kj::READY_NOW;
       auto wrapped = canceler->wrap(kj::mv(ready));
       return addPromise(PendingPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
-    auto promise = canceler->wrap(it->second.stream->write(bytes.asPtr()).attach(kj::mv(bytes)));
+    auto ptr = kj::ArrayPtr<const kj::byte>(
+        reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+    auto promise = canceler->wrap(it->second.stream->write(ptr).attach(kj::mv(bytes)));
     return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   void httpRequestBodyWrite(kj::WaitScope& waitScope, uint32_t requestBodyId,
-                            kj::Array<kj::byte> bytes) {
+                            std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto promiseId = httpRequestBodyWriteStart(requestBodyId, kj::mv(bytes));
     awaitPromise(waitScope, promiseId);
   }
@@ -4972,24 +4967,27 @@ class KjAsyncRuntimeLoop {
     fulfiller->fulfill(kj::mv(command));
   }
 
-  uint32_t httpServerResponseBodyWriteStart(uint32_t responseBodyId, kj::Array<kj::byte> bytes) {
+  uint32_t httpServerResponseBodyWriteStart(
+      uint32_t responseBodyId, std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = httpServerResponseBodies_.find(responseBodyId);
     if (it == httpServerResponseBodies_.end()) {
       throw std::runtime_error("unknown KJ HTTP server response body id: " +
                                std::to_string(responseBodyId));
     }
     auto canceler = kj::heap<kj::Canceler>();
-    if (bytes.size() == 0) {
+    if (!bytes || bytes->empty()) {
       kj::Promise<void> ready = kj::READY_NOW;
       auto wrapped = canceler->wrap(kj::mv(ready));
       return addPromise(PendingPromise(kj::mv(wrapped), kj::mv(canceler)));
     }
-    auto promise = canceler->wrap(it->second.stream->write(bytes.asPtr()).attach(kj::mv(bytes)));
+    auto ptr = kj::ArrayPtr<const kj::byte>(
+        reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+    auto promise = canceler->wrap(it->second.stream->write(ptr).attach(kj::mv(bytes)));
     return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   void httpServerResponseBodyWrite(kj::WaitScope& waitScope, uint32_t responseBodyId,
-                                   kj::Array<kj::byte> bytes) {
+                                   std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto promiseId = httpServerResponseBodyWriteStart(responseBodyId, kj::mv(bytes));
     awaitPromise(waitScope, promiseId);
   }
@@ -5153,21 +5151,32 @@ class KjAsyncRuntimeLoop {
   }
 
   void webSocketSendBinary(kj::WaitScope& waitScope, uint32_t webSocketId,
-                           kj::Array<kj::byte> bytes) {
+                           std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = webSockets_.find(webSocketId);
     if (it == webSockets_.end()) {
       throw std::runtime_error("unknown KJ websocket id: " + std::to_string(webSocketId));
     }
-    it->second.socket->send(bytes.asPtr()).attach(kj::mv(bytes)).wait(waitScope);
+    if (!bytes) {
+      bytes = std::make_shared<std::vector<uint8_t>>();
+    }
+    auto ptr = kj::ArrayPtr<const kj::byte>(
+        reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+    it->second.socket->send(ptr).attach(kj::mv(bytes)).wait(waitScope);
   }
 
-  uint32_t webSocketSendBinaryStart(uint32_t webSocketId, kj::Array<kj::byte> bytes) {
+  uint32_t webSocketSendBinaryStart(uint32_t webSocketId,
+                                    std::shared_ptr<std::vector<uint8_t>> bytes) {
     auto it = webSockets_.find(webSocketId);
     if (it == webSockets_.end()) {
       throw std::runtime_error("unknown KJ websocket id: " + std::to_string(webSocketId));
     }
     auto canceler = kj::heap<kj::Canceler>();
-    auto promise = canceler->wrap(it->second.socket->send(bytes.asPtr()).attach(kj::mv(bytes)));
+    if (!bytes) {
+      bytes = std::make_shared<std::vector<uint8_t>>();
+    }
+    auto ptr = kj::ArrayPtr<const kj::byte>(
+        reinterpret_cast<const kj::byte*>(bytes->data()), bytes->size());
+    auto promise = canceler->wrap(it->second.socket->send(ptr).attach(kj::mv(bytes)));
     return addPromise(PendingPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
@@ -9000,17 +9009,18 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_get_por
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send_ref(
     uint64_t runtimeId, uint32_t portId, b_lean_obj_arg address, uint32_t portHint,
-    b_lean_obj_arg bytes) {
+    b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion = runtime->enqueueDatagramSend(
-        portId, std::string(lean_string_cstr(address)), portHint, copyByteArrayToKjArray(bytes));
+    auto completion =
+        runtime->enqueueDatagramSend(portId, std::string(lean_string_cstr(address)), portHint,
+                                     getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9024,13 +9034,13 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send(
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_send");
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_send_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send_start(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send_start_ref(
     uint64_t runtimeId, uint32_t portId, b_lean_obj_arg address, uint32_t portHint,
-    b_lean_obj_arg bytes) {
+    b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
@@ -9038,7 +9048,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send_st
 
   try {
     auto completion = runtime->enqueueDatagramSendStart(
-        portId, std::string(lean_string_cstr(address)), portHint, copyByteArrayToKjArray(bytes));
+        portId, std::string(lean_string_cstr(address)), portHint, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9052,7 +9062,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_send_st
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_send_start");
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_datagram_send_start_ref");
   }
 }
 
@@ -9140,7 +9151,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_uint32_promise_r
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive_ref(
     uint64_t runtimeId, uint32_t portId, uint32_t maxBytes) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -9157,7 +9168,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive
       }
       auto pair = lean_alloc_ctor(0, 2, 0);
       lean_ctor_set(pair, 0, lean_mk_string(completion->sourceAddress.c_str()));
-      lean_ctor_set(pair, 1, mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      lean_ctor_set(pair, 1, mkBytesRef(makeSharedBytes(std::move(completion->bytes))));
       return lean_io_result_mk_ok(pair);
     }
   } catch (const kj::Exception& e) {
@@ -9165,7 +9176,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_receive");
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_datagram_receive_ref");
   }
 }
 
@@ -9196,7 +9207,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive_promise_await(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive_promise_await_ref(
     uint64_t runtimeId, uint32_t promiseId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -9213,7 +9224,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive
       }
       auto pair = lean_alloc_ctor(0, 2, 0);
       lean_ctor_set(pair, 0, lean_mk_string(completion->sourceAddress.c_str()));
-      lean_ctor_set(pair, 1, mkByteArrayCopy(completion->bytes.data(), completion->bytes.size()));
+      lean_ctor_set(pair, 1, mkBytesRef(makeSharedBytes(std::move(completion->bytes))));
       return lean_io_result_mk_ok(pair);
     }
   } catch (const kj::Exception& e) {
@@ -9222,7 +9233,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_datagram_receive
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_datagram_receive_promise_await");
+        "unknown exception in capnp_lean_kj_async_runtime_datagram_receive_promise_await_ref");
   }
 }
 
@@ -9944,15 +9955,17 @@ capnp_lean_kj_async_runtime_http_response_promise_await_streaming_with_headers(
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_body_write_start(
-    uint64_t runtimeId, uint32_t requestBodyId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_body_write_start_ref(
+    uint64_t runtimeId, uint32_t requestBodyId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion = runtime->enqueueHttpRequestBodyWriteStart(requestBodyId, copyByteArrayToKjArray(bytes));
+    auto completion =
+        runtime->enqueueHttpRequestBodyWriteStart(requestBodyId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9967,19 +9980,20 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_bod
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_http_request_body_write_start");
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_body_write_start_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_body_write(
-    uint64_t runtimeId, uint32_t requestBodyId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_body_write_ref(
+    uint64_t runtimeId, uint32_t requestBodyId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion = runtime->enqueueHttpRequestBodyWrite(requestBodyId, copyByteArrayToKjArray(bytes));
+    auto completion =
+        runtime->enqueueHttpRequestBodyWrite(requestBodyId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9995,7 +10009,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_bod
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_request_body_write");
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_body_write_ref");
   }
 }
 
@@ -10109,7 +10124,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_bo
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_body_read(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_body_read_ref(
     uint64_t runtimeId, uint32_t responseBodyId, uint32_t minBytes, uint32_t maxBytes) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -10125,14 +10140,15 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_bo
         return mkIoUserError(completion->error);
       }
       auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
-      return lean_io_result_mk_ok(mkByteArrayCopy(bytes->data(), bytes->size()));
+      return lean_io_result_mk_ok(mkBytesRef(std::move(bytes)));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_response_body_read");
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_response_body_read_ref");
   }
 }
 
@@ -10191,7 +10207,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_requ
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_request_body_read(
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_server_request_body_read_ref(
     uint64_t runtimeId, uint32_t requestBodyId, uint32_t minBytes, uint32_t maxBytes) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -10207,8 +10224,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_requ
         return mkIoUserError(completion->error);
       }
       auto bytes = completion->bytes ? completion->bytes : std::make_shared<std::vector<uint8_t>>();
-      return lean_io_result_mk_ok(
-          mkByteArrayCopy(bytes->data(), bytes->size()));
+      return lean_io_result_mk_ok(mkBytesRef(std::move(bytes)));
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -10216,7 +10232,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_requ
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_http_server_request_body_read");
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_request_body_read_ref");
   }
 }
 
@@ -10594,16 +10610,16 @@ capnp_lean_kj_async_runtime_http_server_respond_start_streaming(
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
-capnp_lean_kj_async_runtime_http_server_response_body_write_start(
-    uint64_t runtimeId, uint32_t responseBodyId, b_lean_obj_arg bytes) {
+capnp_lean_kj_async_runtime_http_server_response_body_write_start_ref(
+    uint64_t runtimeId, uint32_t responseBodyId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion =
-        runtime->enqueueHttpServerResponseBodyWriteStart(responseBodyId, copyByteArrayToKjArray(bytes));
+    auto completion = runtime->enqueueHttpServerResponseBodyWriteStart(
+        responseBodyId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10618,20 +10634,20 @@ capnp_lean_kj_async_runtime_http_server_response_body_write_start(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_http_server_response_body_write_start");
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_response_body_write_start_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_response_body_write(
-    uint64_t runtimeId, uint32_t responseBodyId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_response_body_write_ref(
+    uint64_t runtimeId, uint32_t responseBodyId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion =
-        runtime->enqueueHttpServerResponseBodyWrite(responseBodyId, copyByteArrayToKjArray(bytes));
+    auto completion = runtime->enqueueHttpServerResponseBodyWrite(
+        responseBodyId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -10648,7 +10664,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_server_resp
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_http_server_response_body_write");
+        "unknown exception in capnp_lean_kj_async_runtime_http_server_response_body_write_ref");
   }
 }
 
@@ -11084,8 +11100,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_t
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_binary_start(
-    uint64_t runtimeId, uint32_t webSocketId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_binary_start_ref(
+    uint64_t runtimeId, uint32_t webSocketId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
@@ -11093,7 +11109,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_b
 
   try {
     auto completion =
-        runtime->enqueueWebSocketSendBinaryStart(webSocketId, copyByteArrayToKjArray(bytes));
+        runtime->enqueueWebSocketSendBinaryStart(webSocketId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -11108,19 +11124,20 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_b
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_websocket_send_binary_start");
+        "unknown exception in capnp_lean_kj_async_runtime_websocket_send_binary_start_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_binary(
-    uint64_t runtimeId, uint32_t webSocketId, b_lean_obj_arg bytes) {
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_binary_ref(
+    uint64_t runtimeId, uint32_t webSocketId, b_lean_obj_arg bytesRef) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
     return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
   }
 
   try {
-    auto completion = runtime->enqueueWebSocketSendBinary(webSocketId, copyByteArrayToKjArray(bytes));
+    auto completion =
+        runtime->enqueueWebSocketSendBinary(webSocketId, getBytesRefDataOrThrow(bytesRef));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -11136,7 +11153,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_send_b
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_websocket_send_binary");
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_websocket_send_binary_ref");
   }
 }
 
@@ -11194,7 +11212,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_message_promise_await(
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_websocket_message_promise_await_ref(
     uint64_t runtimeId, uint32_t promiseId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -11209,7 +11228,16 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_messag
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return mkIoWebSocketMessageResult(*completion);
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->bytes))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -11217,7 +11245,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_messag
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_websocket_message_promise_await");
+        "unknown exception in capnp_lean_kj_async_runtime_websocket_message_promise_await_ref");
   }
 }
 
@@ -11279,7 +11307,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_messag
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receive(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receive_ref(
     uint64_t runtimeId, uint32_t webSocketId) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -11294,18 +11322,27 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return mkIoWebSocketMessageResult(*completion);
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->bytes))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
   } catch (...) {
-    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_websocket_receive");
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_websocket_receive_ref");
   }
 }
 
-extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receive_with_max(
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receive_with_max_ref(
     uint64_t runtimeId, uint32_t webSocketId, uint32_t maxBytes) {
   auto runtime = getKjAsyncRuntime(runtimeId);
   if (!runtime) {
@@ -11320,7 +11357,16 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
       if (!completion->ok) {
         return mkIoUserError(completion->error);
       }
-      return mkIoWebSocketMessageResult(*completion);
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0, lean_mk_string(completion->text.c_str()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->bytes))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_box_uint32(completion->closeCode));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->tag));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
     }
   } catch (const kj::Exception& e) {
     return mkIoUserError(describeKjException(e));
@@ -11328,7 +11374,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_websocket_receiv
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError(
-        "unknown exception in capnp_lean_kj_async_runtime_websocket_receive_with_max");
+        "unknown exception in capnp_lean_kj_async_runtime_websocket_receive_with_max_ref");
   }
 }
 

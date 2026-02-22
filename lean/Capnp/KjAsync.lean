@@ -367,15 +367,15 @@ opaque ffiRuntimeDatagramReleasePortImpl (runtime : UInt64) (port : UInt32) : IO
 @[extern "capnp_lean_kj_async_runtime_datagram_get_port"]
 opaque ffiRuntimeDatagramGetPortImpl (runtime : UInt64) (port : UInt32) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_datagram_send"]
-opaque ffiRuntimeDatagramSendImpl
+@[extern "capnp_lean_kj_async_runtime_datagram_send_ref"]
+opaque ffiRuntimeDatagramSendRefImpl
     (runtime : UInt64) (port : UInt32) (address : @& String) (portHint : UInt32)
-    (bytes : @& ByteArray) : IO UInt32
+    (bytes : @& BytesRef) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_datagram_send_start"]
-opaque ffiRuntimeDatagramSendStartImpl
+@[extern "capnp_lean_kj_async_runtime_datagram_send_start_ref"]
+opaque ffiRuntimeDatagramSendStartRefImpl
     (runtime : UInt64) (port : UInt32) (address : @& String) (portHint : UInt32)
-    (bytes : @& ByteArray) : IO UInt32
+    (bytes : @& BytesRef) : IO UInt32
 
 @[extern "capnp_lean_kj_async_runtime_uint32_promise_await"]
 opaque ffiRuntimeUInt32PromiseAwaitImpl (runtime : UInt64) (promise : UInt32) : IO UInt32
@@ -386,17 +386,17 @@ opaque ffiRuntimeUInt32PromiseCancelImpl (runtime : UInt64) (promise : UInt32) :
 @[extern "capnp_lean_kj_async_runtime_uint32_promise_release"]
 opaque ffiRuntimeUInt32PromiseReleaseImpl (runtime : UInt64) (promise : UInt32) : IO Unit
 
-@[extern "capnp_lean_kj_async_runtime_datagram_receive"]
-opaque ffiRuntimeDatagramReceiveImpl
-    (runtime : UInt64) (port : UInt32) (maxBytes : UInt32) : IO (String × ByteArray)
+@[extern "capnp_lean_kj_async_runtime_datagram_receive_ref"]
+opaque ffiRuntimeDatagramReceiveRefImpl
+    (runtime : UInt64) (port : UInt32) (maxBytes : UInt32) : IO (String × BytesRef)
 
 @[extern "capnp_lean_kj_async_runtime_datagram_receive_start"]
 opaque ffiRuntimeDatagramReceiveStartImpl
     (runtime : UInt64) (port : UInt32) (maxBytes : UInt32) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_datagram_receive_promise_await"]
-opaque ffiRuntimeDatagramReceivePromiseAwaitImpl
-    (runtime : UInt64) (promise : UInt32) : IO (String × ByteArray)
+@[extern "capnp_lean_kj_async_runtime_datagram_receive_promise_await_ref"]
+opaque ffiRuntimeDatagramReceivePromiseAwaitRefImpl
+    (runtime : UInt64) (promise : UInt32) : IO (String × BytesRef)
 
 @[extern "capnp_lean_kj_async_runtime_datagram_receive_promise_cancel"]
 opaque ffiRuntimeDatagramReceivePromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Unit
@@ -500,13 +500,13 @@ opaque ffiRuntimeHttpResponsePromiseAwaitWithHeadersImpl
 opaque ffiRuntimeHttpResponsePromiseAwaitStreamingWithHeadersImpl
     (runtime : UInt64) (promise : UInt32) : IO (UInt32 × String × ByteArray × UInt32)
 
-@[extern "capnp_lean_kj_async_runtime_http_request_body_write_start"]
-opaque ffiRuntimeHttpRequestBodyWriteStartImpl
-    (runtime : UInt64) (requestBody : UInt32) (bytes : @& ByteArray) : IO UInt32
+@[extern "capnp_lean_kj_async_runtime_http_request_body_write_start_ref"]
+opaque ffiRuntimeHttpRequestBodyWriteStartRefImpl
+    (runtime : UInt64) (requestBody : UInt32) (bytes : @& BytesRef) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_http_request_body_write"]
-opaque ffiRuntimeHttpRequestBodyWriteImpl
-    (runtime : UInt64) (requestBody : UInt32) (bytes : @& ByteArray) : IO Unit
+@[extern "capnp_lean_kj_async_runtime_http_request_body_write_ref"]
+opaque ffiRuntimeHttpRequestBodyWriteRefImpl
+    (runtime : UInt64) (requestBody : UInt32) (bytes : @& BytesRef) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_http_request_body_finish_start"]
 opaque ffiRuntimeHttpRequestBodyFinishStartImpl
@@ -525,10 +525,10 @@ opaque ffiRuntimeHttpResponseBodyReadStartImpl
     (runtime : UInt64) (responseBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
     IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_http_response_body_read"]
-opaque ffiRuntimeHttpResponseBodyReadImpl
+@[extern "capnp_lean_kj_async_runtime_http_response_body_read_ref"]
+opaque ffiRuntimeHttpResponseBodyReadRefImpl
     (runtime : UInt64) (responseBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
-    IO ByteArray
+    IO BytesRef
 
 @[extern "capnp_lean_kj_async_runtime_http_response_body_release"]
 opaque ffiRuntimeHttpResponseBodyReleaseImpl
@@ -539,10 +539,10 @@ opaque ffiRuntimeHttpServerRequestBodyReadStartImpl
     (runtime : UInt64) (requestBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
     IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_http_server_request_body_read"]
-opaque ffiRuntimeHttpServerRequestBodyReadImpl
+@[extern "capnp_lean_kj_async_runtime_http_server_request_body_read_ref"]
+opaque ffiRuntimeHttpServerRequestBodyReadRefImpl
     (runtime : UInt64) (requestBody : UInt32) (minBytes : UInt32) (maxBytes : UInt32) :
-    IO ByteArray
+    IO BytesRef
 
 @[extern "capnp_lean_kj_async_runtime_http_server_request_body_release"]
 opaque ffiRuntimeHttpServerRequestBodyReleaseImpl
@@ -598,13 +598,13 @@ opaque ffiRuntimeHttpServerRespondStartStreamingImpl
     (runtime : UInt64) (server : UInt32) (requestId : UInt32) (status : UInt32)
     (statusText : @& String) (responseHeaders : @& ByteArray) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_http_server_response_body_write_start"]
-opaque ffiRuntimeHttpServerResponseBodyWriteStartImpl
-    (runtime : UInt64) (responseBody : UInt32) (bytes : @& ByteArray) : IO UInt32
+@[extern "capnp_lean_kj_async_runtime_http_server_response_body_write_start_ref"]
+opaque ffiRuntimeHttpServerResponseBodyWriteStartRefImpl
+    (runtime : UInt64) (responseBody : UInt32) (bytes : @& BytesRef) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_http_server_response_body_write"]
-opaque ffiRuntimeHttpServerResponseBodyWriteImpl
-    (runtime : UInt64) (responseBody : UInt32) (bytes : @& ByteArray) : IO Unit
+@[extern "capnp_lean_kj_async_runtime_http_server_response_body_write_ref"]
+opaque ffiRuntimeHttpServerResponseBodyWriteRefImpl
+    (runtime : UInt64) (responseBody : UInt32) (bytes : @& BytesRef) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_http_server_response_body_finish_start"]
 opaque ffiRuntimeHttpServerResponseBodyFinishStartImpl
@@ -668,13 +668,13 @@ opaque ffiRuntimeWebSocketSendTextStartImpl
 opaque ffiRuntimeWebSocketSendTextImpl
     (runtime : UInt64) (webSocket : UInt32) (text : @& String) : IO Unit
 
-@[extern "capnp_lean_kj_async_runtime_websocket_send_binary_start"]
-opaque ffiRuntimeWebSocketSendBinaryStartImpl
-    (runtime : UInt64) (webSocket : UInt32) (bytes : @& ByteArray) : IO UInt32
+@[extern "capnp_lean_kj_async_runtime_websocket_send_binary_start_ref"]
+opaque ffiRuntimeWebSocketSendBinaryStartRefImpl
+    (runtime : UInt64) (webSocket : UInt32) (bytes : @& BytesRef) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_websocket_send_binary"]
-opaque ffiRuntimeWebSocketSendBinaryImpl
-    (runtime : UInt64) (webSocket : UInt32) (bytes : @& ByteArray) : IO Unit
+@[extern "capnp_lean_kj_async_runtime_websocket_send_binary_ref"]
+opaque ffiRuntimeWebSocketSendBinaryRefImpl
+    (runtime : UInt64) (webSocket : UInt32) (bytes : @& BytesRef) : IO Unit
 
 @[extern "capnp_lean_kj_async_runtime_websocket_receive_start"]
 opaque ffiRuntimeWebSocketReceiveStartImpl
@@ -684,9 +684,9 @@ opaque ffiRuntimeWebSocketReceiveStartImpl
 opaque ffiRuntimeWebSocketReceiveStartWithMaxImpl
     (runtime : UInt64) (webSocket : UInt32) (maxBytes : UInt32) : IO UInt32
 
-@[extern "capnp_lean_kj_async_runtime_websocket_message_promise_await"]
-opaque ffiRuntimeWebSocketMessagePromiseAwaitImpl
-    (runtime : UInt64) (promise : UInt32) : IO (UInt32 × UInt32 × String × ByteArray)
+@[extern "capnp_lean_kj_async_runtime_websocket_message_promise_await_ref"]
+opaque ffiRuntimeWebSocketMessagePromiseAwaitRefImpl
+    (runtime : UInt64) (promise : UInt32) : IO (UInt32 × UInt32 × String × BytesRef)
 
 @[extern "capnp_lean_kj_async_runtime_websocket_message_promise_cancel"]
 opaque ffiRuntimeWebSocketMessagePromiseCancelImpl (runtime : UInt64) (promise : UInt32) : IO Unit
@@ -694,14 +694,14 @@ opaque ffiRuntimeWebSocketMessagePromiseCancelImpl (runtime : UInt64) (promise :
 @[extern "capnp_lean_kj_async_runtime_websocket_message_promise_release"]
 opaque ffiRuntimeWebSocketMessagePromiseReleaseImpl (runtime : UInt64) (promise : UInt32) : IO Unit
 
-@[extern "capnp_lean_kj_async_runtime_websocket_receive"]
-opaque ffiRuntimeWebSocketReceiveImpl
-    (runtime : UInt64) (webSocket : UInt32) : IO (UInt32 × UInt32 × String × ByteArray)
+@[extern "capnp_lean_kj_async_runtime_websocket_receive_ref"]
+opaque ffiRuntimeWebSocketReceiveRefImpl
+    (runtime : UInt64) (webSocket : UInt32) : IO (UInt32 × UInt32 × String × BytesRef)
 
-@[extern "capnp_lean_kj_async_runtime_websocket_receive_with_max"]
-opaque ffiRuntimeWebSocketReceiveWithMaxImpl
+@[extern "capnp_lean_kj_async_runtime_websocket_receive_with_max_ref"]
+opaque ffiRuntimeWebSocketReceiveWithMaxRefImpl
     (runtime : UInt64) (webSocket : UInt32) (maxBytes : UInt32) :
-    IO (UInt32 × UInt32 × String × ByteArray)
+    IO (UInt32 × UInt32 × String × BytesRef)
 
 @[extern "capnp_lean_kj_async_runtime_websocket_close_start"]
 opaque ffiRuntimeWebSocketCloseStartImpl
@@ -934,6 +934,11 @@ inductive HttpMethod where
   else
     throw (IO.userError s!"unknown websocket message tag: {tag}")
 
+@[inline] private def decodeWebSocketMessageRef
+    (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : BytesRef) :
+    IO WebSocketMessage := do
+  decodeWebSocketMessage tag closeCode text (← BytesRef.toByteArray bytes)
+
 structure HttpServerRequest where
   requestId : UInt32
   method : HttpMethod
@@ -1021,8 +1026,9 @@ structure HttpEndpoint where
       let mut body := request.body
       let mut done := false
       while !done do
-        let chunk ← ffiRuntimeHttpServerRequestBodyReadImpl requestBody.runtime.handle
+        let chunkRef ← ffiRuntimeHttpServerRequestBodyReadRefImpl requestBody.runtime.handle
           requestBody.handle 1 0x1000
+        let chunk ← BytesRef.toByteArray chunkRef
         if chunk.size == 0 then
           done := true
         else
@@ -1456,14 +1462,31 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def datagramSend (runtime : Runtime) (port : DatagramPort)
     (address : String) (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
-  ffiRuntimeDatagramSendImpl runtime.handle port.handle address portHint bytes
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeDatagramSendRefImpl runtime.handle port.handle address portHint bytesRef
+
+@[inline] def datagramSendRef (runtime : Runtime) (port : DatagramPort)
+    (address : String) (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32 := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
+  ffiRuntimeDatagramSendRefImpl runtime.handle port.handle address portHint bytes
 
 @[inline] def datagramSendStart (runtime : Runtime) (port : DatagramPort)
     (address : String) (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32PromiseRef := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := runtime
-    handle := (← ffiRuntimeDatagramSendStartImpl runtime.handle port.handle address portHint bytes)
+    handle := (← ffiRuntimeDatagramSendStartRefImpl
+      runtime.handle port.handle address portHint bytesRef)
+  }
+
+@[inline] def datagramSendStartRef (runtime : Runtime) (port : DatagramPort)
+    (address : String) (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32PromiseRef := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeDatagramSendStartRefImpl
+      runtime.handle port.handle address portHint bytes)
   }
 
 @[inline] def datagramPeerBind (runtime : Runtime) (localAddress remoteAddress : String)
@@ -1501,7 +1524,13 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def datagramReceive (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) := do
   ensureSameRuntime runtime port.runtime "DatagramPort"
-  ffiRuntimeDatagramReceiveImpl runtime.handle port.handle maxBytes
+  let (source, bytesRef) ← ffiRuntimeDatagramReceiveRefImpl runtime.handle port.handle maxBytes
+  pure (source, ← BytesRef.toByteArray bytesRef)
+
+@[inline] def datagramReceiveRef (runtime : Runtime) (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) : IO (String × BytesRef) := do
+  ensureSameRuntime runtime port.runtime "DatagramPort"
+  ffiRuntimeDatagramReceiveRefImpl runtime.handle port.handle maxBytes
 
 @[inline] def datagramReceiveStart (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef := do
@@ -1514,7 +1543,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def datagramReceivePromiseAwait (runtime : Runtime)
     (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
   ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
-  ffiRuntimeDatagramReceivePromiseAwaitImpl runtime.handle promise.handle
+  let (source, bytesRef) ← ffiRuntimeDatagramReceivePromiseAwaitRefImpl
+    runtime.handle promise.handle
+  pure (source, ← BytesRef.toByteArray bytesRef)
+
+@[inline] def datagramReceivePromiseAwaitRef (runtime : Runtime)
+    (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) := do
+  ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
+  ffiRuntimeDatagramReceivePromiseAwaitRefImpl runtime.handle promise.handle
 
 @[inline] def datagramReceivePromiseCancel (runtime : Runtime)
     (promise : DatagramReceivePromiseRef) : IO Unit := do
@@ -1924,15 +1960,32 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpRequestBodyWriteStart (runtime : Runtime) (requestBody : HttpRequestBody)
     (bytes : ByteArray) : IO PromiseRef := do
   ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := runtime
-    handle := (← ffiRuntimeHttpRequestBodyWriteStartImpl runtime.handle requestBody.handle bytes)
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartRefImpl
+      runtime.handle requestBody.handle bytesRef)
+  }
+
+@[inline] def httpRequestBodyWriteStartRef (runtime : Runtime) (requestBody : HttpRequestBody)
+    (bytes : BytesRef) : IO PromiseRef := do
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartRefImpl
+      runtime.handle requestBody.handle bytes)
   }
 
 @[inline] def httpRequestBodyWrite (runtime : Runtime) (requestBody : HttpRequestBody)
     (bytes : ByteArray) : IO Unit := do
-  let promise ← runtime.httpRequestBodyWriteStart requestBody bytes
-  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeHttpRequestBodyWriteRefImpl runtime.handle requestBody.handle bytesRef
+
+@[inline] def httpRequestBodyWriteRef (runtime : Runtime) (requestBody : HttpRequestBody)
+    (bytes : BytesRef) : IO Unit := do
+  ensureSameRuntime runtime requestBody.runtime "HttpRequestBody"
+  ffiRuntimeHttpRequestBodyWriteRefImpl runtime.handle requestBody.handle bytes
 
 @[inline] def httpRequestBodyFinishStart (runtime : Runtime) (requestBody : HttpRequestBody) :
     IO PromiseRef := do
@@ -1964,7 +2017,14 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpResponseBodyRead (runtime : Runtime) (responseBody : HttpResponseBody)
     (minBytes maxBytes : UInt32) : IO ByteArray := do
   ensureSameRuntime runtime responseBody.runtime "HttpResponseBody"
-  ffiRuntimeHttpResponseBodyReadImpl runtime.handle responseBody.handle minBytes maxBytes
+  let bytesRef ← ffiRuntimeHttpResponseBodyReadRefImpl
+    runtime.handle responseBody.handle minBytes maxBytes
+  BytesRef.toByteArray bytesRef
+
+@[inline] def httpResponseBodyReadRef (runtime : Runtime) (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : IO BytesRef := do
+  ensureSameRuntime runtime responseBody.runtime "HttpResponseBody"
+  ffiRuntimeHttpResponseBodyReadRefImpl runtime.handle responseBody.handle minBytes maxBytes
 
 @[inline] def httpResponseBodyRelease (runtime : Runtime) (responseBody : HttpResponseBody) :
     IO Unit := do
@@ -1985,7 +2045,15 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO ByteArray := do
   ensureSameRuntime runtime requestBody.runtime "HttpServerRequestBody"
-  ffiRuntimeHttpServerRequestBodyReadImpl runtime.handle requestBody.handle minBytes maxBytes
+  let bytesRef ← ffiRuntimeHttpServerRequestBodyReadRefImpl
+    runtime.handle requestBody.handle minBytes maxBytes
+  BytesRef.toByteArray bytesRef
+
+@[inline] def httpServerRequestBodyReadRef (runtime : Runtime)
+    (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO BytesRef := do
+  ensureSameRuntime runtime requestBody.runtime "HttpServerRequestBody"
+  ffiRuntimeHttpServerRequestBodyReadRefImpl runtime.handle requestBody.handle minBytes maxBytes
 
 @[inline] def httpServerRequestBodyRelease (runtime : Runtime)
     (requestBody : HttpServerRequestBody) : IO Unit := do
@@ -2101,16 +2169,32 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def httpServerResponseBodyWriteStart (runtime : Runtime)
     (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO PromiseRef := do
   ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := runtime
-    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartImpl runtime.handle
+    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartRefImpl runtime.handle
+      responseBody.handle bytesRef)
+  }
+
+@[inline] def httpServerResponseBodyWriteStartRef (runtime : Runtime)
+    (responseBody : HttpServerResponseBody) (bytes : BytesRef) : IO PromiseRef := do
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartRefImpl runtime.handle
       responseBody.handle bytes)
   }
 
 @[inline] def httpServerResponseBodyWrite (runtime : Runtime)
     (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO Unit := do
-  let promise ← runtime.httpServerResponseBodyWriteStart responseBody bytes
-  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeHttpServerResponseBodyWriteRefImpl runtime.handle responseBody.handle bytesRef
+
+@[inline] def httpServerResponseBodyWriteRef (runtime : Runtime)
+    (responseBody : HttpServerResponseBody) (bytes : BytesRef) : IO Unit := do
+  ensureSameRuntime runtime responseBody.runtime "HttpServerResponseBody"
+  ffiRuntimeHttpServerResponseBodyWriteRefImpl runtime.handle responseBody.handle bytes
 
 @[inline] def httpServerResponseBodyFinishStart (runtime : Runtime)
     (responseBody : HttpServerResponseBody) : IO PromiseRef := do
@@ -2307,15 +2391,30 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 @[inline] def webSocketSendBinaryStart (runtime : Runtime) (webSocket : WebSocket)
     (bytes : ByteArray) : IO PromiseRef := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := runtime
-    handle := (← ffiRuntimeWebSocketSendBinaryStartImpl runtime.handle webSocket.handle bytes)
+    handle := (← ffiRuntimeWebSocketSendBinaryStartRefImpl runtime.handle webSocket.handle bytesRef)
+  }
+
+@[inline] def webSocketSendBinaryStartRef (runtime : Runtime) (webSocket : WebSocket)
+    (bytes : BytesRef) : IO PromiseRef := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWebSocketSendBinaryStartRefImpl runtime.handle webSocket.handle bytes)
   }
 
 @[inline] def webSocketSendBinary (runtime : Runtime) (webSocket : WebSocket) (bytes : ByteArray) :
     IO Unit := do
-  let promise ← runtime.webSocketSendBinaryStart webSocket bytes
-  ffiRuntimePromiseAwaitImpl runtime.handle promise.handle
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeWebSocketSendBinaryRefImpl runtime.handle webSocket.handle bytesRef
+
+@[inline] def webSocketSendBinaryRef (runtime : Runtime) (webSocket : WebSocket)
+    (bytes : BytesRef) : IO Unit := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
+  ffiRuntimeWebSocketSendBinaryRefImpl runtime.handle webSocket.handle bytes
 
 @[inline] def webSocketReceiveStart (runtime : Runtime) (webSocket : WebSocket) :
     IO WebSocketMessagePromiseRef := do
@@ -2338,8 +2437,8 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
   ensureSameRuntime runtime promise.runtime "WebSocketMessagePromiseRef"
   let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketMessagePromiseAwaitImpl runtime.handle promise.handle
-  decodeWebSocketMessage tag closeCode text bytes
+    ffiRuntimeWebSocketMessagePromiseAwaitRefImpl runtime.handle promise.handle
+  decodeWebSocketMessageRef tag closeCode text bytes
 
 @[inline] def webSocketMessagePromiseCancel (runtime : Runtime)
     (promise : WebSocketMessagePromiseRef) : IO Unit := do
@@ -2359,8 +2458,8 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (maxBytes : UInt32) : IO WebSocketMessage := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
   let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketReceiveWithMaxImpl runtime.handle webSocket.handle maxBytes
-  decodeWebSocketMessage tag closeCode text bytes
+    ffiRuntimeWebSocketReceiveWithMaxRefImpl runtime.handle webSocket.handle maxBytes
+  decodeWebSocketMessageRef tag closeCode text bytes
 
 @[inline] def webSocketCloseStartCode (runtime : Runtime) (webSocket : WebSocket)
     (code : UInt32) (reason : String := "") : IO PromiseRef := do
@@ -2618,8 +2717,8 @@ namespace WebSocketMessagePromiseRef
 
 @[inline] def await (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
   let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketMessagePromiseAwaitImpl promise.runtime.handle promise.handle
-  decodeWebSocketMessage tag closeCode text bytes
+    ffiRuntimeWebSocketMessagePromiseAwaitRefImpl promise.runtime.handle promise.handle
+  decodeWebSocketMessageRef tag closeCode text bytes
 
 @[inline] def cancel (promise : WebSocketMessagePromiseRef) : IO Unit :=
   ffiRuntimeWebSocketMessagePromiseCancelImpl promise.runtime.handle promise.handle
@@ -3023,19 +3122,40 @@ namespace DatagramPort
 
 @[inline] def send (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 :=
-  ffiRuntimeDatagramSendImpl port.runtime.handle port.handle address portHint bytes
+  do
+    let bytesRef ← BytesRef.ofByteArray bytes
+    ffiRuntimeDatagramSendRefImpl port.runtime.handle port.handle address portHint bytesRef
+
+@[inline] def sendRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32 :=
+  ffiRuntimeDatagramSendRefImpl port.runtime.handle port.handle address portHint bytes
 
 @[inline] def sendStart (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32PromiseRef := do
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := port.runtime
-    handle := (← ffiRuntimeDatagramSendStartImpl
+    handle := (← ffiRuntimeDatagramSendStartRefImpl
+      port.runtime.handle port.handle address portHint bytesRef)
+  }
+
+@[inline] def sendStartRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32PromiseRef := do
+  return {
+    runtime := port.runtime
+    handle := (← ffiRuntimeDatagramSendStartRefImpl
       port.runtime.handle port.handle address portHint bytes)
   }
 
 @[inline] def receive (port : DatagramPort)
-    (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) :=
-  ffiRuntimeDatagramReceiveImpl port.runtime.handle port.handle maxBytes
+    (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) := do
+  let (source, bytesRef) ← ffiRuntimeDatagramReceiveRefImpl
+    port.runtime.handle port.handle maxBytes
+  pure (source, ← BytesRef.toByteArray bytesRef)
+
+@[inline] def receiveRef (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) : IO (String × BytesRef) :=
+  ffiRuntimeDatagramReceiveRefImpl port.runtime.handle port.handle maxBytes
 
 @[inline] def receiveStart (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : IO DatagramReceivePromiseRef := do
@@ -3059,7 +3179,9 @@ namespace DatagramPort
     IO (Task (Except IO.Error (String × ByteArray))) := do
   let promise ← port.receiveStart maxBytes
   IO.asTask do
-    ffiRuntimeDatagramReceivePromiseAwaitImpl port.runtime.handle promise.handle
+    let (source, bytesRef) ← ffiRuntimeDatagramReceivePromiseAwaitRefImpl
+      port.runtime.handle promise.handle
+    pure (source, ← BytesRef.toByteArray bytesRef)
 
 @[inline] def receiveAsPromise (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
     IO (Capnp.Async.Promise (String × ByteArray)) := do
@@ -3092,8 +3214,14 @@ namespace DatagramPeer
 @[inline] def send (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32 :=
   peer.port.send peer.remoteAddress bytes peer.remotePort
 
+@[inline] def sendRef (peer : DatagramPeer) (bytes : BytesRef) : IO UInt32 :=
+  peer.port.sendRef peer.remoteAddress bytes peer.remotePort
+
 @[inline] def sendStart (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32PromiseRef :=
   peer.port.sendStart peer.remoteAddress bytes peer.remotePort
+
+@[inline] def sendStartRef (peer : DatagramPeer) (bytes : BytesRef) : IO UInt32PromiseRef :=
+  peer.port.sendStartRef peer.remoteAddress bytes peer.remotePort
 
 @[inline] def sendAsTask (peer : DatagramPeer) (bytes : ByteArray) :
     IO (Task (Except IO.Error UInt32)) := do
@@ -3134,8 +3262,13 @@ end DatagramPeer
 
 namespace DatagramReceivePromiseRef
 
-@[inline] def await (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) :=
-  ffiRuntimeDatagramReceivePromiseAwaitImpl promise.runtime.handle promise.handle
+@[inline] def await (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
+  let (source, bytesRef) ← ffiRuntimeDatagramReceivePromiseAwaitRefImpl
+    promise.runtime.handle promise.handle
+  pure (source, ← BytesRef.toByteArray bytesRef)
+
+@[inline] def awaitRef (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) :=
+  ffiRuntimeDatagramReceivePromiseAwaitRefImpl promise.runtime.handle promise.handle
 
 @[inline] def cancel (promise : DatagramReceivePromiseRef) : IO Unit :=
   ffiRuntimeDatagramReceivePromiseCancelImpl promise.runtime.handle promise.handle
@@ -3242,9 +3375,17 @@ end HttpServer
 namespace HttpRequestBody
 
 @[inline] def writeStart (requestBody : HttpRequestBody) (bytes : ByteArray) : IO PromiseRef := do
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := requestBody.runtime
-    handle := (← ffiRuntimeHttpRequestBodyWriteStartImpl
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartRefImpl
+      requestBody.runtime.handle requestBody.handle bytesRef)
+  }
+
+@[inline] def writeStartRef (requestBody : HttpRequestBody) (bytes : BytesRef) : IO PromiseRef := do
+  return {
+    runtime := requestBody.runtime
+    handle := (← ffiRuntimeHttpRequestBodyWriteStartRefImpl
       requestBody.runtime.handle requestBody.handle bytes)
   }
 
@@ -3258,8 +3399,11 @@ namespace HttpRequestBody
   pure (Capnp.Async.Promise.ofTask (← requestBody.writeAsTask bytes))
 
 @[inline] def write (requestBody : HttpRequestBody) (bytes : ByteArray) : IO Unit := do
-  let promise ← requestBody.writeStart bytes
-  promise.await
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeHttpRequestBodyWriteRefImpl requestBody.runtime.handle requestBody.handle bytesRef
+
+@[inline] def writeRef (requestBody : HttpRequestBody) (bytes : BytesRef) : IO Unit :=
+  ffiRuntimeHttpRequestBodyWriteRefImpl requestBody.runtime.handle requestBody.handle bytes
 
 @[inline] def finishStart (requestBody : HttpRequestBody) : IO PromiseRef := do
   return {
@@ -3306,8 +3450,14 @@ namespace HttpResponseBody
   pure (Capnp.Async.Promise.ofTask (← responseBody.readAsTask minBytes maxBytes))
 
 @[inline] def read (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
-    IO ByteArray :=
-  ffiRuntimeHttpResponseBodyReadImpl responseBody.runtime.handle responseBody.handle
+    IO ByteArray := do
+  let bytesRef ← ffiRuntimeHttpResponseBodyReadRefImpl
+    responseBody.runtime.handle responseBody.handle minBytes maxBytes
+  BytesRef.toByteArray bytesRef
+
+@[inline] def readRef (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO BytesRef :=
+  ffiRuntimeHttpResponseBodyReadRefImpl responseBody.runtime.handle responseBody.handle
     minBytes maxBytes
 
 @[inline] def release (responseBody : HttpResponseBody) : IO Unit :=
@@ -3335,8 +3485,14 @@ namespace HttpServerRequestBody
   pure (Capnp.Async.Promise.ofTask (← requestBody.readAsTask minBytes maxBytes))
 
 @[inline] def read (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
-    IO ByteArray :=
-  ffiRuntimeHttpServerRequestBodyReadImpl requestBody.runtime.handle requestBody.handle
+    IO ByteArray := do
+  let bytesRef ← ffiRuntimeHttpServerRequestBodyReadRefImpl
+    requestBody.runtime.handle requestBody.handle minBytes maxBytes
+  BytesRef.toByteArray bytesRef
+
+@[inline] def readRef (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO BytesRef :=
+  ffiRuntimeHttpServerRequestBodyReadRefImpl requestBody.runtime.handle requestBody.handle
     minBytes maxBytes
 
 @[inline] def release (requestBody : HttpServerRequestBody) : IO Unit :=
@@ -3348,9 +3504,18 @@ namespace HttpServerResponseBody
 
 @[inline] def writeStart (responseBody : HttpServerResponseBody) (bytes : ByteArray) :
     IO PromiseRef := do
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := responseBody.runtime
-    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartImpl responseBody.runtime.handle
+    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartRefImpl responseBody.runtime.handle
+      responseBody.handle bytesRef)
+  }
+
+@[inline] def writeStartRef (responseBody : HttpServerResponseBody) (bytes : BytesRef) :
+    IO PromiseRef := do
+  return {
+    runtime := responseBody.runtime
+    handle := (← ffiRuntimeHttpServerResponseBodyWriteStartRefImpl responseBody.runtime.handle
       responseBody.handle bytes)
   }
 
@@ -3364,8 +3529,13 @@ namespace HttpServerResponseBody
   pure (Capnp.Async.Promise.ofTask (← responseBody.writeAsTask bytes))
 
 @[inline] def write (responseBody : HttpServerResponseBody) (bytes : ByteArray) : IO Unit := do
-  let promise ← responseBody.writeStart bytes
-  promise.await
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeHttpServerResponseBodyWriteRefImpl
+    responseBody.runtime.handle responseBody.handle bytesRef
+
+@[inline] def writeRef (responseBody : HttpServerResponseBody) (bytes : BytesRef) : IO Unit :=
+  ffiRuntimeHttpServerResponseBodyWriteRefImpl
+    responseBody.runtime.handle responseBody.handle bytes
 
 @[inline] def finishStart (responseBody : HttpServerResponseBody) : IO PromiseRef := do
   return {
@@ -3418,9 +3588,17 @@ namespace WebSocket
   promise.await
 
 @[inline] def sendBinaryStart (webSocket : WebSocket) (bytes : ByteArray) : IO PromiseRef := do
+  let bytesRef ← BytesRef.ofByteArray bytes
   return {
     runtime := webSocket.runtime
-    handle := (← ffiRuntimeWebSocketSendBinaryStartImpl
+    handle := (← ffiRuntimeWebSocketSendBinaryStartRefImpl
+      webSocket.runtime.handle webSocket.handle bytesRef)
+  }
+
+@[inline] def sendBinaryStartRef (webSocket : WebSocket) (bytes : BytesRef) : IO PromiseRef := do
+  return {
+    runtime := webSocket.runtime
+    handle := (← ffiRuntimeWebSocketSendBinaryStartRefImpl
       webSocket.runtime.handle webSocket.handle bytes)
   }
 
@@ -3434,8 +3612,11 @@ namespace WebSocket
   pure (Capnp.Async.Promise.ofTask (← webSocket.sendBinaryAsTask bytes))
 
 @[inline] def sendBinary (webSocket : WebSocket) (bytes : ByteArray) : IO Unit := do
-  let promise ← webSocket.sendBinaryStart bytes
-  promise.await
+  let bytesRef ← BytesRef.ofByteArray bytes
+  ffiRuntimeWebSocketSendBinaryRefImpl webSocket.runtime.handle webSocket.handle bytesRef
+
+@[inline] def sendBinaryRef (webSocket : WebSocket) (bytes : BytesRef) : IO Unit :=
+  ffiRuntimeWebSocketSendBinaryRefImpl webSocket.runtime.handle webSocket.handle bytes
 
 @[inline] def receiveStart (webSocket : WebSocket) : IO WebSocketMessagePromiseRef := do
   return {
@@ -3472,14 +3653,14 @@ namespace WebSocket
 @[inline] def receive (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← webSocket.receiveStart
   let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketMessagePromiseAwaitImpl webSocket.runtime.handle promise.handle
-  decodeWebSocketMessage tag closeCode text bytes
+    ffiRuntimeWebSocketMessagePromiseAwaitRefImpl webSocket.runtime.handle promise.handle
+  decodeWebSocketMessageRef tag closeCode text bytes
 
 @[inline] def receiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     IO WebSocketMessage := do
   let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketReceiveWithMaxImpl webSocket.runtime.handle webSocket.handle maxBytes
-  decodeWebSocketMessage tag closeCode text bytes
+    ffiRuntimeWebSocketReceiveWithMaxRefImpl webSocket.runtime.handle webSocket.handle maxBytes
+  decodeWebSocketMessageRef tag closeCode text bytes
 
 @[inline] def closeStartCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : IO PromiseRef := do

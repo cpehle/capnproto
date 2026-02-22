@@ -1327,6 +1327,54 @@ def testKjAsyncBytesRefConnectionPrimitives : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncBytesRefDatagramAndWebSocketPrimitives : IO Unit := do
+  let senderRuntime ← Capnp.KjAsync.Runtime.init
+  let receiverRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let receiverEndpoint := Capnp.KjAsync.Endpoint.tcp "127.0.0.1" 0
+    let senderEndpoint := Capnp.KjAsync.Endpoint.tcp "127.0.0.1" 0
+    let receiverPort ← receiverRuntime.datagramBindEndpoint receiverEndpoint
+    let receiverPortNumber ← receiverPort.getPort
+    let senderPort ← senderRuntime.datagramBindEndpoint senderEndpoint
+
+    let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 31))
+    let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+    let receivePromise ← receiverRuntime.datagramReceiveStart receiverPort (UInt32.ofNat 1024)
+    let sentCount ← senderRuntime.datagramSendRef senderPort "127.0.0.1" payloadRef receiverPortNumber
+    assertEqual sentCount (UInt32.ofNat payload.size)
+
+    let (_source, receivedRef) ← receiverRuntime.datagramReceivePromiseAwaitRef receivePromise
+    let received ← Capnp.KjAsync.BytesRef.toByteArray receivedRef
+    assertEqual received payload
+
+    senderPort.release
+    receiverPort.release
+  finally
+    senderRuntime.shutdown
+    receiverRuntime.shutdown
+
+  let wsRuntime ← Capnp.KjAsync.Runtime.init
+  try
+    let (left, right) ← wsRuntime.newWebSocketPipe
+    let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 47))
+    let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+
+    let receivePromise ← right.receiveStart
+    let sendPromise ← left.sendBinaryStartRef payloadRef
+    sendPromise.await
+
+    match (← receivePromise.await) with
+    | .binary bytes =>
+      assertEqual bytes payload
+    | _ =>
+      throw (IO.userError "expected binary websocket payload from sendBinaryStartRef")
+
+    left.release
+    right.release
+  finally
+    wsRuntime.shutdown
+
+@[test]
 def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
