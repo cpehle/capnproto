@@ -5348,6 +5348,58 @@ def testRuntimePendingCallSharedAsyncHelpers : IO Unit := do
     | .error err =>
         throw (IO.userError s!"pending call toPromise failed: {err}")
 
+    let pending3 ← runtime.startCall target Echo.fooMethod payload
+    let pendingOutcomeTask ← pending3.awaitOutcomeAsTask
+    match (← IO.wait pendingOutcomeTask) with
+    | .ok (.ok _responseBytes _responseCaps) => pure ()
+    | .ok (.error ex) =>
+        throw (IO.userError s!"pending call awaitOutcomeAsTask returned error outcome: {ex.description}")
+    | .error err =>
+        throw (IO.userError s!"pending call awaitOutcomeAsTask failed: {err}")
+
+    let pending4 ← runtime.startCall target Echo.fooMethod payload
+    let pendingResultTask ← pending4.awaitResultAsTask
+    match (← IO.wait pendingResultTask) with
+    | .ok (.ok rsp) =>
+        assertEqual rsp.capTable.caps.size 0
+    | .ok (.error ex) =>
+        throw (IO.userError s!"pending call awaitResultAsTask returned error outcome: {ex.description}")
+    | .error err =>
+        throw (IO.userError s!"pending call awaitResultAsTask failed: {err}")
+
+    let pending5 ← runtime.startCall target Echo.fooMethod payload
+    let pendingOutcomePromise ← pending5.toPromiseOutcome
+    match (← pendingOutcomePromise.awaitResult) with
+    | .ok (.ok _responseBytes _responseCaps) => pure ()
+    | .ok (.error ex) =>
+        throw (IO.userError s!"pending call toPromiseOutcome returned error outcome: {ex.description}")
+    | .error err =>
+        throw (IO.userError s!"pending call toPromiseOutcome failed: {err}")
+
+    let pending6 ← runtime.startCall target Echo.fooMethod payload
+    let pendingResultPromise ← pending6.toPromiseResult
+    match (← pendingResultPromise.awaitResult) with
+    | .ok (.ok rsp) =>
+        assertEqual rsp.capTable.caps.size 0
+    | .ok (.error ex) =>
+        throw (IO.userError s!"pending call toPromiseResult returned error outcome: {ex.description}")
+    | .error err =>
+        throw (IO.userError s!"pending call toPromiseResult failed: {err}")
+
+    let failingTarget ← runtime.registerHandlerTarget (fun _ _ _ => do
+      throw (IO.userError "pending-call typed promise failure"))
+    let pendingFail ← runtime.startCall failingTarget Echo.fooMethod payload
+    let pendingFailPromise ← pendingFail.toPromiseResult
+    match (← pendingFailPromise.awaitResult) with
+    | .ok (.error ex) =>
+        assertTrue (ex.description.length > 0)
+          "pending call toPromiseResult error should carry a non-empty remote exception description"
+    | .ok (.ok _rsp) =>
+        throw (IO.userError "pending call toPromiseResult should have returned an error outcome")
+    | .error err =>
+        throw (IO.userError s!"pending call toPromiseResult failure-path helper failed: {err}")
+    runtime.releaseTarget failingTarget
+
     runtime.releaseTarget target
   finally
     runtime.shutdown

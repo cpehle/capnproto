@@ -2030,9 +2030,27 @@ instance : Capnp.Async.Releasable RuntimePendingCallRef where
     IO (Task (Except IO.Error Payload)) :=
   Capnp.Async.awaitAsTask pendingCall
 
+@[inline] def awaitOutcomeAsTask (pendingCall : RuntimePendingCallRef) :
+    IO (Task (Except IO.Error RawCallOutcome)) :=
+  IO.asTask do
+    pendingCall.awaitOutcome
+
+@[inline] def awaitResultAsTask (pendingCall : RuntimePendingCallRef) :
+    IO (Task (Except IO.Error (Except RemoteException Payload))) :=
+  IO.asTask do
+    pendingCall.awaitResult
+
 @[inline] def toPromise (pendingCall : RuntimePendingCallRef) :
     IO (Capnp.Async.Promise Payload) := do
   pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitAsTask))
+
+@[inline] def toPromiseOutcome (pendingCall : RuntimePendingCallRef) :
+    IO (Capnp.Async.Promise RawCallOutcome) := do
+  pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitOutcomeAsTask))
+
+@[inline] def toPromiseResult (pendingCall : RuntimePendingCallRef) :
+    IO (Capnp.Async.Promise (Except RemoteException Payload)) := do
+  pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitResultAsTask))
 
 def toIOPromise (pendingCall : RuntimePendingCallRef) :
     IO (IO.Promise (Except String Payload)) := do
@@ -2652,6 +2670,26 @@ namespace RuntimeM
     RuntimeM (Except RemoteException Payload) := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallAwaitResult pendingCall
+
+@[inline] def pendingCallAwaitOutcomeAsTask (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Task (Except IO.Error RawCallOutcome)) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.awaitOutcomeAsTask
+
+@[inline] def pendingCallAwaitResultAsTask (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Task (Except IO.Error (Except RemoteException Payload))) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.awaitResultAsTask
+
+@[inline] def pendingCallToPromiseOutcome (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Capnp.Async.Promise RawCallOutcome) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.toPromiseOutcome
+
+@[inline] def pendingCallToPromiseResult (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Capnp.Async.Promise (Except RemoteException Payload)) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.toPromiseResult
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Unit := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
