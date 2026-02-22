@@ -2938,6 +2938,44 @@ capnp_lean_rpc_runtime_multivat_connection_resolve_disembargo_counts(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_rpc_runtime_multivat_connection_resolve_disembargo_trace(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion =
+        rpc::enqueueMultiVatConnectionResolveDisembargoTrace(*runtime, fromPeerId, toPeerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return lean_io_result_mk_ok(mkByteArrayCopy(completion->value.data(), completion->value.size()));
+    }
+  } catch (...) {
+    return mkIoUserError("unknown exception in multiVatConnectionResolveDisembargoTrace");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_rpc_runtime_multivat_connection_reset_resolve_disembargo_trace(
+    uint64_t runtimeId, uint32_t fromPeerId, uint32_t toPeerId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) return mkIoUserError("Capnp.Rpc runtime handle is invalid");
+  try {
+    auto completion = rpc::enqueueMultiVatConnectionResetResolveDisembargoTrace(
+        *runtime, fromPeerId, toPeerId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) return mkIoUserError(completion->error);
+      return mkIoOkUnit();
+    }
+  } catch (...) {
+    return mkIoUserError("unknown exception in multiVatConnectionResetResolveDisembargoTrace");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_multivat_get_diagnostics(
     uint64_t runtimeId, uint32_t peerId, b_lean_obj_arg targetVatId) {
   auto runtime = getRuntime(runtimeId);

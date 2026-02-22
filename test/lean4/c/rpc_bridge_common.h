@@ -45,6 +45,7 @@ std::string describeKjException(const kj::Exception& e);
 uint32_t readUint32Le(const uint8_t* data);
 uint16_t readUint16Le(const uint8_t* data);
 uint64_t readUint64Le(const uint8_t* data);
+void appendUint16Le(std::vector<uint8_t>& out, uint16_t value);
 void appendUint32Le(std::vector<uint8_t>& out, uint32_t value);
 void appendUint64Le(std::vector<uint8_t>& out, uint64_t value);
 
@@ -247,6 +248,15 @@ struct Int64Completion {
   int64_t value = 0;
 };
 
+struct ByteArrayCompletion {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  bool ok = false;
+  std::string error;
+  std::vector<uint8_t> value;
+};
+
 struct RegisterPairCompletion {
   std::mutex mutex;
   std::condition_variable cv;
@@ -318,6 +328,10 @@ void completeOptionalStringFailure(const std::shared_ptr<OptionalStringCompletio
                                    std::string message);
 void completeInt64Success(const std::shared_ptr<Int64Completion>& completion, int64_t value);
 void completeInt64Failure(const std::shared_ptr<Int64Completion>& completion, std::string message);
+void completeByteArraySuccess(const std::shared_ptr<ByteArrayCompletion>& completion,
+                              std::vector<uint8_t> value);
+void completeByteArrayFailure(const std::shared_ptr<ByteArrayCompletion>& completion,
+                              std::string message);
 void completeRegisterPairSuccess(const std::shared_ptr<RegisterPairCompletion>& completion, uint32_t first, uint32_t second);
 void completeRegisterPairFailure(const std::shared_ptr<RegisterPairCompletion>& completion, std::string message);
 void completeKjPromiseIdSuccess(const std::shared_ptr<KjPromiseIdCompletion>& completion, uint32_t promiseId);

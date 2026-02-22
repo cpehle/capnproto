@@ -6,6 +6,10 @@ import Capnp.Gen.test.lean4.fixtures.rpc_echo
 open LeanTest
 open Capnp.Gen.test.lean4.fixtures.rpc_echo
 
+private def countTraceTag (trace : Array Capnp.Rpc.ProtocolMessageTraceTag)
+    (tag : Capnp.Rpc.ProtocolMessageTraceTag) : Nat :=
+  trace.foldl (fun acc entry => if entry == tag then acc + 1 else acc) 0
+
 private def registerEchoFooCallOrderTarget (runtime : Capnp.Rpc.Runtime) :
     IO (Capnp.Rpc.Client × IO UInt64) := do
   let nextExpected ← IO.mkRef (UInt64.ofNat 0)
@@ -138,6 +142,9 @@ def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
       let bob ← vatNetwork.newServer "bob-protocol-counts" bobBootstrap
       let aliceToBob ← alice.bootstrapPeer bob
 
+      alice.resetResolveDisembargoTraceTo bob
+      bob.resetResolveDisembargoTraceTo alice
+
       let pending ← runtime.startCall aliceToBob Echo.fooMethod payload
       let pipelineCap ← pending.getPipelinedCap
       let call0Pending ← runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
@@ -172,9 +179,28 @@ def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
       let countsAliceToBob ← alice.resolveDisembargoCountsTo bob
       let countsBobToAlice ← bob.resolveDisembargoCountsTo alice
       let totalResolve := countsAliceToBob.resolveCount + countsBobToAlice.resolveCount
+      let totalDisembargo := countsAliceToBob.disembargoCount + countsBobToAlice.disembargoCount
       if totalResolve == 0 then
         throw (IO.userError
           s!"expected at least one Resolve message, got alice->bob={repr countsAliceToBob}, bob->alice={repr countsBobToAlice}")
+
+      let traceAliceToBob ← alice.resolveDisembargoTraceTo bob
+      let traceBobToAlice ← bob.resolveDisembargoTraceTo alice
+      let traceResolveCount :=
+        UInt64.ofNat
+          ((countTraceTag traceAliceToBob .resolve) + (countTraceTag traceBobToAlice .resolve))
+      let traceDisembargoCount :=
+        UInt64.ofNat
+          ((countTraceTag traceAliceToBob .disembargo) + (countTraceTag traceBobToAlice .disembargo))
+      assertEqual traceResolveCount totalResolve
+      assertEqual traceDisembargoCount totalDisembargo
+
+      alice.resetResolveDisembargoTraceTo bob
+      bob.resetResolveDisembargoTraceTo alice
+      assertTrue (← alice.resolveDisembargoTraceTo bob).isEmpty
+        "expected empty resolve/disembargo trace after reset (alice -> bob)"
+      assertTrue (← bob.resolveDisembargoTraceTo alice).isEmpty
+        "expected empty resolve/disembargo trace after reset (bob -> alice)"
 
       runtime.releaseTarget pipelineCap
       runtime.releaseTarget aliceToBob

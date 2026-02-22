@@ -91,6 +91,28 @@ structure ProtocolMessageCounts where
   disembargoCount : UInt64
   deriving Inhabited, BEq, Repr
 
+inductive ProtocolMessageTraceTag where
+  | resolve
+  | disembargo
+  | unknown (raw : UInt16)
+  deriving Inhabited, BEq, Repr
+
+@[inline] def ProtocolMessageTraceTag.toUInt16 : ProtocolMessageTraceTag -> UInt16
+  | .resolve => 1
+  | .disembargo => 2
+  | .unknown raw => raw
+
+@[inline] def ProtocolMessageTraceTag.ofUInt16 : UInt16 -> ProtocolMessageTraceTag
+  | 1 => .resolve
+  | 2 => .disembargo
+  | raw => .unknown raw
+
+instance : ToString ProtocolMessageTraceTag where
+  toString
+    | .resolve => "resolve"
+    | .disembargo => "disembargo"
+    | .unknown raw => s!"unknown({raw})"
+
 @[inline] def Client.ofCapability (cap : Capnp.Capability) : Client := cap
 
 @[inline] def Client.toCapability (client : Client) : Capnp.Capability := client
@@ -807,6 +829,14 @@ opaque ffiRuntimeMultiVatConnectionDisconnectImpl
 opaque ffiRuntimeMultiVatConnectionResolveDisembargoCountsImpl
     (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO ProtocolMessageCounts
 
+@[extern "capnp_lean_rpc_runtime_multivat_connection_resolve_disembargo_trace"]
+opaque ffiRuntimeMultiVatConnectionResolveDisembargoTraceImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO ByteArray
+
+@[extern "capnp_lean_rpc_runtime_multivat_connection_reset_resolve_disembargo_trace"]
+opaque ffiRuntimeMultiVatConnectionResetResolveDisembargoTraceImpl
+    (runtime : UInt64) (fromPeer : UInt32) (toPeer : UInt32) : IO Unit
+
 @[extern "capnp_lean_rpc_runtime_multivat_get_diagnostics"]
 opaque ffiRuntimeMultiVatGetDiagnosticsImpl
     (runtime : UInt64) (peerId : UInt32) (targetVatId : @& VatId) : IO RpcDiagnostics
@@ -912,6 +942,22 @@ namespace PipelinePath
     out := out.push op.toUInt8
     out := out.push (op >>> 8).toUInt8
   return out
+
+@[inline] def ofBytes (bytes : ByteArray) : Array UInt16 := Id.run do
+  let mut out : Array UInt16 := Array.emptyWithCapacity (bytes.size / 2)
+  let mut i := 0
+  while i + 2 ≤ bytes.size do
+    let lo := bytes.get! i |>.toUInt16
+    let hi := bytes.get! (i + 1) |>.toUInt16
+    out := out.push (lo + (hi <<< 8))
+    i := i + 2
+  return out
+
+@[inline] def ofBytesChecked (bytes : ByteArray) : Except String (Array UInt16) :=
+  if bytes.size % 2 != 0 then
+    Except.error "pipeline op payload must be a multiple of 2 bytes"
+  else
+    Except.ok (ofBytes bytes)
 
 end PipelinePath
 
@@ -1341,6 +1387,22 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ffiRuntimeMultiVatConnectionResolveDisembargoCountsImpl
     runtime.handle fromPeer.handle.raw toPeer.handle.raw
 
+@[inline] def multiVatConnectionResolveDisembargoTrace (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    IO (Array ProtocolMessageTraceTag) := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  let bytes ← ffiRuntimeMultiVatConnectionResolveDisembargoTraceImpl
+    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+  return (PipelinePath.ofBytes bytes).map ProtocolMessageTraceTag.ofUInt16
+
+@[inline] def multiVatConnectionResetResolveDisembargoTrace (runtime : Runtime)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
+  ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
+  ffiRuntimeMultiVatConnectionResetResolveDisembargoTraceImpl
+    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
   ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.raw
@@ -1757,6 +1819,14 @@ namespace RuntimeVatPeerRef
     (targetPeer : RuntimeVatPeerRef) : IO ProtocolMessageCounts :=
   Runtime.multiVatConnectionResolveDisembargoCounts peer.runtime peer targetPeer
 
+@[inline] def resolveDisembargoTraceTo (peer : RuntimeVatPeerRef)
+    (targetPeer : RuntimeVatPeerRef) : IO (Array ProtocolMessageTraceTag) :=
+  Runtime.multiVatConnectionResolveDisembargoTrace peer.runtime peer targetPeer
+
+@[inline] def resetResolveDisembargoTraceTo (peer : RuntimeVatPeerRef)
+    (targetPeer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.multiVatConnectionResetResolveDisembargoTrace peer.runtime peer targetPeer
+
 @[inline] def setRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
   Runtime.multiVatSetRestorer peer restorer
@@ -1863,6 +1933,19 @@ namespace VatNetwork
   ensurePeerRuntime network fromPeer "connectionResolveDisembargoCounts"
   ensurePeerRuntime network toPeer "connectionResolveDisembargoCounts"
   Runtime.multiVatConnectionResolveDisembargoCounts network.runtime fromPeer toPeer
+
+@[inline] def connectionResolveDisembargoTrace (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    IO (Array ProtocolMessageTraceTag) := do
+  ensurePeerRuntime network fromPeer "connectionResolveDisembargoTrace"
+  ensurePeerRuntime network toPeer "connectionResolveDisembargoTrace"
+  Runtime.multiVatConnectionResolveDisembargoTrace network.runtime fromPeer toPeer
+
+@[inline] def resetConnectionResolveDisembargoTrace (network : VatNetwork)
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network fromPeer "resetConnectionResolveDisembargoTrace"
+  ensurePeerRuntime network toPeer "resetConnectionResolveDisembargoTrace"
+  Runtime.multiVatConnectionResetResolveDisembargoTrace network.runtime fromPeer toPeer
 
 @[inline] def releasePeer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
   ensurePeerRuntime network peer "releasePeer"
@@ -2323,6 +2406,16 @@ namespace RuntimeM
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
     RuntimeM ProtocolMessageCounts := do
   Runtime.multiVatConnectionResolveDisembargoCounts (← runtime) fromPeer toPeer
+
+@[inline] def multiVatConnectionResolveDisembargoTrace
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    RuntimeM (Array ProtocolMessageTraceTag) := do
+  Runtime.multiVatConnectionResolveDisembargoTrace (← runtime) fromPeer toPeer
+
+@[inline] def multiVatConnectionResetResolveDisembargoTrace
+    (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
+    RuntimeM Unit := do
+  Runtime.multiVatConnectionResetResolveDisembargoTrace (← runtime) fromPeer toPeer
 
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : RuntimeM Unit := do

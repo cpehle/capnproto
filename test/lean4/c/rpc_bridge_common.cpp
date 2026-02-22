@@ -84,6 +84,11 @@ void appendUint32Le(std::vector<uint8_t>& out, uint32_t value) {
   out.push_back(static_cast<uint8_t>((value >> 24) & 0xff));
 }
 
+void appendUint16Le(std::vector<uint8_t>& out, uint16_t value) {
+  out.push_back(static_cast<uint8_t>(value & 0xff));
+  out.push_back(static_cast<uint8_t>((value >> 8) & 0xff));
+}
+
 void appendUint64Le(std::vector<uint8_t>& out, uint64_t value) {
   out.push_back(static_cast<uint8_t>(value & 0xff));
   out.push_back(static_cast<uint8_t>((value >> 8) & 0xff));
@@ -339,6 +344,28 @@ void completeInt64Success(const std::shared_ptr<Int64Completion>& completion, in
 
 void completeInt64Failure(const std::shared_ptr<Int64Completion>& completion,
                           std::string message) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = false;
+    completion->error = std::move(message);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeByteArraySuccess(const std::shared_ptr<ByteArrayCompletion>& completion,
+                              std::vector<uint8_t> value) {
+  {
+    std::lock_guard<std::mutex> lock(completion->mutex);
+    completion->ok = true;
+    completion->value = std::move(value);
+    completion->done = true;
+  }
+  completion->cv.notify_one();
+}
+
+void completeByteArrayFailure(const std::shared_ptr<ByteArrayCompletion>& completion,
+                              std::string message) {
   {
     std::lock_guard<std::mutex> lock(completion->mutex);
     completion->ok = false;

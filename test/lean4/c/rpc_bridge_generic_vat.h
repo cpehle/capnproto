@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <vector>
 
 namespace capnp_lean_rpc {
 
@@ -104,6 +105,8 @@ class GenericVat final : public GenericVatNetworkBase {
     void onSend(MessageHandler handler);
     ProtocolMessageCounts getProtocolMessageCounts() const { return protocolMessageCounts_; }
     void resetProtocolMessageCounts() { protocolMessageCounts_ = {}; }
+    std::vector<uint16_t> getProtocolMessageTrace() const { return protocolMessageTrace_; }
+    void resetProtocolMessageTrace() { protocolMessageTrace_.clear(); }
 
     GenericVatId::Reader getPeerVatId() override;
     kj::Own<capnp::OutgoingRpcMessage> newOutgoingMessage(unsigned int firstSegmentWordSize) override;
@@ -146,6 +149,7 @@ class GenericVat final : public GenericVatNetworkBase {
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> currentBlockFulfiller_;
     kj::Maybe<MessageHandler> onSendHandler_;
     ProtocolMessageCounts protocolMessageCounts_;
+    std::vector<uint16_t> protocolMessageTrace_;
 
     void recordProtocolMessage(::capnp::rpc::Message::Reader message);
   };

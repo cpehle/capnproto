@@ -135,9 +135,11 @@ void GenericVat::ConnectionImpl::recordProtocolMessage(::capnp::rpc::Message::Re
   switch (message.which()) {
     case ::capnp::rpc::Message::RESOLVE:
       ++protocolMessageCounts_.resolveCount;
+      protocolMessageTrace_.push_back(static_cast<uint16_t>(1));
       break;
     case ::capnp::rpc::Message::DISEMBARGO:
       ++protocolMessageCounts_.disembargoCount;
+      protocolMessageTrace_.push_back(static_cast<uint16_t>(2));
       break;
     default:
       break;
