@@ -37,7 +37,7 @@ using rpc::unregisterRuntime;
 namespace {
 
 lean_obj_res mkIoOkRawCallResult(const rpc::RawCallResult& result) {
-  auto responseObj = mkByteArrayCopy(result.response.data(), result.response.size());
+  auto responseObj = mkByteArrayCopy(result.responseData(), result.responseSize());
   auto responseCapsObj = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
   auto out = lean_alloc_ctor(0, 2, 0);
   lean_ctor_set(out, 0, responseObj);
@@ -94,7 +94,7 @@ lean_object* mkRemoteExceptionObj(const rpc::RawCallCompletion& completion) {
 
 lean_object* mkRawCallOutcomeOkObj(const rpc::RawCallResult& result) {
   // Mirror `Capnp.Rpc.RawCallOutcome.ok`.
-  auto responseObj = mkByteArrayCopy(result.response.data(), result.response.size());
+  auto responseObj = mkByteArrayCopy(result.responseData(), result.responseSize());
   auto responseCapsObj = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
   auto out = lean_alloc_ctor(0, 2, 0);
   lean_ctor_set(out, 0, responseObj);
@@ -131,9 +131,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_on_runtime(
       }
     }
 
-    const auto responseSize = completion->result.response.size();
-    const auto* responseData =
-        responseSize == 0 ? nullptr : completion->result.response.data();
+    const auto responseSize = completion->result.responseSize();
+    const auto* responseData = completion->result.responseData();
     return lean_io_result_mk_ok(mkByteArrayCopy(responseData, responseSize));
   } catch (const std::exception& e) {
     return mkIoUserError(e.what());
@@ -174,9 +173,8 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_raw_call_with_caps_on_runtime
     }
     debugLog("ffi.rawcall_with_caps.done", "ok");
 
-    const auto responseSize = completion->result.response.size();
-    const auto* responseData =
-        responseSize == 0 ? nullptr : completion->result.response.data();
+    const auto responseSize = completion->result.responseSize();
+    const auto* responseData = completion->result.responseData();
     const auto responseCapsSize = completion->result.responseCaps.size();
     const auto* responseCapsData =
         responseCapsSize == 0 ? nullptr : completion->result.responseCaps.data();

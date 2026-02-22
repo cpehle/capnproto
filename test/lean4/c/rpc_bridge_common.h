@@ -175,8 +175,17 @@ struct LeanAdvancedHandlerAction {
 
 // Completion structures used for synchronization between worker and Lean threads
 struct RawCallResult {
-  std::vector<uint8_t> response;
+  kj::Array<capnp::word> responseWords;
   std::vector<uint8_t> responseCaps;
+
+  inline kj::ArrayPtr<const kj::byte> responseBytes() const { return responseWords.asBytes(); }
+
+  inline size_t responseSize() const { return responseWords.asBytes().size(); }
+
+  inline const uint8_t* responseData() const {
+    auto bytes = responseWords.asBytes();
+    return bytes.size() == 0 ? nullptr : reinterpret_cast<const uint8_t*>(bytes.begin());
+  }
 };
 
 struct RawCallCompletion {

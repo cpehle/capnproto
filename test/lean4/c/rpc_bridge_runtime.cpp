@@ -88,8 +88,6 @@ class OneShotCaptureServer final : public capnp::Capability::Server {
         .setAs<capnp::AnyPointer>(context.getParams().getAs<capnp::AnyPointer>());
 
     auto requestWords = capnp::messageToFlatArray(requestMessage);
-    auto requestBytes = requestWords.asBytes();
-    std::vector<uint8_t> requestCopy(requestBytes.begin(), requestBytes.end());
 
     std::vector<uint8_t> requestCaps;
     auto requestCapEntries = requestCapTable.getTable();
@@ -103,7 +101,7 @@ class OneShotCaptureServer final : public capnp::Capability::Server {
       }
     }
 
-    RawCallResult captured{std::move(requestCopy), std::move(requestCaps)};
+    RawCallResult captured{std::move(requestWords), std::move(requestCaps)};
     auto fulfillCaptured = [&]() {
       if (!fulfilled_) {
         fulfiller_->fulfill(kj::mv(captured));
@@ -181,8 +179,6 @@ RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint
       .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
 
   auto responseWords = capnp::messageToFlatArray(responseMessage);
-  auto responseBytes = responseWords.asBytes();
-  std::vector<uint8_t> responseCopy(responseBytes.begin(), responseBytes.end());
 
   std::vector<uint8_t> responseCaps;
   auto responseCapEntries = responseCapTable.getTable();
@@ -196,7 +192,7 @@ RawCallResult cppCallOneShot(const std::string& address, uint32_t portHint, uint
     }
   }
 
-  return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+  return RawCallResult{std::move(responseWords), std::move(responseCaps)};
 }
 
 void setRequestPayloadNoCaps(capnp::Request<capnp::AnyPointer, capnp::AnyPointer>& requestBuilder,
@@ -228,8 +224,6 @@ RawCallResult serializeResponseNoCaps(capnp::Response<capnp::AnyPointer>& respon
       .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
 
   auto responseWords = capnp::messageToFlatArray(responseMessage);
-  auto responseBytes = responseWords.asBytes();
-  std::vector<uint8_t> responseCopy(responseBytes.begin(), responseBytes.end());
 
   std::vector<uint8_t> responseCaps;
   auto responseCapEntries = responseCapTable.getTable();
@@ -242,7 +236,7 @@ RawCallResult serializeResponseNoCaps(capnp::Response<capnp::AnyPointer>& respon
     }
   }
 
-  return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+  return RawCallResult{std::move(responseWords), std::move(responseCaps)};
 }
 
 RawCallResult cppCallPipelinedCapOneShot(const std::string& address, uint32_t portHint,
@@ -3982,7 +3976,8 @@ class RuntimeLoop {
         capnp::Response<capnp::AnyPointer>& response) {
       auto raw = runtime_.serializeResponse(response);
       runtime_.setContextResultsFromPayload(
-          context, raw.response, raw.responseCaps,
+          context, raw.responseData(), raw.responseSize(),
+          raw.responseCaps.data(), raw.responseCaps.size(),
           "unknown RPC response capability id from Lean advanced handler: ");
     }
 
@@ -4652,8 +4647,6 @@ class RuntimeLoop {
         .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
 
     auto responseWords = capnp::messageToFlatArray(responseMessage);
-    auto responseBytes = responseWords.asBytes();
-    std::vector<uint8_t> responseCopy(responseBytes.begin(), responseBytes.end());
 
     std::vector<uint8_t> responseCaps;
     auto responseCapTableEntries = responseCapTable.getTable();
@@ -4667,7 +4660,7 @@ class RuntimeLoop {
       }
     }
 
-    return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+    return RawCallResult{std::move(responseWords), std::move(responseCaps)};
   }
 
   uint32_t startPendingCall(uint32_t target, uint64_t interfaceId, uint16_t methodId,
@@ -4954,7 +4947,7 @@ class RuntimeLoop {
 
     // Accept the incoming client connection and keep the server peer alive in runtime-owned state.
     networkServerPeers_.add(makeRuntimeServerPeerWithFds(*serverIt->second, kj::mv(connection)));
-    std::vector<uint8_t> responseCopy;
+    kj::Array<capnp::word> responseWords;
     std::vector<uint8_t> responseCaps;
     {
       auto network = kj::heap<capnp::TwoPartyVatNetwork>(
@@ -4981,9 +4974,7 @@ class RuntimeLoop {
           .imbue(responseMessage.getRoot<capnp::AnyPointer>())
           .setAs<capnp::AnyPointer>(response.getAs<capnp::AnyPointer>());
 
-      auto responseWords = capnp::messageToFlatArray(responseMessage);
-      auto responseBytes = responseWords.asBytes();
-      responseCopy.assign(responseBytes.begin(), responseBytes.end());
+      responseWords = capnp::messageToFlatArray(responseMessage);
 
       auto responseCapTableEntries = responseCapTable.getTable();
       responseCaps.reserve(responseCapTableEntries.size() * 4);
@@ -4996,7 +4987,7 @@ class RuntimeLoop {
         }
       }
     }
-    return RawCallResult{std::move(responseCopy), std::move(responseCaps)};
+    return RawCallResult{std::move(responseWords), std::move(responseCaps)};
   }
 
   RawCallResult processCppPipelinedCallWithAccept(
