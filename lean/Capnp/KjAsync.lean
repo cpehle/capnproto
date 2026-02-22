@@ -2976,6 +2976,10 @@ instance : Capnp.Async.Releasable PromiseRef where
 @[inline] def awaitAsTask (promise : PromiseRef) : IO (Task (Except IO.Error Unit)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def toPromise (promise : PromiseRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
 def toIOPromise (promise : PromiseRef) : IO (IO.Promise (Except String Unit)) := do
   Capnp.Async.toIOPromise promise
 
@@ -3036,6 +3040,19 @@ instance : Capnp.Async.Releasable HttpResponsePromiseRef where
     IO (Task (Except IO.Error HttpResponse)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def awaitRefAsTask (promise : HttpResponsePromiseRef) :
+    IO (Task (Except IO.Error HttpResponseRef)) :=
+  IO.asTask do
+    promise.awaitRef
+
+@[inline] def toPromise (promise : HttpResponsePromiseRef) :
+    IO (Capnp.Async.Promise HttpResponse) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
+@[inline] def toPromiseRef (promise : HttpResponsePromiseRef) :
+    IO (Capnp.Async.Promise HttpResponseRef) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
+
 def toIOPromise (promise : HttpResponsePromiseRef) :
     IO (IO.Promise (Except String HttpResponse)) := do
   Capnp.Async.toIOPromise promise
@@ -3072,6 +3089,10 @@ instance : Capnp.Async.Releasable WebSocketPromiseRef where
     IO (Task (Except IO.Error WebSocket)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def toPromise (promise : WebSocketPromiseRef) :
+    IO (Capnp.Async.Promise WebSocket) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
 def toIOPromise (promise : WebSocketPromiseRef) :
     IO (IO.Promise (Except String WebSocket)) := do
   Capnp.Async.toIOPromise promise
@@ -3106,6 +3127,10 @@ instance : Capnp.Async.Releasable WebSocketMessagePromiseRef where
 @[inline] def awaitAsTask (promise : WebSocketMessagePromiseRef) :
     IO (Task (Except IO.Error WebSocketMessage)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def toPromise (promise : WebSocketMessagePromiseRef) :
+    IO (Capnp.Async.Promise WebSocketMessage) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
 def toIOPromise (promise : WebSocketMessagePromiseRef) :
     IO (IO.Promise (Except String WebSocketMessage)) := do
@@ -3405,6 +3430,19 @@ instance : Capnp.Async.Releasable BytesPromiseRef where
     IO (Task (Except IO.Error ByteArray)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def awaitRefAsTask (promise : BytesPromiseRef) :
+    IO (Task (Except IO.Error BytesRef)) :=
+  IO.asTask do
+    promise.awaitRef
+
+@[inline] def toPromise (promise : BytesPromiseRef) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
+@[inline] def toPromiseRef (promise : BytesPromiseRef) :
+    IO (Capnp.Async.Promise BytesRef) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
+
 def toIOPromise (promise : BytesPromiseRef) :
     IO (IO.Promise (Except String ByteArray)) := do
   Capnp.Async.toIOPromise promise
@@ -3437,6 +3475,10 @@ instance : Capnp.Async.Releasable UInt32PromiseRef where
 @[inline] def awaitAsTask (promise : UInt32PromiseRef) :
     IO (Task (Except IO.Error UInt32)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def toPromise (promise : UInt32PromiseRef) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
 def toIOPromise (promise : UInt32PromiseRef) :
     IO (IO.Promise (Except String UInt32)) := do
@@ -3666,6 +3708,19 @@ instance : Capnp.Async.Releasable DatagramReceivePromiseRef where
 @[inline] def awaitAsTask (promise : DatagramReceivePromiseRef) :
     IO (Task (Except IO.Error (String × ByteArray))) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def awaitRefAsTask (promise : DatagramReceivePromiseRef) :
+    IO (Task (Except IO.Error (String × BytesRef))) :=
+  IO.asTask do
+    promise.awaitRef
+
+@[inline] def toPromise (promise : DatagramReceivePromiseRef) :
+    IO (Capnp.Async.Promise (String × ByteArray)) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
+
+@[inline] def toPromiseRef (promise : DatagramReceivePromiseRef) :
+    IO (Capnp.Async.Promise (String × BytesRef)) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
 
 def toIOPromise (promise : DatagramReceivePromiseRef) :
     IO (IO.Promise (Except String (String × ByteArray))) := do

@@ -1237,6 +1237,75 @@ def testKjAsyncPromiseRefFlowHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncTypedPromiseHelpersConnectionAndDatagram : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let unitPromiseRef ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let unitPromise ← unitPromiseRef.toPromise
+    let _ ← unitPromise.await
+
+    let (left, right) ← runtime.newTwoWayPipe
+    let payload := mkPayload
+    let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+
+    let writePendingRef ← left.writeStartRef payloadRef
+    let writePromise ← writePendingRef.toPromise
+    let readPendingRef ← right.readStart (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+    let readPromiseRef ← readPendingRef.toPromiseRef
+    let _ ← writePromise.await
+    let readRef ← readPromiseRef.await
+    assertEqual (← readRef.toByteArray) payload
+
+    let writePendingCopy ← left.writeStartRef payloadRef
+    let writePromiseCopy ← writePendingCopy.toPromise
+    let readPendingCopy ← right.readStart (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+    let readPromiseCopy ← readPendingCopy.toPromise
+    let _ ← writePromiseCopy.await
+    let readCopy ← readPromiseCopy.await
+    assertEqual readCopy payload
+
+    let receiverPort ← runtime.datagramBind "127.0.0.1" 0
+    let senderPort ← runtime.datagramBind "127.0.0.1" 0
+    let receiverPortNumber ← receiverPort.getPort
+    let receivePending ← receiverPort.receiveStart (UInt32.ofNat 4096)
+    let receivePromiseRef ← receivePending.toPromiseRef
+    let sendPending ← senderPort.sendStartRef "127.0.0.1" payloadRef receiverPortNumber
+    let sendPromise ← sendPending.toPromise
+    let sentCount ← sendPromise.await
+    assertEqual sentCount (UInt32.ofNat payload.size)
+    let (_source, receivedRef) ← receivePromiseRef.await
+    assertEqual (← receivedRef.toByteArray) payload
+
+    left.release
+    right.release
+    receiverPort.release
+    senderPort.release
+  finally
+    runtime.shutdown
+
+@[test]
+def testKjAsyncTypedPromiseHelpersHttpResponseRef : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    let payload := mkPayload
+    let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+    let responsePending ←
+      runtime.httpRequestStartRef .post "127.0.0.1" "/typed-promise-ref" requestBodyRef server.boundPort
+    let request ← waitForHttpServerRequest runtime server
+    assertEqual request.path "/typed-promise-ref"
+    assertEqual request.body payload
+    runtime.httpServerRespond server request.requestId (UInt32.ofNat 203) "Non-Authoritative Information"
+      #[] payload
+    let responsePromiseRef ← responsePending.toPromiseRef
+    let responseRef ← responsePromiseRef.await
+    assertEqual responseRef.status (UInt32.ofNat 203)
+    assertEqual (← responseRef.body.toByteArray) payload
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncPromiseRefCombinatorRuntimeMismatch : IO Unit := do
   let runtimeA ← Capnp.KjAsync.Runtime.init
   let runtimeB ← Capnp.KjAsync.Runtime.init
