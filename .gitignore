@@ -86,3 +86,15 @@
 # bazel output
 /c++/MODULE.bazel.lock
 bazel-*
+
+# Lean4 backend local artifacts
+.DS_Store
+/.agent-worktrees/
+/build/
+/build-lean4/
+/build-lean4-apple/
+/doc/lean4-backend.md
+/doc/lean4-deep-integration-plan.md
+/lean/Capnp/Rpc.lean_start
+/test/lean4/.lake/
+/test/lean4/LeanTest/.lake/
