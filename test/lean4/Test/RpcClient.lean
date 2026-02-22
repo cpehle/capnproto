@@ -3777,6 +3777,85 @@ def testRuntimeStreamingNoPrematureCancellationWhenTargetDropped : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeStreamingForwardedAcrossMultiVatNoPrematureCancellation : IO Unit := do
+  let payload := mkUInt64Payload (UInt64.ofNat 42)
+  let runtime ← Capnp.Rpc.Runtime.init
+  let entered ← IO.mkRef false
+  let gate ← IO.mkRef false
+  let bobToCarolRef ← IO.mkRef (none : Option Capnp.Rpc.Client)
+  let rec waitForGate (attempts : Nat) : IO Capnp.Rpc.AdvancedHandlerResult := do
+    if (← gate.get) then
+      pure (Capnp.Rpc.Advanced.respond payload)
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError "forwarded multi-vat streaming gate wait timed out")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 5)
+          waitForGate attempts
+  let rec waitForEntered (attempts : Nat) : IO Unit := do
+    runtime.pump
+    if (← entered.get) then
+      pure ()
+    else
+      match attempts with
+      | 0 =>
+          throw (IO.userError "forwarded multi-vat streaming call did not reach destination")
+      | attempts + 1 =>
+          IO.sleep (UInt32.ofNat 10)
+          waitForEntered attempts
+  try
+    let carolBootstrap ← runtime.registerAdvancedHandlerTargetAsync (fun _ method _ => do
+      if method.interfaceId == Echo.interfaceId && method.methodId == Echo.fooMethodId then
+        entered.set true
+        Capnp.Rpc.Advanced.streamingDefer do
+          waitForGate 10_000
+      else
+        throw (IO.userError
+          s!"unexpected method in forwarded multi-vat streaming destination: {method.interfaceId}/{method.methodId}"))
+
+    let bobBootstrap ← runtime.registerAdvancedHandlerTargetAsync (fun _ method req => do
+      match (← bobToCarolRef.get) with
+      | some carolCap =>
+          pure (Capnp.Rpc.Advanced.now
+            (Capnp.Rpc.Advanced.streaming (Capnp.Rpc.Advanced.forward carolCap method req)))
+      | none =>
+          throw (IO.userError "bob forwarding capability not initialized"))
+
+    let network := runtime.vatNetwork
+    let alice ← network.newClient "alice-forward-stream"
+    let bob ← network.newServer "bob-forward-stream" bobBootstrap
+    let carol ← network.newServer "carol-forward-stream" carolBootstrap
+
+    let bobToCarol ← bob.bootstrapPeer carol
+    bobToCarolRef.set (some bobToCarol)
+    let aliceToBob ← alice.bootstrapPeer bob
+
+    let pending ← runtime.startCall aliceToBob Echo.fooMethod payload
+
+    -- Ensure the forwarded call reached Carol before dropping Alice's local handle.
+    waitForEntered 500
+    runtime.releaseTarget aliceToBob
+
+    gate.set true
+    let result ← pending.awaitResult
+    match result with
+    | .ok _ =>
+        pure ()
+    | .error ex =>
+        throw (IO.userError
+          s!"forwarded multi-vat streaming call failed: {ex.type}: {ex.description}")
+
+    runtime.releaseTarget bobToCarol
+    alice.release
+    bob.release
+    carol.release
+    runtime.releaseTarget bobBootstrap
+    runtime.releaseTarget carolBootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeStreamingChainedBackpressure : IO Unit := do
   let payload := mkLargePayload 10240 -- 10KB
   let runtime ← Capnp.Rpc.Runtime.init

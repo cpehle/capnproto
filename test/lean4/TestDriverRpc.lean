@@ -79,6 +79,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRuntimeRegisterStreamingHandlerTarget,
   `testRuntimeStreamingCancellation,
   `testRuntimeStreamingNoPrematureCancellationWhenTargetDropped,
+  `testRuntimeStreamingForwardedAcrossMultiVatNoPrematureCancellation,
   `testRuntimeStreamingChainedBackpressure,
   `testRuntimeFdPassingOverNetwork,
   `testRuntimeFdPerMessageLimitDropsExcessFds,

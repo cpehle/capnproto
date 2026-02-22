@@ -105,13 +105,14 @@
       "Test.RpcClient.testRuntimeRegisterStreamingHandlerTarget",
       "Test.RpcClient.testRuntimeStreamingCancellation",
       "Test.RpcClient.testRuntimeStreamingNoPrematureCancellationWhenTargetDropped",
+      "Test.RpcClient.testRuntimeStreamingForwardedAcrossMultiVatNoPrematureCancellation",
       "Test.RpcClient.testRuntimeStreamingChainedBackpressure",
       "Test.RpcClient.testRuntimeFdPassingOverNetwork",
       "Test.RpcClient.testRuntimeFdPerMessageLimitDropsExcessFds",
       "Test.RpcClient.testRuntimeFdTargetLocalGetFd"
     ],
     "status": "partial",
-    "notes": "Streaming basics, cancellation semantics (including dropping client-side target handles), chained backpressure, and FD behavior are covered; broader forwarded-streaming parity across multi-vat topologies remains."
+    "notes": "Streaming basics, cancellation semantics (including dropping client-side target handles), forwarded streaming over multi-vat routing, chained backpressure, and FD behavior are covered; wider topology/interop matrices still remain."
   },
   {
     "behaviorClass": "RPC/KjAsync runtime-handle bridge helpers",
