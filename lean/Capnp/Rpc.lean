@@ -910,6 +910,25 @@ structure RuntimePendingCallRef where
   handle : RuntimePendingCall
   deriving Inhabited, BEq, Repr
 
+structure Promise (α : Type) where
+  pendingCall : RuntimePendingCallRef
+  deriving Inhabited, BEq, Repr
+
+structure TypedPayload (α : Type) where
+  reader : α
+  capTable : Capnp.CapTable
+  deriving Inhabited, BEq
+
+namespace TypedPayload
+
+@[inline] def toPair (payload : TypedPayload α) : α × Capnp.CapTable :=
+  (payload.reader, payload.capTable)
+
+@[inline] def mapReader (f : α -> β) (payload : TypedPayload α) : TypedPayload β :=
+  { reader := f payload.reader, capTable := payload.capTable }
+
+end TypedPayload
+
 structure RuntimeRegisterPromiseRef where
   runtime : Runtime
   handle : UInt32

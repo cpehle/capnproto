@@ -3650,6 +3650,10 @@ private:
       std::string startCallName;
       std::string startCallMName;
       std::string awaitCallName;
+      std::string responseTypeName;
+      std::string promiseTypeName;
+      std::string startPromiseName;
+      std::string startPromiseMName;
       std::string awaitTypedCallName;
       std::string pipelinedCapName;
       std::string pipelinedCallMName;
@@ -3685,6 +3689,10 @@ private:
       auto startCallName = uniqueName("start" + std::string(cap.cStr()), usedNames);
       auto startCallMName = uniqueName("start" + std::string(cap.cStr()) + "M", usedNames);
       auto awaitCallName = uniqueName("await" + std::string(cap.cStr()), usedNames);
+      auto responseTypeName = uniqueName(std::string(cap.cStr()) + "Response", usedNames);
+      auto promiseTypeName = uniqueName(std::string(cap.cStr()) + "Promise", usedNames);
+      auto startPromiseName = uniqueName("start" + std::string(cap.cStr()) + "Promise", usedNames);
+      auto startPromiseMName = uniqueName("start" + std::string(cap.cStr()) + "PromiseM", usedNames);
       auto awaitTypedCallName = uniqueName("await" + std::string(cap.cStr()) + "Typed", usedNames);
       auto pipelinedCapName = uniqueName("get" + std::string(cap.cStr()) + "PipelinedCap", usedNames);
       auto pipelinedCallMName = uniqueName("call" + std::string(cap.cStr()) + "PipelinedM", usedNames);
@@ -3700,6 +3708,7 @@ private:
       rpcMethods.push_back({fieldName, handlerName, typedHandlerName, advancedTypedHandlerName,
                             streamingTypedHandlerName, methodIdName, methodName, callName,
                             callMName, startCallName, startCallMName, awaitCallName,
+                            responseTypeName, promiseTypeName, startPromiseName, startPromiseMName,
                             awaitTypedCallName, pipelinedCapName, pipelinedCallMName,
                             pipelinedTypedCallMName, typedCallName, typedCallMName,
                             encodeRequestName, decodeRequestName, encodeResponseName,
@@ -3763,6 +3772,63 @@ private:
       auto resultReaderTypeName = resultTypeName + ".Reader";
 
       out += "abbrev ";
+      out += responseTypeName;
+      out += " := Capnp.Rpc.TypedPayload ";
+      out += resultReaderTypeName;
+      out += "\n";
+
+      out += "abbrev ";
+      out += promiseTypeName;
+      out += " := Capnp.Rpc.Promise ";
+      out += responseTypeName;
+      out += "\n";
+
+      out += "def ";
+      out += startPromiseName;
+      out += " (runtime : Capnp.Rpc.Runtime) (target : ";
+      out += name.cStr();
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO ";
+      out += promiseTypeName;
+      out += " := do\n";
+      out += "  return { pendingCall := (← ";
+      out += startCallName;
+      out += " runtime target payload) }\n";
+
+      out += "def ";
+      out += startPromiseMName;
+      out += " (target : ";
+      out += name.cStr();
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+      out += promiseTypeName;
+      out += " := do\n";
+      out += "  return { pendingCall := (← ";
+      out += startCallMName;
+      out += " target payload) }\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".await (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Capnp.Rpc.Payload := do\n";
+      out += "  ";
+      out += awaitCallName;
+      out += " promise.pendingCall\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".release (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Unit :=\n";
+      out += "  promise.pendingCall.release\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".releaseDeferred (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Unit :=\n";
+      out += "  promise.pendingCall.releaseDeferred\n";
+
+      out += "abbrev ";
       out += typedHandlerName;
       out += " := Capnp.Rpc.Client -> ";
       out += paramReaderTypeName;
@@ -3796,9 +3862,9 @@ private:
 
       out += "def ";
       out += decodeResponseName;
-      out += " (payload : Capnp.Rpc.Payload) : IO (";
-      out += resultReaderTypeName;
-      out += " × Capnp.CapTable) := do\n";
+      out += " (payload : Capnp.Rpc.Payload) : IO ";
+      out += responseTypeName;
+      out += " := do\n";
       out += "  let reader ← match ";
       out += resultTypeName;
       out += ".readChecked (Capnp.getRoot payload.msg) with\n";
@@ -3806,15 +3872,15 @@ private:
       out += "    | Except.error e => throw (IO.userError s!\"invalid ";
       out += methodName;
       out += " response: {e}\")\n";
-      out += "  return (reader, payload.capTable)\n";
+      out += "  return { reader := reader, capTable := payload.capTable }\n";
 
       out += "def ";
       out += typedCallName;
       out += " (backend : Capnp.Rpc.Backend) (target : ";
       out += name.cStr();
-      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (";
-      out += resultReaderTypeName;
-      out += " × Capnp.CapTable) := do\n";
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO ";
+      out += responseTypeName;
+      out += " := do\n";
       out += "  let response ← Capnp.Rpc.call backend target ";
       out += methodName;
       out += " payload\n";
@@ -3826,9 +3892,9 @@ private:
       out += typedCallMName;
       out += " (target : ";
       out += name.cStr();
-      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (";
-      out += resultReaderTypeName;
-      out += " × Capnp.CapTable) := do\n";
+      out += ") (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+      out += responseTypeName;
+      out += " := do\n";
       out += "  let response ← Capnp.Rpc.RuntimeM.call target ";
       out += methodName;
       out += " payload\n";
@@ -3838,13 +3904,40 @@ private:
 
       out += "def ";
       out += awaitTypedCallName;
-      out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (";
-      out += resultReaderTypeName;
-      out += " × Capnp.CapTable) := do\n";
+      out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO ";
+      out += responseTypeName;
+      out += " := do\n";
       out += "  let response ← pendingCall.await\n";
       out += "  ";
       out += decodeResponseName;
       out += " response\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".awaitTyped (promise : ";
+      out += promiseTypeName;
+      out += ") : IO ";
+      out += responseTypeName;
+      out += " := do\n";
+      out += "  ";
+      out += awaitTypedCallName;
+      out += " promise.pendingCall\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".awaitAndRelease (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Capnp.Rpc.Payload := do\n";
+      out += "  promise.await\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".awaitTypedAndRelease (promise : ";
+      out += promiseTypeName;
+      out += ") : IO ";
+      out += responseTypeName;
+      out += " := do\n";
+      out += "  promise.awaitTyped\n";
 
       out += "def ";
       out += pipelinedCapName;
@@ -3868,15 +3961,51 @@ private:
       out += pipelinedTypedCallMName;
       out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef)\n";
       out += "    (pointerPath : Array UInt16 := #[])\n";
-      out += "    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (";
-      out += resultReaderTypeName;
-      out += " × Capnp.CapTable) := do\n";
+      out += "    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+      out += responseTypeName;
+      out += " := do\n";
       out += "  let response ← ";
       out += pipelinedCallMName;
       out += " pendingCall pointerPath payload\n";
       out += "  ";
       out += decodeResponseName;
       out += " response\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".getPipelinedCap (promise : ";
+      out += promiseTypeName;
+      out += ")\n";
+      out += "    (pointerPath : Array UInt16 := #[]) : IO ";
+      out += name.cStr();
+      out += " := do\n";
+      out += "  ";
+      out += pipelinedCapName;
+      out += " promise.pendingCall pointerPath\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".callPipelinedM (promise : ";
+      out += promiseTypeName;
+      out += ")\n";
+      out += "    (pointerPath : Array UInt16 := #[])\n";
+      out += "    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do\n";
+      out += "  ";
+      out += pipelinedCallMName;
+      out += " promise.pendingCall pointerPath payload\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".callPipelinedTypedM (promise : ";
+      out += promiseTypeName;
+      out += ")\n";
+      out += "    (pointerPath : Array UInt16 := #[])\n";
+      out += "    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM ";
+      out += responseTypeName;
+      out += " := do\n";
+      out += "  ";
+      out += pipelinedTypedCallMName;
+      out += " promise.pendingCall pointerPath payload\n";
 
       auto methodOwner = std::string(name.cStr()) + "." + methodName;
       auto methodAnnOut = genAnnotationUses(

@@ -103,6 +103,18 @@ def startFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnve
   Capnp.Rpc.RuntimeM.startCall target fooMethod payload
 def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
+abbrev FooResponse := Capnp.Rpc.TypedPayload Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader
+abbrev FooPromise := Capnp.Rpc.Promise FooResponse
+def startFooPromise (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO FooPromise := do
+  return { pendingCall := (← startFoo runtime target payload) }
+def startFooPromiseM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM FooPromise := do
+  return { pendingCall := (← startFooM target payload) }
+def FooPromise.await (promise : FooPromise) : IO Capnp.Rpc.Payload := do
+  awaitFoo promise.pendingCall
+def FooPromise.release (promise : FooPromise) : IO Unit :=
+  promise.pendingCall.release
+def FooPromise.releaseDeferred (promise : FooPromise) : IO Unit :=
+  promise.pendingCall.releaseDeferred
 abbrev fooTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 abbrev fooAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 abbrev fooStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
@@ -111,20 +123,26 @@ def fooRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4
     | Except.ok r => pure r
     | Except.error e => throw (IO.userError s!"invalid fooMethod request: {e}")
   return (reader, payload.capTable)
-def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+def fooResponseOfPayload (payload : Capnp.Rpc.Payload) : IO FooResponse := do
   let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
     | Except.error e => throw (IO.userError s!"invalid fooMethod response: {e}")
-  return (reader, payload.capTable)
-def callFooTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+  return { reader := reader, capTable := payload.capTable }
+def callFooTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO FooResponse := do
   let response ← Capnp.Rpc.call backend target fooMethod payload
   fooResponseOfPayload response
-def callFooTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+def callFooTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM FooResponse := do
   let response ← Capnp.Rpc.RuntimeM.call target fooMethod payload
   fooResponseOfPayload response
-def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooResponse := do
   let response ← pendingCall.await
   fooResponseOfPayload response
+def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
+  awaitFooTyped promise.pendingCall
+def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
+  promise.await
+def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
+  promise.awaitTyped
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath
@@ -135,9 +153,20 @@ def callFooPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
   Capnp.Rpc.RuntimeM.call target fooMethod payload
 def callFooPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[])
-    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader × Capnp.CapTable) := do
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM FooResponse := do
   let response ← callFooPipelinedM pendingCall pointerPath payload
   fooResponseOfPayload response
+def FooPromise.getPipelinedCap (promise : FooPromise)
+    (pointerPath : Array UInt16 := #[]) : IO Echo := do
+  getFooPipelinedCap promise.pendingCall pointerPath
+def FooPromise.callPipelinedM (promise : FooPromise)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  callFooPipelinedM promise.pendingCall pointerPath payload
+def FooPromise.callPipelinedTypedM (promise : FooPromise)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM FooResponse := do
+  callFooPipelinedTypedM promise.pendingCall pointerPath payload
 
 def barMethodId : UInt16 := UInt16.ofNat 1
 def barMethod : Capnp.Rpc.Method := { interfaceId := interfaceId, methodId := barMethodId }
@@ -151,6 +180,18 @@ def startBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnve
   Capnp.Rpc.RuntimeM.startCall target barMethod payload
 def awaitBar (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
+abbrev BarResponse := Capnp.Rpc.TypedPayload Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader
+abbrev BarPromise := Capnp.Rpc.Promise BarResponse
+def startBarPromise (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO BarPromise := do
+  return { pendingCall := (← startBar runtime target payload) }
+def startBarPromiseM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM BarPromise := do
+  return { pendingCall := (← startBarM target payload) }
+def BarPromise.await (promise : BarPromise) : IO Capnp.Rpc.Payload := do
+  awaitBar promise.pendingCall
+def BarPromise.release (promise : BarPromise) : IO Unit :=
+  promise.pendingCall.release
+def BarPromise.releaseDeferred (promise : BarPromise) : IO Unit :=
+  promise.pendingCall.releaseDeferred
 abbrev barTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.Payload
 abbrev barAdvancedTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
 abbrev barStreamingTypedHandler := Capnp.Rpc.Client -> Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Params.Reader -> Capnp.CapTable -> IO Capnp.Rpc.AdvancedHandlerReply
@@ -159,20 +200,26 @@ def barRequestOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4
     | Except.ok r => pure r
     | Except.error e => throw (IO.userError s!"invalid barMethod request: {e}")
   return (reader, payload.capTable)
-def barResponseOfPayload (payload : Capnp.Rpc.Payload) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+def barResponseOfPayload (payload : Capnp.Rpc.Payload) : IO BarResponse := do
   let reader ← match Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.readChecked (Capnp.getRoot payload.msg) with
     | Except.ok r => pure r
     | Except.error e => throw (IO.userError s!"invalid barMethod response: {e}")
-  return (reader, payload.capTable)
-def callBarTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+  return { reader := reader, capTable := payload.capTable }
+def callBarTyped (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO BarResponse := do
   let response ← Capnp.Rpc.call backend target barMethod payload
   barResponseOfPayload response
-def callBarTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+def callBarTypedM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM BarResponse := do
   let response ← Capnp.Rpc.RuntimeM.call target barMethod payload
   barResponseOfPayload response
-def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO BarResponse := do
   let response ← pendingCall.await
   barResponseOfPayload response
+def BarPromise.awaitTyped (promise : BarPromise) : IO BarResponse := do
+  awaitBarTyped promise.pendingCall
+def BarPromise.awaitAndRelease (promise : BarPromise) : IO Capnp.Rpc.Payload := do
+  promise.await
+def BarPromise.awaitTypedAndRelease (promise : BarPromise) : IO BarResponse := do
+  promise.awaitTyped
 def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath
@@ -183,9 +230,20 @@ def callBarPipelinedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
   Capnp.Rpc.RuntimeM.call target barMethod payload
 def callBarPipelinedTypedM (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[])
-    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM (Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader × Capnp.CapTable) := do
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM BarResponse := do
   let response ← callBarPipelinedM pendingCall pointerPath payload
   barResponseOfPayload response
+def BarPromise.getPipelinedCap (promise : BarPromise)
+    (pointerPath : Array UInt16 := #[]) : IO Echo := do
+  getBarPipelinedCap promise.pendingCall pointerPath
+def BarPromise.callPipelinedM (promise : BarPromise)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
+  callBarPipelinedM promise.pendingCall pointerPath payload
+def BarPromise.callPipelinedTypedM (promise : BarPromise)
+    (pointerPath : Array UInt16 := #[])
+    (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM BarResponse := do
+  callBarPipelinedTypedM promise.pendingCall pointerPath payload
 
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler

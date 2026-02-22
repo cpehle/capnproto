@@ -128,9 +128,9 @@ def testGeneratedTypedServerBackendDispatch : IO Unit := do
       throw (IO.userError "unexpected typed bar handler invocation")
   }
   let backend := Echo.typedBackend server
-  let (response, responseCaps) ← Echo.callFooTyped backend (UInt32.ofNat 7) payload
-  assertEqual responseCaps.caps.size 0
-  assertEqual response.hasPayload false
+  let response ← Echo.callFooTyped backend (UInt32.ofNat 7) payload
+  assertEqual response.capTable.caps.size 0
+  assertEqual response.reader.hasPayload false
   assertEqual (← seenFoo.get) true
 
 @[test]
@@ -206,10 +206,10 @@ def testGeneratedRegisterTypedTargetNetwork : IO Unit := do
     server.accept listener
 
     let remoteTarget ← client.bootstrap
-    let (response, responseCaps) ← Capnp.Rpc.RuntimeM.run runtime do
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooTypedM remoteTarget payload
-    assertEqual responseCaps.caps.size 0
-    assertEqual response.hasPayload false
+    assertEqual response.capTable.caps.size 0
+    assertEqual response.reader.hasPayload false
     assertEqual (← seenFoo.get) true
 
     client.release
@@ -255,10 +255,10 @@ def testGeneratedRegisterAdvancedTypedTargetNetwork : IO Unit := do
     server.accept listener
 
     let remoteTarget ← client.bootstrap
-    let (response, responseCaps) ← Capnp.Rpc.RuntimeM.run runtime do
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooTypedM remoteTarget payload
-    assertEqual responseCaps.caps.size 0
-    assertEqual response.hasPayload false
+    assertEqual response.capTable.caps.size 0
+    assertEqual response.reader.hasPayload false
     assertEqual (← seenFoo.get) true
 
     client.release
@@ -347,6 +347,29 @@ def testGeneratedAsyncHelpers : IO Unit := do
     assertEqual response2.capTable.caps.size 1
     runtime.releaseCapTable response2.capTable
 
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testGeneratedPromiseHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+
+    let promise ← Echo.startFooPromise runtime target capPayload
+    let pipelinedCap ← promise.getPipelinedCap
+    let pipelinedResponse ← Capnp.Rpc.RuntimeM.run runtime do
+      promise.callPipelinedM #[] payload
+    assertEqual pipelinedResponse.capTable.caps.size 0
+
+    let response ← promise.awaitAndRelease
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    runtime.releaseTarget pipelinedCap
     runtime.releaseTarget target
   finally
     runtime.shutdown
