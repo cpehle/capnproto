@@ -53,6 +53,14 @@ std::shared_ptr<std::vector<uint8_t>> makeSharedBytes(std::vector<uint8_t>&& byt
   return std::make_shared<std::vector<uint8_t>>(std::move(bytes));
 }
 
+std::shared_ptr<std::vector<uint8_t>> cloneSharedBytes(
+    const std::shared_ptr<std::vector<uint8_t>>& bytes) {
+  if (!bytes) {
+    return std::make_shared<std::vector<uint8_t>>();
+  }
+  return std::make_shared<std::vector<uint8_t>>(*bytes);
+}
+
 std::shared_ptr<std::vector<uint8_t>> copyByteArrayToSharedBytes(b_lean_obj_arg bytes) {
   const auto size = lean_sarray_size(bytes);
   const auto* data =
@@ -1533,13 +1541,11 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<HttpResponseCompletion> enqueueHttpRequest(uint32_t method, std::string address,
-                                                             uint32_t portHint, std::string path,
-                                                             std::vector<uint8_t> requestHeaders,
-                                                             kj::Array<kj::byte> body,
-                                                             bool useTls = false,
-                                                             uint64_t responseBodyLimit =
-                                                                 std::numeric_limits<uint64_t>::max()) {
+  std::shared_ptr<HttpResponseCompletion> enqueueHttpRequest(
+      uint32_t method, std::string address, uint32_t portHint, std::string path,
+      std::vector<uint8_t> requestHeaders, std::shared_ptr<std::vector<uint8_t>> body,
+      bool useTls = false,
+      uint64_t responseBodyLimit = std::numeric_limits<uint64_t>::max()) {
     auto completion = std::make_shared<HttpResponseCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -1555,15 +1561,11 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
-  std::shared_ptr<PromiseIdCompletion> enqueueHttpRequestStart(uint32_t method,
-                                                               std::string address,
-                                                               uint32_t portHint,
-                                                               std::string path,
-                                                               std::vector<uint8_t> requestHeaders,
-                                                               kj::Array<kj::byte> body,
-                                                               bool useTls = false,
-                                                               uint64_t responseBodyLimit =
-                                                                   std::numeric_limits<uint64_t>::max()) {
+  std::shared_ptr<PromiseIdCompletion> enqueueHttpRequestStart(
+      uint32_t method, std::string address, uint32_t portHint, std::string path,
+      std::vector<uint8_t> requestHeaders, std::shared_ptr<std::vector<uint8_t>> body,
+      bool useTls = false,
+      uint64_t responseBodyLimit = std::numeric_limits<uint64_t>::max()) {
     auto completion = std::make_shared<PromiseIdCompletion>();
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
@@ -2919,7 +2921,7 @@ class KjAsyncRuntimeLoop {
     uint32_t portHint;
     std::string path;
     std::vector<uint8_t> requestHeaders;
-    kj::Array<kj::byte> body;
+    std::shared_ptr<std::vector<uint8_t>> body;
     bool useTls;
     uint64_t responseBodyLimit;
     std::shared_ptr<HttpResponseCompletion> completion;
@@ -2931,7 +2933,7 @@ class KjAsyncRuntimeLoop {
     uint32_t portHint;
     std::string path;
     std::vector<uint8_t> requestHeaders;
-    kj::Array<kj::byte> body;
+    std::shared_ptr<std::vector<uint8_t>> body;
     bool useTls;
     uint64_t responseBodyLimit;
     std::shared_ptr<PromiseIdCompletion> completion;
@@ -4497,7 +4499,8 @@ class KjAsyncRuntimeLoop {
                             const std::string& address, uint32_t portHint,
                             const std::string& path,
                             std::vector<std::pair<std::string, std::string>> requestHeaders,
-                            kj::Array<kj::byte> body, bool useTls, uint64_t responseBodyLimit) {
+                            std::shared_ptr<std::vector<uint8_t>> body, bool useTls,
+                            uint64_t responseBodyLimit) {
     const auto decodedMethod = decodeHttpMethod(method);
     auto headerTable = kj::heap<kj::HttpHeaderTable>();
     auto tlsNetwork = resolveTlsNetwork(useTls);
@@ -4506,15 +4509,15 @@ class KjAsyncRuntimeLoop {
     auto requestUrl = buildUrl(useTls ? "https" : "http", address, portHint, path);
     auto headers = kj::heap<kj::HttpHeaders>(*headerTable);
     applyHeadersFromPairs(*headers, requestHeaders);
-    auto request = client->request(decodedMethod, requestUrl, *headers,
-                                   body.size() == 0
-                                       ? kj::none
-                                       : kj::Maybe<uint64_t>(static_cast<uint64_t>(body.size())));
+    const size_t bodySize = body ? body->size() : 0;
+    auto request = client->request(
+        decodedMethod, requestUrl, *headers,
+        bodySize == 0 ? kj::none : kj::Maybe<uint64_t>(static_cast<uint64_t>(bodySize)));
 
     auto responsePromise = kj::mv(request.response);
     kj::Promise<HttpResponseResult> promise = nullptr;
     if (request.body.get() == nullptr) {
-      if (body.size() != 0) {
+      if (bodySize != 0) {
         throw std::runtime_error("HTTP method does not accept a request body");
       }
       promise = kj::mv(responsePromise).then(
@@ -4523,8 +4526,10 @@ class KjAsyncRuntimeLoop {
           });
     } else {
       kj::Promise<void> writePromise = kj::READY_NOW;
-      if (body.size() != 0) {
-        writePromise = request.body->write(body.asPtr()).attach(kj::mv(body));
+      if (bodySize != 0) {
+        auto bodyPtr = kj::ArrayPtr<const kj::byte>(
+            reinterpret_cast<const kj::byte*>(body->data()), body->size());
+        writePromise = request.body->write(bodyPtr).attach(kj::mv(body));
       }
 
       promise = kj::mv(writePromise).then(
@@ -4601,7 +4606,7 @@ class KjAsyncRuntimeLoop {
                                  uint32_t method, const std::string& address, uint32_t portHint,
                                  const std::string& path,
                                  std::vector<std::pair<std::string, std::string>> requestHeaders,
-                                 kj::Array<kj::byte> body, bool useTls,
+                                 std::shared_ptr<std::vector<uint8_t>> body, bool useTls,
                                  uint64_t responseBodyLimit) {
     auto promiseId = httpRequestStart(ioProvider, method, address, portHint, path,
                                       std::move(requestHeaders), kj::mv(body), useTls,
@@ -9307,7 +9312,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request(
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
         encodedEmptyHeaderPairs(),
-        copyByteArrayToKjArray(body));
+        copyByteArrayToSharedBytes(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9329,6 +9334,40 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request(
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pair, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_http_request_ref");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_with_response_limit(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg body, uint64_t responseBodyLimit) {
@@ -9341,7 +9380,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
         encodedEmptyHeaderPairs(),
-        copyByteArrayToKjArray(body), false, responseBodyLimit);
+        copyByteArrayToSharedBytes(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9364,6 +9403,42 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_with_response_limit_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg bodyRef, uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pair, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_with_response_limit_ref");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_start(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg body) {
@@ -9376,7 +9451,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_sta
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
         encodedEmptyHeaderPairs(),
-        copyByteArrayToKjArray(body));
+        copyByteArrayToSharedBytes(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9394,6 +9469,37 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_sta
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_start_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_ref");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_start_with_response_limit(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
@@ -9407,7 +9513,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_response_limit(
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
         encodedEmptyHeaderPairs(),
-        copyByteArrayToKjArray(body), false, responseBodyLimit);
+        copyByteArrayToSharedBytes(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9423,6 +9529,38 @@ capnp_lean_kj_async_runtime_http_request_start_with_response_limit(
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_response_limit");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_start_with_response_limit_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg bodyRef, uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), encodedEmptyHeaderPairs(),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_response_limit_ref");
   }
 }
 
@@ -9454,6 +9592,37 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_pr
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_http_response_promise_await");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_response_promise_await_ref(
+    uint64_t runtimeId, uint32_t promiseId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpResponsePromiseAwait(promiseId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pair, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_response_promise_await_ref");
   }
 }
 
@@ -9526,7 +9695,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body));
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9556,6 +9725,48 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_with_headers_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0,
+                    mkByteArrayCopy(completion->headers.data(), completion->headers.size()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_mk_string(completion->statusText.c_str()));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_with_headers_ref");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_with_headers_secure(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body) {
@@ -9567,7 +9778,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), true);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), true);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9598,6 +9809,49 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_http_request_wit
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_with_headers_secure_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0,
+                    mkByteArrayCopy(completion->headers.data(), completion->headers.size()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_mk_string(completion->statusText.c_str()));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_with_headers_secure_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body,
@@ -9610,7 +9864,7 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit(
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), false, responseBodyLimit);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9641,6 +9895,50 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit(
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef,
+    uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0,
+                    mkByteArrayCopy(completion->headers.data(), completion->headers.size()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_mk_string(completion->statusText.c_str()));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body,
@@ -9653,7 +9951,7 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure
   try {
     auto completion = runtime->enqueueHttpRequest(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), true, responseBodyLimit);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), true, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9684,6 +9982,50 @@ capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef,
+    uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequest(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0,
+                    mkByteArrayCopy(completion->headers.data(), completion->headers.size()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_mk_string(completion->statusText.c_str()));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_with_headers_with_response_limit_secure_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_start_with_headers(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body) {
@@ -9695,7 +10037,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers(
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body));
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body));
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9715,6 +10057,38 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers(
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_start_with_headers_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)));
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_start_with_headers_secure(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body) {
@@ -9726,7 +10100,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_secure(
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), true);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), true);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9742,6 +10116,38 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_secure(
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_secure");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_start_with_headers_secure_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_secure_ref");
   }
 }
 
@@ -9826,7 +10232,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit(
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), false, responseBodyLimit);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), false, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9846,6 +10252,39 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit(
 }
 
 extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef,
+    uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), false, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
 capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_secure(
     uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
     b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg body,
@@ -9858,7 +10297,7 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_
   try {
     auto completion = runtime->enqueueHttpRequestStart(
         method, std::string(lean_string_cstr(address)), portHint, std::string(lean_string_cstr(path)),
-        copyByteArray(requestHeaders), copyByteArrayToKjArray(body), true, responseBodyLimit);
+        copyByteArray(requestHeaders), copyByteArrayToSharedBytes(body), true, responseBodyLimit);
     {
       std::unique_lock<std::mutex> lock(completion->mutex);
       completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -9874,6 +10313,39 @@ capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_secure");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_secure_ref(
+    uint64_t runtimeId, uint32_t method, b_lean_obj_arg address, uint32_t portHint,
+    b_lean_obj_arg path, b_lean_obj_arg requestHeaders, b_lean_obj_arg bodyRef,
+    uint64_t responseBodyLimit) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpRequestStart(
+        method, std::string(lean_string_cstr(address)), portHint,
+        std::string(lean_string_cstr(path)), copyByteArray(requestHeaders),
+        cloneSharedBytes(getBytesRefDataOrThrow(bodyRef)), true, responseBodyLimit);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_request_start_with_headers_with_response_limit_secure_ref");
   }
 }
 
@@ -9913,6 +10385,45 @@ capnp_lean_kj_async_runtime_http_response_promise_await_with_headers(
   } catch (...) {
     return mkIoUserError(
         "unknown exception in capnp_lean_kj_async_runtime_http_response_promise_await_with_headers");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_http_response_promise_await_with_headers_ref(
+    uint64_t runtimeId, uint32_t promiseId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueHttpResponsePromiseAwait(promiseId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+
+      auto pairInner = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairInner, 0,
+                    mkByteArrayCopy(completion->headers.data(), completion->headers.size()));
+      lean_ctor_set(pairInner, 1, mkBytesRef(makeSharedBytes(std::move(completion->body))));
+      auto pairMid = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairMid, 0, lean_mk_string(completion->statusText.c_str()));
+      lean_ctor_set(pairMid, 1, pairInner);
+      auto pairOuter = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pairOuter, 0, lean_box_uint32(completion->statusCode));
+      lean_ctor_set(pairOuter, 1, pairMid);
+      return lean_io_result_mk_ok(pairOuter);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_http_response_promise_await_with_headers_ref");
   }
 }
 

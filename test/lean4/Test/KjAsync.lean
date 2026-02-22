@@ -1375,6 +1375,35 @@ def testKjAsyncBytesRefDatagramAndWebSocketPrimitives : IO Unit := do
     wsRuntime.shutdown
 
 @[test]
+def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    try
+      let requestBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 11))
+      let requestBodyRef ← Capnp.KjAsync.BytesRef.ofByteArray requestBody
+      let responseBody := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 12))
+
+      let responsePromise ←
+        runtime.httpRequestStartRef
+          .post "127.0.0.1" "/bytesref-http" requestBodyRef server.boundPort
+      let request ← waitForHttpServerRequest runtime server
+      assertEqual request.path "/bytesref-http"
+      assertEqual request.body requestBody
+
+      runtime.httpServerRespond
+        server request.requestId (UInt32.ofNat 201) "Created" #[] responseBody
+      runtime.pump
+      let response ← responsePromise.awaitRef
+      assertEqual response.status (UInt32.ofNat 201)
+      let receivedBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
+      assertEqual receivedBody responseBody
+    finally
+      server.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncTwoWayPipeAsyncTaskAndPromiseHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
