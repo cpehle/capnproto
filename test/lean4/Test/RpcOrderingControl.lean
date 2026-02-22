@@ -166,6 +166,11 @@ def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
               waitForHeldResolve attempts
       waitForHeldResolve 400
 
+      assertTrue (← alice.resolveDisembargoTraceTo bob).isEmpty
+        "expected empty resolve/disembargo trace while Resolve messages are held (alice -> bob)"
+      assertTrue (← bob.resolveDisembargoTraceTo alice).isEmpty
+        "expected empty resolve/disembargo trace while Resolve messages are held (bob -> alice)"
+
       let flushed ← runtime.orderingFlushResolves
       if flushed == 0 then
         throw (IO.userError "expected at least one held Resolve to flush")
