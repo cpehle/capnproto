@@ -7321,9 +7321,14 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_release(uint64_t
     if (runtime) {
       runtime->shutdown();
     } else {
-      auto rpcRuntime = capnp_lean_rpc::unregisterRuntime(runtimeId);
-      if (rpcRuntime) {
-        capnp_lean_rpc::shutdown(*rpcRuntime);
+      auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId);
+      if (rpcRuntime && capnp_lean_rpc::isWorkerThread(*rpcRuntime)) {
+        return mkIoUserError(
+            "Capnp.KjAsync runtime shutdown is not allowed from the Capnp.Rpc worker thread");
+      }
+      auto unregisteredRpcRuntime = capnp_lean_rpc::unregisterRuntime(runtimeId);
+      if (unregisteredRpcRuntime) {
+        capnp_lean_rpc::shutdown(*unregisteredRpcRuntime);
       }
     }
 

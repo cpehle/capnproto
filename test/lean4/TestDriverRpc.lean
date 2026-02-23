@@ -17,6 +17,7 @@ import Test.Checked
 import Test.KjAsync
 import Test.Rpc
 import Test.RpcClient
+import Test.RpcShutdown
 import Test.RpcReliability
 import Test.RpcOrderingControl
 import Test.RpcLayout
@@ -95,6 +96,8 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRpcRuntimeMWithKjAsyncRuntimeHelpers,
   `testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime,
   `testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread,
+  `testRuntimeAdvancedHandlerRejectsRpcShutdownOnWorkerThread,
+  `testRuntimeAdvancedHandlerRejectsKjAsyncShutdownOnWorkerThread,
   `testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers,
   `testRuntimeAsyncFFIPump,
 
@@ -211,7 +214,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     #[{ module := `LeanTest }, { module := `Test.Runtime }, { module := `Test.Generated },
       { module := `Test.Builder }, { module := `Test.Capability }, { module := `Test.Packed },
       { module := `Test.Checked }, { module := `Test.KjAsync }, { module := `Test.Rpc },
-      { module := `Test.RpcClient }, { module := `Test.RpcReliability },
+      { module := `Test.RpcClient }, { module := `Test.RpcShutdown },
+      { module := `Test.RpcReliability },
       { module := `Test.RpcOrderingControl }, { module := `Test.RpcLayout },
       { module := `Test.AsyncBridge }]
     {}

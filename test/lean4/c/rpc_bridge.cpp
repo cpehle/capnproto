@@ -2089,9 +2089,15 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_new() {
 
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release(uint64_t runtimeId) {
   try {
-    auto runtime = unregisterRuntime(runtimeId);
-    if (runtime) {
-      rpc::shutdown(*runtime);
+    auto runtime = getRuntime(runtimeId);
+    if (runtime && rpc::isWorkerThread(*runtime)) {
+      return mkIoUserError(
+          "Capnp.Rpc runtime shutdown is not allowed from the Capnp.Rpc worker thread");
+    }
+
+    auto unregisteredRuntime = unregisterRuntime(runtimeId);
+    if (unregisteredRuntime) {
+      rpc::shutdown(*unregisteredRuntime);
     }
 
     lean_obj_res ok;

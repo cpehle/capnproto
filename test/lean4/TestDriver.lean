@@ -15,6 +15,7 @@ import Test.Packed
 import Test.Checked
 import Test.Rpc
 import Test.RpcClient
+import Test.RpcShutdown
 import Test.RpcOrderingControl
 import Test.Conformance
 
@@ -63,6 +64,7 @@ unsafe def main (args : List String) : IO UInt32 := do
     #[{ module := `LeanTest }, { module := `Test.Runtime }, { module := `Test.Generated },
       { module := `Test.Builder }, { module := `Test.Capability }, { module := `Test.Packed },
       { module := `Test.Checked }, { module := `Test.Rpc }, { module := `Test.RpcClient },
+      { module := `Test.RpcShutdown },
       { module := `Test.RpcOrderingControl },
       { module := `Test.Conformance }]
     {}
