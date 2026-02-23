@@ -837,6 +837,18 @@ opaque ffiRuntimeMultiVatClearRestorerImpl
 opaque ffiRuntimeMultiVatPublishSturdyRefImpl
     (runtime : UInt64) (hostPeer : UInt32) (objectId : @& ByteArray) (target : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_runtime_multivat_unpublish_sturdy_ref"]
+opaque ffiRuntimeMultiVatUnpublishSturdyRefImpl
+    (runtime : UInt64) (hostPeer : UInt32) (objectId : @& ByteArray) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_clear_published_sturdy_refs"]
+opaque ffiRuntimeMultiVatClearPublishedSturdyRefsImpl
+    (runtime : UInt64) (hostPeer : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_multivat_published_sturdy_ref_count"]
+opaque ffiRuntimeMultiVatPublishedSturdyRefCountImpl
+    (runtime : UInt64) (hostPeer : UInt32) : IO UInt64
+
 @[extern "capnp_lean_rpc_runtime_multivat_restore_sturdy_ref"]
 opaque ffiRuntimeMultiVatRestoreSturdyRefImpl
     (runtime : UInt64) (sourcePeer : UInt32) (host : @& String) (unique : UInt8)
@@ -1475,6 +1487,16 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     (objectId : ByteArray) (target : Client) : IO Unit :=
   ffiRuntimeMultiVatPublishSturdyRefImpl peer.runtime.handle peer.handle.raw objectId target
 
+@[inline] def multiVatUnpublishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) : IO Unit :=
+  ffiRuntimeMultiVatUnpublishSturdyRefImpl peer.runtime.handle peer.handle.raw objectId
+
+@[inline] def multiVatClearPublishedSturdyRefs (peer : RuntimeVatPeerRef) : IO Unit :=
+  ffiRuntimeMultiVatClearPublishedSturdyRefsImpl peer.runtime.handle peer.handle.raw
+
+@[inline] def multiVatPublishedSturdyRefCount (peer : RuntimeVatPeerRef) : IO UInt64 :=
+  ffiRuntimeMultiVatPublishedSturdyRefCountImpl peer.runtime.handle peer.handle.raw
+
 @[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO Client :=
   ffiRuntimeMultiVatRestoreSturdyRefImpl peer.runtime.handle peer.handle.raw
@@ -2003,6 +2025,16 @@ namespace RuntimeVatPeerRef
     (objectId : ByteArray) (target : Client) : IO Unit :=
   Runtime.multiVatPublishSturdyRef peer objectId target
 
+@[inline] def unpublishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) : IO Unit :=
+  Runtime.multiVatUnpublishSturdyRef peer objectId
+
+@[inline] def clearPublishedSturdyRefs (peer : RuntimeVatPeerRef) : IO Unit :=
+  Runtime.multiVatClearPublishedSturdyRefs peer
+
+@[inline] def publishedSturdyRefCount (peer : RuntimeVatPeerRef) : IO UInt64 :=
+  Runtime.multiVatPublishedSturdyRefCount peer
+
 @[inline] def restoreSturdyRef (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO Client :=
   Runtime.multiVatRestoreSturdyRef peer sturdyRef
@@ -2048,6 +2080,20 @@ namespace VatNetwork
     (objectId : ByteArray) (target : Client) : IO Unit := do
   ensurePeerRuntime network peer "publishSturdyRef"
   Runtime.multiVatPublishSturdyRef peer objectId target
+
+@[inline] def unpublishSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) : IO Unit := do
+  ensurePeerRuntime network peer "unpublishSturdyRef"
+  Runtime.multiVatUnpublishSturdyRef peer objectId
+
+@[inline] def clearPublishedSturdyRefs (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
+  ensurePeerRuntime network peer "clearPublishedSturdyRefs"
+  Runtime.multiVatClearPublishedSturdyRefs peer
+
+@[inline] def publishedSturdyRefCount (network : VatNetwork)
+    (peer : RuntimeVatPeerRef) : IO UInt64 := do
+  ensurePeerRuntime network peer "publishedSturdyRefCount"
+  Runtime.multiVatPublishedSturdyRefCount peer
 
 @[inline] def restoreSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO Client := do
@@ -2634,6 +2680,19 @@ namespace RuntimeM
     (objectId : ByteArray) (target : Client) : RuntimeM Unit := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatPublishSturdyRef peer objectId target
+
+@[inline] def multiVatUnpublishSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatUnpublishSturdyRef peer objectId
+
+@[inline] def multiVatClearPublishedSturdyRefs (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatClearPublishedSturdyRefs peer
+
+@[inline] def multiVatPublishedSturdyRefCount (peer : RuntimeVatPeerRef) : RuntimeM UInt64 := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatPublishedSturdyRefCount peer
 
 @[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : RuntimeM Client := do

@@ -2054,6 +2054,50 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<UnitCompletion> enqueueMultiVatUnpublishSturdyRef(
+      uint32_t hostPeerId, LeanByteArrayRef objectId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedMultiVatUnpublishSturdyRef{hostPeerId, std::move(objectId), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueMultiVatClearPublishedSturdyRefs(uint32_t hostPeerId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatClearPublishedSturdyRefs{hostPeerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<UInt64Completion> enqueueMultiVatPublishedSturdyRefCount(uint32_t hostPeerId) {
+    auto completion = std::make_shared<UInt64Completion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUInt64Failure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatPublishedSturdyRefCount{hostPeerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
       uint32_t sourcePeerId, std::string host, bool unique, LeanByteArrayRef objectId) {
     auto completion = std::make_shared<RegisterTargetCompletion>();
@@ -2931,6 +2975,22 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedMultiVatUnpublishSturdyRef {
+    uint32_t hostPeerId;
+    LeanByteArrayRef objectId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedMultiVatClearPublishedSturdyRefs {
+    uint32_t hostPeerId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedMultiVatPublishedSturdyRefCount {
+    uint32_t hostPeerId;
+    std::shared_ptr<UInt64Completion> completion;
+  };
+
   struct QueuedMultiVatRestoreSturdyRef {
     uint32_t sourcePeerId;
     std::string host;
@@ -3039,6 +3099,8 @@ class RuntimeLoop {
                    QueuedMultiVatDeniedForwardCount,
                    QueuedMultiVatHasConnection, QueuedMultiVatSetRestorer,
                    QueuedMultiVatClearRestorer, QueuedMultiVatPublishSturdyRef,
+                   QueuedMultiVatUnpublishSturdyRef, QueuedMultiVatClearPublishedSturdyRefs,
+                   QueuedMultiVatPublishedSturdyRefCount,
                    QueuedMultiVatRestoreSturdyRef, QueuedMultiVatGetDiagnostics,
                    QueuedMultiVatConnectionBlock,
                    QueuedMultiVatConnectionUnblock, QueuedMultiVatConnectionDisconnect,
@@ -4443,6 +4505,38 @@ class RuntimeLoop {
     }
     auto& hostRefs = sturdyRefs_[hostPeerId];
     hostRefs.insert_or_assign(sturdyObjectKey(objectIdData, objectIdSize), targetIt->second);
+  }
+
+  void multiVatUnpublishSturdyRef(uint32_t hostPeerId, const uint8_t* objectIdData,
+                                  size_t objectIdSize) {
+    requireMultiVatPeer(hostPeerId);
+    auto hostRefsIt = sturdyRefs_.find(hostPeerId);
+    if (hostRefsIt == sturdyRefs_.end()) {
+      throw std::runtime_error("no sturdy refs published for host peer id: " +
+                               std::to_string(hostPeerId));
+    }
+    auto key = sturdyObjectKey(objectIdData, objectIdSize);
+    auto erased = hostRefsIt->second.erase(key);
+    if (erased == 0) {
+      throw std::runtime_error("unknown sturdy ref object id");
+    }
+    if (hostRefsIt->second.empty()) {
+      sturdyRefs_.erase(hostRefsIt);
+    }
+  }
+
+  void multiVatClearPublishedSturdyRefs(uint32_t hostPeerId) {
+    requireMultiVatPeer(hostPeerId);
+    sturdyRefs_.erase(hostPeerId);
+  }
+
+  uint64_t multiVatPublishedSturdyRefCount(uint32_t hostPeerId) {
+    requireMultiVatPeer(hostPeerId);
+    auto hostRefsIt = sturdyRefs_.find(hostPeerId);
+    if (hostRefsIt == sturdyRefs_.end()) {
+      return 0;
+    }
+    return static_cast<uint64_t>(hostRefsIt->second.size());
   }
 
   uint32_t multiVatRestoreSturdyRef(uint32_t sourcePeerId, const LeanVatId& hostVatId,
@@ -7403,6 +7497,49 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_publish_sturdy_ref");
           }
+        } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRef>(op)) {
+          auto request = std::get<QueuedMultiVatUnpublishSturdyRef>(std::move(op));
+          try {
+            multiVatUnpublishSturdyRef(request.hostPeerId, request.objectId.data(),
+                                       request.objectId.size());
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_unpublish_sturdy_ref");
+          }
+        } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefs>(op)) {
+          auto request = std::get<QueuedMultiVatClearPublishedSturdyRefs>(std::move(op));
+          try {
+            multiVatClearPublishedSturdyRefs(request.hostPeerId);
+            completeUnitSuccess(request.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(request.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_clear_published_sturdy_refs");
+          }
+        } else if (std::holds_alternative<QueuedMultiVatPublishedSturdyRefCount>(op)) {
+          auto request = std::get<QueuedMultiVatPublishedSturdyRefCount>(std::move(op));
+          try {
+            auto count = multiVatPublishedSturdyRefCount(request.hostPeerId);
+            completeUInt64Success(request.completion, count);
+          } catch (const kj::Exception& e) {
+            completeUInt64Failure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUInt64Failure(request.completion, e.what());
+          } catch (...) {
+            completeUInt64Failure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_published_sturdy_ref_count");
+          }
         } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRef>(op)) {
           auto request = std::get<QueuedMultiVatRestoreSturdyRef>(std::move(op));
           try {
@@ -7865,6 +8002,14 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedMultiVatClearRestorer>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatPublishSturdyRef>(op)) {
         completeUnitFailure(std::get<QueuedMultiVatPublishSturdyRef>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRef>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatUnpublishSturdyRef>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefs>(op)) {
+        completeUnitFailure(std::get<QueuedMultiVatClearPublishedSturdyRefs>(op).completion,
+                            message);
+      } else if (std::holds_alternative<QueuedMultiVatPublishedSturdyRefCount>(op)) {
+        completeUInt64Failure(std::get<QueuedMultiVatPublishedSturdyRefCount>(op).completion,
+                              message);
       } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRef>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatRestoreSturdyRef>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatGetDiagnostics>(op)) {
@@ -8652,6 +8797,22 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& run
                                                                 LeanByteArrayRef objectId,
                                                                 uint32_t targetId) {
   return runtime.enqueueMultiVatPublishSturdyRef(hostPeerId, std::move(objectId), targetId);
+}
+
+std::shared_ptr<UnitCompletion> enqueueMultiVatUnpublishSturdyRef(RuntimeLoop& runtime,
+                                                                  uint32_t hostPeerId,
+                                                                  LeanByteArrayRef objectId) {
+  return runtime.enqueueMultiVatUnpublishSturdyRef(hostPeerId, std::move(objectId));
+}
+
+std::shared_ptr<UnitCompletion> enqueueMultiVatClearPublishedSturdyRefs(RuntimeLoop& runtime,
+                                                                         uint32_t hostPeerId) {
+  return runtime.enqueueMultiVatClearPublishedSturdyRefs(hostPeerId);
+}
+
+std::shared_ptr<UInt64Completion> enqueueMultiVatPublishedSturdyRefCount(RuntimeLoop& runtime,
+                                                                          uint32_t hostPeerId) {
+  return runtime.enqueueMultiVatPublishedSturdyRefCount(hostPeerId);
 }
 
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(

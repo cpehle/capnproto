@@ -6268,6 +6268,71 @@ def testRuntimeMultiVatPublishedSturdyRefAndStats : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeMultiVatPublishedSturdyRefLifecycleControls : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-sturdy-catalog"
+    let bob ← runtime.newMultiVatServer "bob-sturdy-catalog" bootstrap
+
+    let objectIdA := ByteArray.mk #[1, 2, 3]
+    let objectIdB := ByteArray.mk #[4, 5, 6]
+    let vat : Capnp.Rpc.VatId := { host := "bob-sturdy-catalog", unique := false }
+
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 0)
+
+    bob.publishSturdyRef objectIdA bootstrap
+    bob.publishSturdyRef objectIdB bootstrap
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 2)
+
+    let restoredA ← alice.restoreSturdyRef { vat := vat, objectId := objectIdA }
+    runtime.releaseTarget restoredA
+
+    bob.unpublishSturdyRef objectIdA
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 1)
+
+    let removedErr ←
+      try
+        let restored ← alice.restoreSturdyRef { vat := vat, objectId := objectIdA }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(removedErr.containsSubstr "unknown sturdy ref object id") then
+      throw (IO.userError s!"missing unknown sturdy-ref object-id error text after unpublish: {removedErr}")
+
+    let restoredB ← alice.restoreSturdyRef { vat := vat, objectId := objectIdB }
+    runtime.releaseTarget restoredB
+
+    bob.clearPublishedSturdyRefs
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 0)
+
+    let clearedErr ←
+      try
+        let restored ← alice.restoreSturdyRef { vat := vat, objectId := objectIdB }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(clearedErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing no-published-sturdy-ref error text after clear: {clearedErr}")
+
+    let unpublishAfterClearErr ←
+      try
+        bob.unpublishSturdyRef objectIdA
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(unpublishAfterClearErr.containsSubstr "no sturdy refs published for host peer id:") then
+      throw (IO.userError s!"missing unpublish-after-clear error text: {unpublishAfterClearErr}")
+
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeVatNetworkBootstrapPeer : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -6321,6 +6386,7 @@ def testRuntimeVatNetworkSturdyRefLifecycleHelpers : IO Unit := do
     network.clearRestorer bob
     let publishedObjectId := ByteArray.mk #[1, 2, 3, 4]
     network.publishSturdyRef bob publishedObjectId bootstrap
+    assertEqual (← network.publishedSturdyRefCount bob) (UInt64.ofNat 1)
     let restoredViaPublish ← network.restoreSturdyRef alice {
       vat := { host := "bob-network-sturdy", unique := false }
       objectId := publishedObjectId
@@ -6329,6 +6395,27 @@ def testRuntimeVatNetworkSturdyRefLifecycleHelpers : IO Unit := do
       Echo.callFooM restoredViaPublish payload
     assertEqual response2.capTable.caps.size 0
     runtime.releaseTarget restoredViaPublish
+
+    network.unpublishSturdyRef bob publishedObjectId
+    assertEqual (← network.publishedSturdyRefCount bob) (UInt64.ofNat 0)
+
+    let missingAfterUnpublishErr ←
+      try
+        let restored ← network.restoreSturdyRef alice {
+          vat := { host := "bob-network-sturdy", unique := false }
+          objectId := publishedObjectId
+        }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(missingAfterUnpublishErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing no-published-sturdy-ref error text after unpublish: {missingAfterUnpublishErr}")
+
+    network.publishSturdyRef bob publishedObjectId bootstrap
+    assertEqual (← network.publishedSturdyRefCount bob) (UInt64.ofNat 1)
+    network.clearPublishedSturdyRefs bob
+    assertEqual (← network.publishedSturdyRefCount bob) (UInt64.ofNat 0)
 
     network.releasePeer alice
     network.releasePeer bob
@@ -6392,6 +6479,33 @@ def testRuntimeVatNetworkPeerRuntimeMismatchForSturdyRefOps : IO Unit := do
         pure (toString err)
     if !(publishErr.containsSubstr "VatNetwork.publishSturdyRef: peer belongs to a different runtime") then
       throw (IO.userError s!"expected vat-network publishSturdyRef mismatch error, got: {publishErr}")
+
+    let unpublishErr ←
+      try
+        networkA.unpublishSturdyRef bobB ByteArray.empty
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(unpublishErr.containsSubstr "VatNetwork.unpublishSturdyRef: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network unpublishSturdyRef mismatch error, got: {unpublishErr}")
+
+    let clearPublishedErr ←
+      try
+        networkA.clearPublishedSturdyRefs bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(clearPublishedErr.containsSubstr "VatNetwork.clearPublishedSturdyRefs: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network clearPublishedSturdyRefs mismatch error, got: {clearPublishedErr}")
+
+    let publishedCountErr ←
+      try
+        let _ ← networkA.publishedSturdyRefCount bobB
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(publishedCountErr.containsSubstr "VatNetwork.publishedSturdyRefCount: peer belongs to a different runtime") then
+      throw (IO.userError s!"expected vat-network publishedSturdyRefCount mismatch error, got: {publishedCountErr}")
 
     let restoreErr ←
       try

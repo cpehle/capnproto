@@ -257,6 +257,12 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatClearRestorer(RuntimeLoop& runtim
 std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& runtime, uint32_t hostPeerId,
                                                                 LeanByteArrayRef objectId,
                                                                 uint32_t targetId);
+std::shared_ptr<UnitCompletion> enqueueMultiVatUnpublishSturdyRef(
+    RuntimeLoop& runtime, uint32_t hostPeerId, LeanByteArrayRef objectId);
+std::shared_ptr<UnitCompletion> enqueueMultiVatClearPublishedSturdyRefs(RuntimeLoop& runtime,
+                                                                         uint32_t hostPeerId);
+std::shared_ptr<UInt64Completion> enqueueMultiVatPublishedSturdyRefCount(RuntimeLoop& runtime,
+                                                                          uint32_t hostPeerId);
 std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
     RuntimeLoop& runtime, uint32_t sourcePeerId, std::string host, bool unique,
     LeanByteArrayRef objectId);
