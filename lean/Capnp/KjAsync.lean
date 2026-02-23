@@ -167,13 +167,18 @@ inductive WebSocketMessage where
   | close (code : UInt16) (reason : String)
   deriving Inhabited, BEq
 
+inductive WebSocketMessageRef where
+  | text (value : String)
+  | binary (value : BytesRef)
+  | close (code : UInt16) (reason : String)
+
 abbrev ConnectionPromiseRef := PromiseRef Connection
 abbrev BytesPromiseRef := PromiseRef BytesRef
 abbrev UInt32PromiseRef := PromiseRef UInt32
 abbrev DatagramReceivePromiseRef := PromiseRef (String × BytesRef)
 abbrev HttpResponsePromiseRef := PromiseRef HttpResponseRef
 abbrev WebSocketPromiseRef := PromiseRef WebSocket
-abbrev WebSocketMessagePromiseRef := PromiseRef WebSocketMessage
+abbrev WebSocketMessagePromiseRef := PromiseRef WebSocketMessageRef
 
 @[extern "capnp_lean_kj_async_runtime_new"]
 opaque ffiRuntimeNewImpl : IO UInt64
@@ -1014,8 +1019,28 @@ inductive HttpMethod where
 
 @[inline] private def decodeWebSocketMessageRef
     (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : BytesRef) :
-    IO WebSocketMessage := do
-  decodeWebSocketMessage tag closeCode text (← BytesRef.toByteArray bytes)
+    IO WebSocketMessageRef := do
+  if tag == 0 then
+    return .text text
+  else if tag == 1 then
+    return .binary bytes
+  else if tag == 2 then
+    return .close closeCode.toUInt16 text
+  else
+    throw (IO.userError s!"unknown websocket message tag: {tag}")
+
+namespace WebSocketMessageRef
+
+@[inline] def toMessage (message : WebSocketMessageRef) : IO WebSocketMessage := do
+  match message with
+  | .text value =>
+    return .text value
+  | .binary value =>
+    return .binary (← value.toByteArray)
+  | .close code reason =>
+    return .close code reason
+
+end WebSocketMessageRef
 
 structure HttpServerRequest where
   requestId : UInt32
@@ -2771,11 +2796,15 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   }
 
 @[inline] def webSocketMessagePromiseAwait (runtime : Runtime)
-    (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+    (promise : WebSocketMessagePromiseRef) : IO WebSocketMessageRef := do
   ensureSameRuntime runtime promise.runtime "WebSocketMessagePromiseRef"
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketMessagePromiseAwaitRefImpl runtime.handle promise.handle
   decodeWebSocketMessageRef tag closeCode text bytes
+
+@[inline] def webSocketMessagePromiseAwaitCopy (runtime : Runtime)
+    (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+  (← runtime.webSocketMessagePromiseAwait promise).toMessage
 
 @[inline] def webSocketMessagePromiseCancel (runtime : Runtime)
     (promise : WebSocketMessagePromiseRef) : IO Unit := do
@@ -2789,10 +2818,23 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
 
 @[inline] def webSocketReceive (runtime : Runtime) (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← runtime.webSocketReceiveStart webSocket
+  runtime.webSocketMessagePromiseAwaitCopy promise
+
+@[inline] def webSocketReceiveRef (runtime : Runtime) (webSocket : WebSocket) :
+    IO WebSocketMessageRef := do
+  let promise ← runtime.webSocketReceiveStart webSocket
   runtime.webSocketMessagePromiseAwait promise
 
 @[inline] def webSocketReceiveWithMax (runtime : Runtime) (webSocket : WebSocket)
     (maxBytes : UInt32) : IO WebSocketMessage := do
+  ensureSameRuntime runtime webSocket.runtime "WebSocket"
+  let (tag, closeCode, text, bytes) ←
+    ffiRuntimeWebSocketReceiveWithMaxRefImpl runtime.handle webSocket.handle maxBytes
+  let message ← decodeWebSocketMessageRef tag closeCode text bytes
+  WebSocketMessageRef.toMessage message
+
+@[inline] def webSocketReceiveWithMaxRef (runtime : Runtime) (webSocket : WebSocket)
+    (maxBytes : UInt32) : IO WebSocketMessageRef := do
   ensureSameRuntime runtime webSocket.runtime "WebSocket"
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketReceiveWithMaxRefImpl runtime.handle webSocket.handle maxBytes
@@ -3084,10 +3126,13 @@ end WebSocketPromiseRef
 
 namespace WebSocketMessagePromiseRef
 
-@[inline] def await (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+@[inline] def await (promise : WebSocketMessagePromiseRef) : IO WebSocketMessageRef := do
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketMessagePromiseAwaitRefImpl promise.runtime.handle promise.handle
   decodeWebSocketMessageRef tag closeCode text bytes
+
+@[inline] def awaitCopy (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+  (← promise.await).toMessage
 
 @[inline] def cancel (promise : WebSocketMessagePromiseRef) : IO Unit :=
   ffiRuntimeWebSocketMessagePromiseCancelImpl promise.runtime.handle promise.handle
@@ -3095,10 +3140,13 @@ namespace WebSocketMessagePromiseRef
 @[inline] def release (promise : WebSocketMessagePromiseRef) : IO Unit :=
   ffiRuntimeWebSocketMessagePromiseReleaseImpl promise.runtime.handle promise.handle
 
-@[inline] def awaitAndRelease (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+@[inline] def awaitAndRelease (promise : WebSocketMessagePromiseRef) : IO WebSocketMessageRef := do
   promise.await
 
-instance : Capnp.Async.Awaitable WebSocketMessagePromiseRef WebSocketMessage where
+@[inline] def awaitAndReleaseCopy (promise : WebSocketMessagePromiseRef) : IO WebSocketMessage := do
+  promise.awaitCopy
+
+instance : Capnp.Async.Awaitable WebSocketMessagePromiseRef WebSocketMessageRef where
   await := WebSocketMessagePromiseRef.await
 
 instance : Capnp.Async.Cancelable WebSocketMessagePromiseRef where
@@ -3108,15 +3156,24 @@ instance : Capnp.Async.Releasable WebSocketMessagePromiseRef where
   release := WebSocketMessagePromiseRef.release
 
 @[inline] def awaitAsTask (promise : WebSocketMessagePromiseRef) :
-    IO (Task (Except IO.Error WebSocketMessage)) :=
+    IO (Task (Except IO.Error WebSocketMessageRef)) :=
   Capnp.Async.awaitAsTask promise
 
+@[inline] def awaitCopyAsTask (promise : WebSocketMessagePromiseRef) :
+    IO (Task (Except IO.Error WebSocketMessage)) :=
+  IO.asTask do
+    promise.awaitCopy
+
 @[inline] def toPromise (promise : WebSocketMessagePromiseRef) :
-    IO (Capnp.Async.Promise WebSocketMessage) := do
+    IO (Capnp.Async.Promise WebSocketMessageRef) := do
   pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
+@[inline] def toPromiseCopy (promise : WebSocketMessagePromiseRef) :
+    IO (Capnp.Async.Promise WebSocketMessage) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitCopyAsTask))
+
 def toIOPromise (promise : WebSocketMessagePromiseRef) :
-    IO (IO.Promise (Except String WebSocketMessage)) := do
+    IO (IO.Promise (Except String WebSocketMessageRef)) := do
   Capnp.Async.toIOPromise promise
 
 end WebSocketMessagePromiseRef
@@ -4137,14 +4194,28 @@ namespace WebSocket
 @[inline] def receiveAsTask (webSocket : WebSocket) :
     IO (Task (Except IO.Error WebSocketMessage)) := do
   let promise ← webSocket.receiveStart
+  promise.awaitCopyAsTask
+
+@[inline] def receiveAsTaskRef (webSocket : WebSocket) :
+    IO (Task (Except IO.Error WebSocketMessageRef)) := do
+  let promise ← webSocket.receiveStart
   promise.awaitAsTask
 
 @[inline] def receiveAsPromise (webSocket : WebSocket) :
     IO (Capnp.Async.Promise WebSocketMessage) := do
   pure (Capnp.Async.Promise.ofTask (← webSocket.receiveAsTask))
 
+@[inline] def receiveAsPromiseRef (webSocket : WebSocket) :
+    IO (Capnp.Async.Promise WebSocketMessageRef) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.receiveAsTaskRef))
+
 @[inline] def receiveWithMaxAsTask (webSocket : WebSocket) (maxBytes : UInt32) :
     IO (Task (Except IO.Error WebSocketMessage)) := do
+  let promise ← webSocket.receiveStartWithMax maxBytes
+  promise.awaitCopyAsTask
+
+@[inline] def receiveWithMaxAsTaskRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO (Task (Except IO.Error WebSocketMessageRef)) := do
   let promise ← webSocket.receiveStartWithMax maxBytes
   promise.awaitAsTask
 
@@ -4152,14 +4223,27 @@ namespace WebSocket
     IO (Capnp.Async.Promise WebSocketMessage) := do
   pure (Capnp.Async.Promise.ofTask (← webSocket.receiveWithMaxAsTask maxBytes))
 
+@[inline] def receiveWithMaxAsPromiseRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO (Capnp.Async.Promise WebSocketMessageRef) := do
+  pure (Capnp.Async.Promise.ofTask (← webSocket.receiveWithMaxAsTaskRef maxBytes))
+
 @[inline] def receive (webSocket : WebSocket) : IO WebSocketMessage := do
   let promise ← webSocket.receiveStart
-  let (tag, closeCode, text, bytes) ←
-    ffiRuntimeWebSocketMessagePromiseAwaitRefImpl webSocket.runtime.handle promise.handle
-  decodeWebSocketMessageRef tag closeCode text bytes
+  promise.awaitCopy
+
+@[inline] def receiveRef (webSocket : WebSocket) : IO WebSocketMessageRef := do
+  let promise ← webSocket.receiveStart
+  promise.await
 
 @[inline] def receiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     IO WebSocketMessage := do
+  let (tag, closeCode, text, bytes) ←
+    ffiRuntimeWebSocketReceiveWithMaxRefImpl webSocket.runtime.handle webSocket.handle maxBytes
+  let message ← decodeWebSocketMessageRef tag closeCode text bytes
+  WebSocketMessageRef.toMessage message
+
+@[inline] def receiveWithMaxRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    IO WebSocketMessageRef := do
   let (tag, closeCode, text, bytes) ←
     ffiRuntimeWebSocketReceiveWithMaxRefImpl webSocket.runtime.handle webSocket.handle maxBytes
   decodeWebSocketMessageRef tag closeCode text bytes
@@ -5500,10 +5584,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.receiveAsTask
 
+@[inline] def webSocketReceiveAsTaskRef (webSocket : WebSocket) :
+    RuntimeM (Task (Except IO.Error WebSocketMessageRef)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveAsTaskRef
+
 @[inline] def webSocketReceiveAsPromise (webSocket : WebSocket) :
     RuntimeM (Capnp.Async.Promise WebSocketMessage) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.receiveAsPromise
+
+@[inline] def webSocketReceiveAsPromiseRef (webSocket : WebSocket) :
+    RuntimeM (Capnp.Async.Promise WebSocketMessageRef) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveAsPromiseRef
 
 @[inline] def webSocketReceiveStartWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM WebSocketMessagePromiseRef := do
@@ -5514,14 +5608,28 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.receiveWithMaxAsTask maxBytes
 
+@[inline] def webSocketReceiveWithMaxAsTaskRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM (Task (Except IO.Error WebSocketMessageRef)) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveWithMaxAsTaskRef maxBytes
+
 @[inline] def webSocketReceiveWithMaxAsPromise (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM (Capnp.Async.Promise WebSocketMessage) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
   webSocket.receiveWithMaxAsPromise maxBytes
 
+@[inline] def webSocketReceiveWithMaxAsPromiseRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM (Capnp.Async.Promise WebSocketMessageRef) := do
+  ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
+  webSocket.receiveWithMaxAsPromiseRef maxBytes
+
 @[inline] def awaitWebSocketMessage (promise : WebSocketMessagePromiseRef) :
-    RuntimeM WebSocketMessage := do
+    RuntimeM WebSocketMessageRef := do
   promise.await
+
+@[inline] def awaitWebSocketMessageCopy (promise : WebSocketMessagePromiseRef) :
+    RuntimeM WebSocketMessage := do
+  promise.awaitCopy
 
 @[inline] def cancelWebSocketMessage (promise : WebSocketMessagePromiseRef) :
     RuntimeM Unit := do
@@ -5534,9 +5642,16 @@ namespace RuntimeM
 @[inline] def webSocketReceive (webSocket : WebSocket) : RuntimeM WebSocketMessage := do
   webSocket.receive
 
+@[inline] def webSocketReceiveRef (webSocket : WebSocket) : RuntimeM WebSocketMessageRef := do
+  webSocket.receiveRef
+
 @[inline] def webSocketReceiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM WebSocketMessage := do
   webSocket.receiveWithMax maxBytes
+
+@[inline] def webSocketReceiveWithMaxRef (webSocket : WebSocket) (maxBytes : UInt32) :
+    RuntimeM WebSocketMessageRef := do
+  webSocket.receiveWithMaxRef maxBytes
 
 @[inline] def webSocketCloseStartCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM PromiseRef := do

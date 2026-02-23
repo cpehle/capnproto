@@ -1516,8 +1516,8 @@ def testKjAsyncBytesRefDatagramAndWebSocketPrimitives : IO Unit := do
     sendPromise.await
 
     match (← receivePromise.await) with
-    | .binary bytes =>
-      assertEqual bytes payload
+    | .binary bytesRef =>
+      assertEqual (← bytesRef.toByteArray) payload
     | _ =>
       throw (IO.userError "expected binary websocket payload from sendBinaryStartRef")
 
@@ -1574,12 +1574,12 @@ def testKjAsyncBytesRefConnectionAndWebSocketTaskPromiseHelpers : IO Unit := do
       | .error err =>
         throw (IO.userError s!"WebSocket.sendBinaryAsTaskRef failed: {err}")
       match (← recvA.await) with
-      | .binary bytes => assertEqual bytes payload
+      | .binary bytesRef => assertEqual (← bytesRef.toByteArray) payload
       | _ => throw (IO.userError "expected binary websocket payload from sendBinaryAsTaskRef")
 
       let recvB ← wsRight.receiveStart
       (← wsLeft.sendBinaryAsPromiseRef payloadRef).await
-      match (← recvB.await) with
+      match (← recvB.awaitCopy) with
       | .binary bytes => assertEqual bytes payload
       | _ => throw (IO.userError "expected binary websocket payload from sendBinaryAsPromiseRef")
     finally
@@ -1963,7 +1963,7 @@ def testKjAsyncWebSocketPipeAsyncSendReceive : IO Unit := do
     let recvBinary ← right.receiveStart
     let sendBinary ← left.sendBinaryStart payload
     sendBinary.await
-    let binaryMessage ← recvBinary.await
+    let binaryMessage ← recvBinary.awaitCopy
     match binaryMessage with
     | .binary bytes =>
       assertEqual bytes payload
