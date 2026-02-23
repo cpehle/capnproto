@@ -1645,10 +1645,22 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   IO.asTask do
     runtime.datagramReceivePromiseAwaitCopy pending
 
+@[inline] def datagramReceiveAsTaskRef (runtime : Runtime) (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × BytesRef))) := do
+  let pending ← runtime.datagramReceiveStart port maxBytes
+  IO.asTask do
+    runtime.datagramReceivePromiseAwait pending
+
 @[inline] def datagramReceiveAsPromise (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) :
     IO (Capnp.Async.Promise (String × ByteArray)) := do
   pure (Capnp.Async.Promise.ofTask (← runtime.datagramReceiveAsTask port maxBytes))
+
+@[inline] def datagramReceiveAsPromiseRef (runtime : Runtime) (port : DatagramPort)
+    (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × BytesRef)) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.datagramReceiveAsTaskRef port maxBytes))
 
 @[inline] def withDatagramPort (runtime : Runtime) (address : String)
     (action : DatagramPort -> IO α) (portHint : UInt32 := 0) : IO α := do
@@ -3231,9 +3243,19 @@ namespace Connection
   IO.asTask do
     Runtime.bytesPromiseAwaitCopy connection.runtime pending
 
+@[inline] def readAsTaskRef (connection : Connection) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error BytesRef)) := do
+  let pending ← connection.readStart minBytes maxBytes
+  IO.asTask do
+    Runtime.bytesPromiseAwait connection.runtime pending
+
 @[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
   pure (Capnp.Async.Promise.ofTask (← connection.readAsTask minBytes maxBytes))
+
+@[inline] def readAsPromiseRef (connection : Connection) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise BytesRef) := do
+  pure (Capnp.Async.Promise.ofTask (← connection.readAsTaskRef minBytes maxBytes))
 
 @[inline] def shutdownWrite (connection : Connection) : IO Unit :=
   ffiRuntimeConnectionShutdownWriteImpl connection.runtime.handle connection.handle
@@ -3572,9 +3594,19 @@ namespace DatagramPort
       port.runtime.handle promise.handle
     pure (source, ← BytesRef.toByteArray bytesRef)
 
+@[inline] def receiveAsTaskRef (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × BytesRef))) := do
+  let promise ← port.receiveStart maxBytes
+  IO.asTask do
+    ffiRuntimeDatagramReceivePromiseAwaitRefImpl port.runtime.handle promise.handle
+
 @[inline] def receiveAsPromise (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
     IO (Capnp.Async.Promise (String × ByteArray)) := do
   pure (Capnp.Async.Promise.ofTask (← port.receiveAsTask maxBytes))
+
+@[inline] def receiveAsPromiseRef (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × BytesRef)) := do
+  pure (Capnp.Async.Promise.ofTask (← port.receiveAsTaskRef maxBytes))
 
 @[inline] def sendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
@@ -3636,9 +3668,17 @@ namespace DatagramPeer
     IO (Task (Except IO.Error (String × ByteArray))) :=
   peer.port.receiveAsTask maxBytes
 
+@[inline] def receiveAsTaskRef (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
+    IO (Task (Except IO.Error (String × BytesRef))) :=
+  peer.port.receiveAsTaskRef maxBytes
+
 @[inline] def receiveAsPromise (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
     IO (Capnp.Async.Promise (String × ByteArray)) :=
   peer.port.receiveAsPromise maxBytes
+
+@[inline] def receiveAsPromiseRef (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
+    IO (Capnp.Async.Promise (String × BytesRef)) :=
+  peer.port.receiveAsPromiseRef maxBytes
 
 @[inline] def receiveMany (peer : DatagramPeer) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : IO (Array (String × ByteArray)) :=
@@ -3871,9 +3911,18 @@ namespace HttpResponseBody
   let promise ← responseBody.readStart minBytes maxBytes
   promise.awaitCopyAsTask
 
+@[inline] def readAsTaskRef (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error BytesRef)) := do
+  let promise ← responseBody.readStart minBytes maxBytes
+  promise.awaitAsTask
+
 @[inline] def readAsPromise (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
   pure (Capnp.Async.Promise.ofTask (← responseBody.readAsTask minBytes maxBytes))
+
+@[inline] def readAsPromiseRef (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise BytesRef) := do
+  pure (Capnp.Async.Promise.ofTask (← responseBody.readAsTaskRef minBytes maxBytes))
 
 @[inline] def read (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
     IO ByteArray := do
@@ -3906,9 +3955,18 @@ namespace HttpServerRequestBody
   let promise ← requestBody.readStart minBytes maxBytes
   promise.awaitCopyAsTask
 
+@[inline] def readAsTaskRef (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error BytesRef)) := do
+  let promise ← requestBody.readStart minBytes maxBytes
+  promise.awaitAsTask
+
 @[inline] def readAsPromise (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
   pure (Capnp.Async.Promise.ofTask (← requestBody.readAsTask minBytes maxBytes))
+
+@[inline] def readAsPromiseRef (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise BytesRef) := do
+  pure (Capnp.Async.Promise.ofTask (← requestBody.readAsTaskRef minBytes maxBytes))
 
 @[inline] def read (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO ByteArray := do
@@ -4295,10 +4353,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.readAsTask minBytes maxBytes
 
+@[inline] def readAsTaskRef (connection : Connection) (minBytes maxBytes : UInt32) :
+    RuntimeM (Task (Except IO.Error BytesRef)) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.readAsTaskRef minBytes maxBytes
+
 @[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
     RuntimeM (Capnp.Async.Promise ByteArray) := do
   ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.readAsPromise minBytes maxBytes
+
+@[inline] def readAsPromiseRef (connection : Connection) (minBytes maxBytes : UInt32) :
+    RuntimeM (Capnp.Async.Promise BytesRef) := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
+  connection.readAsPromiseRef minBytes maxBytes
 
 @[inline] def readAll (connection : Connection) (chunkSize : UInt32 := 0x1000) :
     RuntimeM ByteArray := do
@@ -4510,10 +4578,22 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.receiveAsTask maxBytes
 
+@[inline] def datagramPeerReceiveAsTaskRef (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Task (Except IO.Error (String × BytesRef))) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.receiveAsTaskRef maxBytes
+
 @[inline] def datagramPeerReceiveAsPromise (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Capnp.Async.Promise (String × ByteArray)) := do
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.receiveAsPromise maxBytes
+
+@[inline] def datagramPeerReceiveAsPromiseRef (peer : DatagramPeer)
+    (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Capnp.Async.Promise (String × BytesRef)) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.receiveAsPromiseRef maxBytes
 
 @[inline] def datagramPeerReceiveMany (peer : DatagramPeer) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
@@ -4543,9 +4623,17 @@ namespace RuntimeM
     RuntimeM (Task (Except IO.Error (String × ByteArray))) := do
   Runtime.datagramReceiveAsTask (← runtime) port maxBytes
 
+@[inline] def datagramReceiveAsTaskRef (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Task (Except IO.Error (String × BytesRef))) := do
+  Runtime.datagramReceiveAsTaskRef (← runtime) port maxBytes
+
 @[inline] def datagramReceiveAsPromise (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
     RuntimeM (Capnp.Async.Promise (String × ByteArray)) := do
   Runtime.datagramReceiveAsPromise (← runtime) port maxBytes
+
+@[inline] def datagramReceiveAsPromiseRef (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
+    RuntimeM (Capnp.Async.Promise (String × BytesRef)) := do
+  Runtime.datagramReceiveAsPromiseRef (← runtime) port maxBytes
 
 @[inline] def datagramReceiveMany (port : DatagramPort) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
@@ -5059,10 +5147,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
   responseBody.readAsTask minBytes maxBytes
 
+@[inline] def httpResponseBodyReadAsTaskRef (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Task (Except IO.Error BytesRef)) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
+  responseBody.readAsTaskRef minBytes maxBytes
+
 @[inline] def httpResponseBodyReadAsPromise (responseBody : HttpResponseBody)
     (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise ByteArray) := do
   ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
   responseBody.readAsPromise minBytes maxBytes
+
+@[inline] def httpResponseBodyReadAsPromiseRef (responseBody : HttpResponseBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise BytesRef) := do
+  ensureSameRuntime (← runtime) responseBody.runtime "HttpResponseBody"
+  responseBody.readAsPromiseRef minBytes maxBytes
 
 @[inline] def httpResponseBodyRead (responseBody : HttpResponseBody)
     (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do
@@ -5084,10 +5182,20 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
   requestBody.readAsTask minBytes maxBytes
 
+@[inline] def httpServerRequestBodyReadAsTaskRef (requestBody : HttpServerRequestBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Task (Except IO.Error BytesRef)) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
+  requestBody.readAsTaskRef minBytes maxBytes
+
 @[inline] def httpServerRequestBodyReadAsPromise (requestBody : HttpServerRequestBody)
     (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise ByteArray) := do
   ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
   requestBody.readAsPromise minBytes maxBytes
+
+@[inline] def httpServerRequestBodyReadAsPromiseRef (requestBody : HttpServerRequestBody)
+    (minBytes maxBytes : UInt32) : RuntimeM (Capnp.Async.Promise BytesRef) := do
+  ensureSameRuntime (← runtime) requestBody.runtime "HttpServerRequestBody"
+  requestBody.readAsPromiseRef minBytes maxBytes
 
 @[inline] def httpServerRequestBodyRead (requestBody : HttpServerRequestBody)
     (minBytes maxBytes : UInt32) : RuntimeM ByteArray := do

@@ -1545,6 +1545,20 @@ def testKjAsyncBytesRefConnectionAndWebSocketTaskPromiseHelpers : IO Unit := do
       (← left.writeAsPromiseRef payloadRef).await
       let receivedB ← right.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
       assertEqual receivedB payload
+
+      let readTaskRef ← right.readAsTaskRef (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      (← left.writeAsPromiseRef payloadRef).await
+      let receivedCRef ←
+        match (← IO.wait readTaskRef) with
+        | .ok bytesRef => pure bytesRef
+        | .error err =>
+          throw (IO.userError s!"Connection.readAsTaskRef failed: {err}")
+      assertEqual (← receivedCRef.toByteArray) payload
+
+      let readPromiseRef ← right.readAsPromiseRef (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      (← left.writeAsPromiseRef payloadRef).await
+      let receivedDRef ← readPromiseRef.await
+      assertEqual (← receivedDRef.toByteArray) payload
     finally
       left.release
       right.release
@@ -1879,6 +1893,17 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let (_source2, bytes2) ← receivePromise.await
     assertEqual bytes2 payload
 
+    let receivePromiseRef ← receiverPort.receiveAsPromiseRef (UInt32.ofNat 1024)
+    let sendTaskRefCase ← senderPort.sendAsTask "127.0.0.1" payload receiverPortNumber
+    let sentCount3 ←
+      match (← IO.wait sendTaskRefCase) with
+      | .ok value => pure value
+      | .error err =>
+        throw (IO.userError s!"DatagramPort.sendAsTask (ref receive case) failed: {err}")
+    assertEqual sentCount3 (UInt32.ofNat payload.size)
+    let (_source3, bytes3Ref) ← receivePromiseRef.await
+    assertEqual (← bytes3Ref.toByteArray) payload
+
     let leftSeedPeer ← senderRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
     let rightSeedPeer ← receiverRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
     let leftPortNumber ← leftSeedPeer.port.getPort
@@ -1887,7 +1912,7 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
     let peerPayload := ByteArray.append payload (ByteArray.empty.push (UInt8.ofNat 3))
     try
-      let peerReceivePromise ← rightPeer.receiveAsPromise (UInt32.ofNat 1024)
+      let peerReceivePromise ← rightPeer.receiveAsPromiseRef (UInt32.ofNat 1024)
       let peerSendTask ← leftPeer.sendAsTask peerPayload
       let peerSentCount ←
         match (← IO.wait peerSendTask) with
@@ -1895,19 +1920,19 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
         | .error err =>
           throw (IO.userError s!"DatagramPeer.sendAsTask failed: {err}")
       assertEqual peerSentCount (UInt32.ofNat peerPayload.size)
-      let (_peerSource, peerBytes) ← peerReceivePromise.await
-      assertEqual peerBytes peerPayload
+      let (_peerSource, peerBytesRef) ← peerReceivePromise.await
+      assertEqual (← peerBytesRef.toByteArray) peerPayload
 
-      let reverseReceiveTask ← leftPeer.receiveAsTask (UInt32.ofNat 1024)
+      let reverseReceiveTask ← leftPeer.receiveAsTaskRef (UInt32.ofNat 1024)
       let reverseSendPromise ← rightPeer.sendAsPromise payload
       let reverseSentCount ← reverseSendPromise.await
       assertEqual reverseSentCount (UInt32.ofNat payload.size)
-      let (_reverseSource, reverseBytes) ←
+      let (_reverseSource, reverseBytesRef) ←
         match (← IO.wait reverseReceiveTask) with
         | .ok datagram => pure datagram
         | .error err =>
-          throw (IO.userError s!"DatagramPeer.receiveAsTask failed: {err}")
-      assertEqual reverseBytes payload
+          throw (IO.userError s!"DatagramPeer.receiveAsTaskRef failed: {err}")
+      assertEqual (← reverseBytesRef.toByteArray) payload
     finally
       leftPeer.release
       rightPeer.release
@@ -2581,10 +2606,21 @@ def testKjAsyncHttpStreamingBodyTaskAndPromiseHelpersRef : IO Unit := do
         (fun h => h.name == "x-stream-helper-ref-response" && h.value == "1"))
       "expected x-stream-helper-ref-response header"
 
+    let firstResponseChunkRef ←
+      match (← IO.wait (← response.body.readAsTaskRef (UInt32.ofNat 1) (UInt32.ofNat 64))) with
+      | .ok chunk => pure chunk
+      | .error err =>
+        throw (IO.userError s!"HttpResponseBody.readAsTaskRef failed: {err}")
     let mut receivedResponseBody := ByteArray.empty
     let mut done := false
+    let firstResponseChunk ← firstResponseChunkRef.toByteArray
+    if firstResponseChunk.size == 0 then
+      done := true
+    else
+      receivedResponseBody := ByteArray.append receivedResponseBody firstResponseChunk
     while !done do
-      let chunk ← response.body.read (UInt32.ofNat 1) (UInt32.ofNat 64)
+      let chunkRef ← (← response.body.readAsPromiseRef (UInt32.ofNat 1) (UInt32.ofNat 64)).await
+      let chunk ← chunkRef.toByteArray
       if chunk.size == 0 then
         done := true
       else
