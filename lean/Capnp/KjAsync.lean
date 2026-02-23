@@ -970,8 +970,28 @@ inductive HttpMethod where
   | put
   | delete
   | patch
+  | purge
   | options
   | trace
+  | copy
+  | lock
+  | mkcol
+  | move
+  | propfind
+  | proppatch
+  | search
+  | unlock
+  | acl
+  | report
+  | mkactivity
+  | checkout
+  | merge
+  | msearch
+  | notify
+  | subscribe
+  | unsubscribe
+  | query
+  | ban
   deriving Inhabited, BEq, Repr
 
 @[inline] private def httpMethodToTag (method : HttpMethod) : UInt32 :=
@@ -982,8 +1002,28 @@ inductive HttpMethod where
   | .put => 3
   | .delete => 4
   | .patch => 5
-  | .options => 6
-  | .trace => 7
+  | .purge => 6
+  | .options => 7
+  | .trace => 8
+  | .copy => 9
+  | .lock => 10
+  | .mkcol => 11
+  | .move => 12
+  | .propfind => 13
+  | .proppatch => 14
+  | .search => 15
+  | .unlock => 16
+  | .acl => 17
+  | .report => 18
+  | .mkactivity => 19
+  | .checkout => 20
+  | .merge => 21
+  | .msearch => 22
+  | .notify => 23
+  | .subscribe => 24
+  | .unsubscribe => 25
+  | .query => 26
+  | .ban => 27
 
 @[inline] private def httpMethodFromTag (tag : UInt32) : IO HttpMethod := do
   if tag == 0 then
@@ -999,9 +1039,49 @@ inductive HttpMethod where
   else if tag == 5 then
     return .patch
   else if tag == 6 then
-    return .options
+    return .purge
   else if tag == 7 then
+    return .options
+  else if tag == 8 then
     return .trace
+  else if tag == 9 then
+    return .copy
+  else if tag == 10 then
+    return .lock
+  else if tag == 11 then
+    return .mkcol
+  else if tag == 12 then
+    return .move
+  else if tag == 13 then
+    return .propfind
+  else if tag == 14 then
+    return .proppatch
+  else if tag == 15 then
+    return .search
+  else if tag == 16 then
+    return .unlock
+  else if tag == 17 then
+    return .acl
+  else if tag == 18 then
+    return .report
+  else if tag == 19 then
+    return .mkactivity
+  else if tag == 20 then
+    return .checkout
+  else if tag == 21 then
+    return .merge
+  else if tag == 22 then
+    return .msearch
+  else if tag == 23 then
+    return .notify
+  else if tag == 24 then
+    return .subscribe
+  else if tag == 25 then
+    return .unsubscribe
+  else if tag == 26 then
+    return .query
+  else if tag == 27 then
+    return .ban
   else
     throw (IO.userError s!"unknown HTTP method tag: {tag}")
 

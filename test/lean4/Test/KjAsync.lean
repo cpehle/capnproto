@@ -2422,6 +2422,38 @@ def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncHttpServerMethodCoverage : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  let methods : Array Capnp.KjAsync.HttpMethod := #[
+    .get, .head, .post, .put, .delete, .patch, .purge, .options, .trace,
+    .copy, .lock, .mkcol, .move, .propfind, .proppatch, .search, .unlock, .acl,
+    .report, .mkactivity, .checkout, .merge, .msearch, .notify, .subscribe,
+    .unsubscribe, .query, .ban
+  ]
+  try
+    let server ← runtime.httpServerListen "127.0.0.1" 0
+    for i in [:methods.size] do
+      let method := methods[i]!
+      let path := s!"/lean-http-method-{i}"
+      let responsePromise ← runtime.httpRequestStartWithHeaders
+        method "127.0.0.1" path #[] ByteArray.empty server.boundPort
+
+      let request ← waitForHttpServerRequest runtime server
+      assertTrue (request.method == method) "expected HTTP method to roundtrip through server poll"
+      assertEqual request.path path
+      assertEqual request.body ByteArray.empty
+
+      runtime.httpServerRespond server request.requestId (UInt32.ofNat 204) "No Content"
+        #[] ByteArray.empty
+      let response ← runtime.httpResponsePromiseAwaitWithHeaders responsePromise
+      assertEqual response.status (UInt32.ofNat 204)
+      assertEqual response.statusText "No Content"
+
+    server.release
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncHttpServerRoundtripHeaderDecodeStress : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   let mkHeader : String → Nat → Capnp.KjAsync.HttpHeader := fun namePrefix idx =>

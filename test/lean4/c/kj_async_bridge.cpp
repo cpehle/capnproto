@@ -4273,9 +4273,49 @@ class KjAsyncRuntimeLoop {
       case 5:
         return kj::HttpMethod::PATCH;
       case 6:
-        return kj::HttpMethod::OPTIONS;
+        return kj::HttpMethod::PURGE;
       case 7:
+        return kj::HttpMethod::OPTIONS;
+      case 8:
         return kj::HttpMethod::TRACE;
+      case 9:
+        return kj::HttpMethod::COPY;
+      case 10:
+        return kj::HttpMethod::LOCK;
+      case 11:
+        return kj::HttpMethod::MKCOL;
+      case 12:
+        return kj::HttpMethod::MOVE;
+      case 13:
+        return kj::HttpMethod::PROPFIND;
+      case 14:
+        return kj::HttpMethod::PROPPATCH;
+      case 15:
+        return kj::HttpMethod::SEARCH;
+      case 16:
+        return kj::HttpMethod::UNLOCK;
+      case 17:
+        return kj::HttpMethod::ACL;
+      case 18:
+        return kj::HttpMethod::REPORT;
+      case 19:
+        return kj::HttpMethod::MKACTIVITY;
+      case 20:
+        return kj::HttpMethod::CHECKOUT;
+      case 21:
+        return kj::HttpMethod::MERGE;
+      case 22:
+        return kj::HttpMethod::MSEARCH;
+      case 23:
+        return kj::HttpMethod::NOTIFY;
+      case 24:
+        return kj::HttpMethod::SUBSCRIBE;
+      case 25:
+        return kj::HttpMethod::UNSUBSCRIBE;
+      case 26:
+        return kj::HttpMethod::QUERY;
+      case 27:
+        return kj::HttpMethod::BAN;
       default:
         throw std::runtime_error("unknown HTTP method tag: " + std::to_string(method));
     }
@@ -4295,10 +4335,50 @@ class KjAsyncRuntimeLoop {
         return 4;
       case kj::HttpMethod::PATCH:
         return 5;
-      case kj::HttpMethod::OPTIONS:
+      case kj::HttpMethod::PURGE:
         return 6;
-      case kj::HttpMethod::TRACE:
+      case kj::HttpMethod::OPTIONS:
         return 7;
+      case kj::HttpMethod::TRACE:
+        return 8;
+      case kj::HttpMethod::COPY:
+        return 9;
+      case kj::HttpMethod::LOCK:
+        return 10;
+      case kj::HttpMethod::MKCOL:
+        return 11;
+      case kj::HttpMethod::MOVE:
+        return 12;
+      case kj::HttpMethod::PROPFIND:
+        return 13;
+      case kj::HttpMethod::PROPPATCH:
+        return 14;
+      case kj::HttpMethod::SEARCH:
+        return 15;
+      case kj::HttpMethod::UNLOCK:
+        return 16;
+      case kj::HttpMethod::ACL:
+        return 17;
+      case kj::HttpMethod::REPORT:
+        return 18;
+      case kj::HttpMethod::MKACTIVITY:
+        return 19;
+      case kj::HttpMethod::CHECKOUT:
+        return 20;
+      case kj::HttpMethod::MERGE:
+        return 21;
+      case kj::HttpMethod::MSEARCH:
+        return 22;
+      case kj::HttpMethod::NOTIFY:
+        return 23;
+      case kj::HttpMethod::SUBSCRIBE:
+        return 24;
+      case kj::HttpMethod::UNSUBSCRIBE:
+        return 25;
+      case kj::HttpMethod::QUERY:
+        return 26;
+      case kj::HttpMethod::BAN:
+        return 27;
       default:
         throw std::runtime_error("unsupported HTTP method in Capnp.KjAsync bridge");
     }
