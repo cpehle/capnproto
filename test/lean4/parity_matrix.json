@@ -136,10 +136,13 @@
       "Test.KjAsync.testRpcRuntimeMWithKjAsyncRuntimeHelpers",
       "Test.RpcClient.testRuntimeAdvancedHandlerStartsKjAsyncPromisesOnSameRuntime",
       "Test.RpcClient.testRuntimeAdvancedHandlerRejectsKjAsyncAwaitOnWorkerThread",
+      "Test.RpcShutdown.testRuntimeAdvancedHandlerRejectsRpcShutdownOnWorkerThread",
+      "Test.RpcShutdown.testRuntimeAdvancedHandlerRejectsKjAsyncShutdownOnWorkerThread",
+      "Test.RpcShutdown.testKjAsyncShutdownReleasesRpcRuntimeHandle",
       "Test.RpcClient.testRuntimeKjAsyncSleepAsTaskAndPromiseHelpers",
       "Test.RpcClient.testRuntimeAsyncFFIPump"
     ],
-    "status": "partial",
-    "notes": "Lean runtime-handle bridge helpers are covered for promises/tasks/fd primitives, runtime pump task integration, and worker-thread safety."
+    "status": "covered",
+    "notes": "Lean runtime-handle bridge helpers are covered for promises/tasks/fd primitives, runtime pump task integration, worker-thread await/shutdown safety, and cross-API shutdown compatibility."
   }
 ]
