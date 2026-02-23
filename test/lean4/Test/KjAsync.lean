@@ -358,7 +358,7 @@ def testKjAsyncRuntimeMBytesRefAndHttpPromiseHelpers : IO Unit := do
         Capnp.KjAsync.RuntimeM.httpServerRespondRef
           server request.requestId (UInt32.ofNat 201) "Created" #[] responseBodyRef
         Capnp.KjAsync.RuntimeM.pump
-        let response ← Capnp.KjAsync.RuntimeM.httpResponsePromiseAwaitRef responsePromise
+        let response ← Capnp.KjAsync.RuntimeM.httpResponsePromiseAwait responsePromise
         assertEqual response.status (UInt32.ofNat 201)
         let receivedResponseBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
         assertEqual receivedResponseBody responseBody
@@ -1251,7 +1251,7 @@ def testKjAsyncTypedPromiseHelpersConnectionAndDatagram : IO Unit := do
     let writePendingRef ← left.writeStartRef payloadRef
     let writePromise ← writePendingRef.toPromise
     let readPendingRef ← right.readStart (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
-    let readPromiseRef ← readPendingRef.toPromiseRef
+    let readPromiseRef ← readPendingRef.toPromise
     let _ ← writePromise.await
     let readRef ← readPromiseRef.await
     assertEqual (← readRef.toByteArray) payload
@@ -1268,7 +1268,7 @@ def testKjAsyncTypedPromiseHelpersConnectionAndDatagram : IO Unit := do
     let senderPort ← runtime.datagramBind "127.0.0.1" 0
     let receiverPortNumber ← receiverPort.getPort
     let receivePending ← receiverPort.receiveStart (UInt32.ofNat 4096)
-    let receivePromiseRef ← receivePending.toPromiseRef
+    let receivePromiseRef ← receivePending.toPromise
     let sendPending ← senderPort.sendStartRef "127.0.0.1" payloadRef receiverPortNumber
     let sendPromise ← sendPending.toPromise
     let sentCount ← sendPromise.await
@@ -1297,7 +1297,7 @@ def testKjAsyncTypedPromiseHelpersHttpResponseRef : IO Unit := do
     assertEqual request.body payload
     runtime.httpServerRespond server request.requestId (UInt32.ofNat 203) "Non-Authoritative Information"
       #[] payload
-    let responsePromiseRef ← responsePending.toPromiseRef
+    let responsePromiseRef ← responsePending.toPromise
     let responseRef ← responsePromiseRef.await
     assertEqual responseRef.status (UInt32.ofNat 203)
     assertEqual (← responseRef.body.toByteArray) payload
@@ -1467,7 +1467,7 @@ def testKjAsyncBytesRefConnectionPrimitives : IO Unit := do
     let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
     writePromise.await
 
-    let readRef ← readPromise.awaitRef
+    let readRef ← readPromise.await
     let readSize ← Capnp.KjAsync.BytesRef.size readRef
     assertEqual readSize payloadSize
     let received ← Capnp.KjAsync.BytesRef.toByteArray readRef
@@ -1495,7 +1495,7 @@ def testKjAsyncBytesRefDatagramAndWebSocketPrimitives : IO Unit := do
     let sentCount ← senderRuntime.datagramSendRef senderPort "127.0.0.1" payloadRef receiverPortNumber
     assertEqual sentCount (UInt32.ofNat payload.size)
 
-    let (_source, receivedRef) ← receiverRuntime.datagramReceivePromiseAwaitRef receivePromise
+    let (_source, receivedRef) ← receiverRuntime.datagramReceivePromiseAwait receivePromise
     let received ← Capnp.KjAsync.BytesRef.toByteArray receivedRef
     assertEqual received payload
 
@@ -1595,7 +1595,7 @@ def testKjAsyncBytesRefHttpRequestPrimitives : IO Unit := do
       runtime.httpServerRespondRef
         server request.requestId (UInt32.ofNat 201) "Created" #[] responseBodyRef
       runtime.pump
-      let response ← responsePromise.awaitRef
+      let response ← responsePromise.await
       assertEqual response.status (UInt32.ofNat 201)
       let receivedBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
       assertEqual receivedBody responseBody
@@ -1628,7 +1628,7 @@ def testKjAsyncBytesRefHttpRequestStartCrossRuntimeWithPump : IO Unit := do
         server request.requestId (UInt32.ofNat 202) "Accepted" #[] responseBodyRef
       serverRuntime.pump
 
-      let response ← responsePromise.awaitRef
+      let response ← responsePromise.await
       assertEqual response.status (UInt32.ofNat 202)
       let receivedBody ← Capnp.KjAsync.BytesRef.toByteArray response.body
       assertEqual receivedBody responseBody
