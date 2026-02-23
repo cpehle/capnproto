@@ -716,6 +716,75 @@ def testKjAsyncNetworkRoundtrip : IO Unit := do
         pure ()
 
 @[test]
+def testKjAsyncNetworkAddressRoundtripAndDatagramBind : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ network address test skipped on Windows"
+  else
+    let (unixAddress, socketPath) ← mkUnixTestAddress
+    let serverRuntime ← Capnp.KjAsync.Runtime.init
+    let clientRuntime ← Capnp.KjAsync.Runtime.init
+    try
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+      let serverAddress ← serverRuntime.parseAddress unixAddress
+      let serverAddressClone ← serverAddress.clone
+      let serverAddressText? ← serverAddress.toString?
+      assertTrue serverAddressText?.isSome
+        "expected parsed network address string representation"
+
+      let listener ← serverAddressClone.listen
+      let clientAddress ← clientRuntime.parseAddress unixAddress
+      let connectPromise ← clientAddress.connectStart
+      let serverConn ← listener.accept
+      let clientConn ← connectPromise.await
+
+      let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 86))
+      clientConn.write payload
+      clientConn.shutdownWrite
+
+      let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      assertEqual req payload
+      serverConn.write req
+      serverConn.shutdownWrite
+
+      let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
+      assertEqual echoed payload
+
+      clientConn.release
+      serverConn.release
+      listener.release
+      clientAddress.release
+      serverAddressClone.release
+      serverAddress.release
+
+      let receiverAddress ← serverRuntime.parseAddress "127.0.0.1" 0
+      let senderAddress ← clientRuntime.parseAddress "127.0.0.1" 0
+      let receiverPort ← receiverAddress.bindDatagramPort
+      let senderPort ← senderAddress.bindDatagramPort
+      let receiverPortNumber ← receiverPort.getPort
+      let datagramPayload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 87))
+      let receivePromise ← receiverPort.receiveStart (UInt32.ofNat 1024)
+      let sent ← senderPort.send "127.0.0.1" datagramPayload receiverPortNumber
+      assertEqual sent (UInt32.ofNat datagramPayload.size)
+      let (_source, received) ← receivePromise.awaitCopy
+      assertEqual received datagramPayload
+
+      senderPort.release
+      receiverPort.release
+      senderAddress.release
+      receiverAddress.release
+    finally
+      serverRuntime.shutdown
+      clientRuntime.shutdown
+      try
+        IO.FS.removeFile socketPath
+      catch _ =>
+        pure ()
+
+@[test]
 def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ unix socket test skipped on Windows"

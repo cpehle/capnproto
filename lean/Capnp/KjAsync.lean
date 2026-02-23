@@ -19,6 +19,11 @@ structure Listener where
   handle : UInt32
   deriving Inhabited, BEq, Repr
 
+structure NetworkAddress where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
 structure Connection where
   runtime : Runtime
   handle : UInt32
@@ -231,6 +236,34 @@ opaque ffiRuntimeConnectImpl (runtime : UInt64) (address : @& String) (portHint 
 
 @[extern "capnp_lean_kj_async_runtime_connect_start"]
 opaque ffiRuntimeConnectStartImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_parse_address"]
+opaque ffiRuntimeParseAddressImpl (runtime : UInt64) (address : @& String) (portHint : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_release_network_address"]
+opaque ffiRuntimeReleaseNetworkAddressImpl (runtime : UInt64) (address : UInt32) : IO Unit
+
+@[extern "capnp_lean_kj_async_runtime_network_address_to_string"]
+opaque ffiRuntimeNetworkAddressToStringImpl (runtime : UInt64) (address : UInt32) :
+    IO (Bool × String)
+
+@[extern "capnp_lean_kj_async_runtime_network_address_clone"]
+opaque ffiRuntimeNetworkAddressCloneImpl (runtime : UInt64) (address : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_network_address_connect"]
+opaque ffiRuntimeNetworkAddressConnectImpl (runtime : UInt64) (address : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_network_address_connect_start"]
+opaque ffiRuntimeNetworkAddressConnectStartImpl (runtime : UInt64) (address : UInt32) :
+    IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_network_address_listen"]
+opaque ffiRuntimeNetworkAddressListenImpl (runtime : UInt64) (address : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_network_address_bind_datagram_port"]
+opaque ffiRuntimeNetworkAddressBindDatagramPortImpl (runtime : UInt64) (address : UInt32) :
     IO UInt32
 
 @[extern "capnp_lean_kj_async_runtime_connection_promise_await"]
@@ -855,39 +888,31 @@ end BytesRef
     out := appendUInt32Le out promise.handle
   pure out
 
-@[inline] private def addUInt32? (a b : UInt32) : Option UInt32 :=
-  let sum := a + b
-  if sum < a then
-    none
-  else
-    some sum
-
-@[inline] private def sliceAtAndNext? (bytes : ByteArray) (offset length : UInt32) :
-    Option (ByteArray × UInt32) := do
-  let stop ← addUInt32? offset length
-  if stop.toNat ≤ bytes.size then
-    some (bytes.extract offset.toNat stop.toNat, stop)
+@[inline] private def sliceAtAndNext? (bytes : ByteArray) (offset : Nat) (length : UInt32) :
+    Option (ByteArray × Nat) := do
+  let stop := offset + length.toNat
+  if stop ≤ bytes.size then
+    some (bytes.extract offset stop, stop)
   else
     none
 
-@[inline] private def decodeUInt32LeAt? (bytes : ByteArray) (offset : UInt32) :
-    Option (UInt32 × UInt32) := do
-  let nextOffset ← addUInt32? offset 4
-  let i := offset.toNat
+@[inline] private def decodeUInt32LeAt? (bytes : ByteArray) (offset : Nat) :
+    Option (UInt32 × Nat) := do
+  let i := offset
   if i + 3 < bytes.size then
     let b0 := (bytes.get! i).toUInt32
     let b1 := ((bytes.get! (i + 1)).toUInt32) <<< 8
     let b2 := ((bytes.get! (i + 2)).toUInt32) <<< 16
     let b3 := ((bytes.get! (i + 3)).toUInt32) <<< 24
-    some (b0 ||| b1 ||| b2 ||| b3, nextOffset)
+    some (b0 ||| b1 ||| b2 ||| b3, i + 4)
   else
     none
 
-@[inline] private def isAtEnd (bytes : ByteArray) (offset : UInt32) : Bool :=
-  offset.toNat == bytes.size
+@[inline] private def isAtEnd (bytes : ByteArray) (offset : Nat) : Bool :=
+  offset == bytes.size
 
-@[inline] private def decodeUtf8AtAndNext (bytes : ByteArray) (offset length : UInt32) :
-    IO (String × UInt32) := do
+@[inline] private def decodeUtf8AtAndNext (bytes : ByteArray) (offset : Nat) (length : UInt32) :
+    IO (String × Nat) := do
   let some (slice, nextOffset) := sliceAtAndNext? bytes offset length
     | throw (IO.userError "truncated KJ async payload")
   match String.fromUTF8? slice with
@@ -907,13 +932,13 @@ end BytesRef
       out := ByteArray.append out valueBytes
     pure out
 
-@[inline] private def decodeHeadersAtOffset (bytes : ByteArray) (offset : UInt32) :
-    IO (Array HttpHeader × UInt32) := do
+@[inline] private def decodeHeadersAtOffset (bytes : ByteArray) (offset : Nat) :
+    IO (Array HttpHeader × Nat) := do
   let some (count, offset0) := decodeUInt32LeAt? bytes offset
     | throw (IO.userError "invalid header list payload")
   let mut cursor := offset0
   let mut headers : Array HttpHeader := #[]
-  let mut remaining := count
+  let mut remaining := count.toNat
   while remaining != 0 do
     let some (nameLen, nextOffset) := decodeUInt32LeAt? bytes cursor
       | throw (IO.userError "invalid header list payload")
@@ -1171,9 +1196,8 @@ structure HttpEndpoint where
   let (path, offset5) ← decodeUtf8AtAndNext bytes offset4 pathLen
   let some (headersLen, offset6) := decodeUInt32LeAt? bytes offset5
     | throw (IO.userError "invalid HTTP server request payload")
-  let some offset7 := addUInt32? offset6 headersLen
-    | throw (IO.userError "invalid HTTP server request payload")
-  if offset7.toNat > bytes.size then
+  let offset7 := offset6 + headersLen.toNat
+  if offset7 > bytes.size then
     throw (IO.userError "invalid HTTP server request payload")
   let (headers, parsedOffset7) ← decodeHeadersAtOffset bytes offset6
   if parsedOffset7 != offset7 then
@@ -1346,6 +1370,66 @@ If the deadline is in the past, this yields once.
   return {
     runtime := runtime
     handle := (← ffiRuntimeConnectStartImpl runtime.handle address portHint)
+  }
+
+@[inline] def parseAddress (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
+    IO NetworkAddress := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeParseAddressImpl runtime.handle address portHint)
+  }
+
+@[inline] def releaseNetworkAddress (runtime : Runtime) (address : NetworkAddress) : IO Unit := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  ffiRuntimeReleaseNetworkAddressImpl runtime.handle address.handle
+
+@[inline] def networkAddressToString? (runtime : Runtime) (address : NetworkAddress) :
+    IO (Option String) := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  let (hasValue, value) ← ffiRuntimeNetworkAddressToStringImpl runtime.handle address.handle
+  if hasValue then
+    return some value
+  else
+    return none
+
+@[inline] def networkAddressClone (runtime : Runtime) (address : NetworkAddress) :
+    IO NetworkAddress := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeNetworkAddressCloneImpl runtime.handle address.handle)
+  }
+
+@[inline] def networkAddressConnect (runtime : Runtime) (address : NetworkAddress) :
+    IO Connection := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeNetworkAddressConnectImpl runtime.handle address.handle)
+  }
+
+@[inline] def networkAddressConnectStart (runtime : Runtime) (address : NetworkAddress) :
+    IO ConnectionPromiseRef := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeNetworkAddressConnectStartImpl runtime.handle address.handle)
+  }
+
+@[inline] def networkAddressListen (runtime : Runtime) (address : NetworkAddress) :
+    IO Listener := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeNetworkAddressListenImpl runtime.handle address.handle)
+  }
+
+@[inline] def networkAddressBindDatagramPort (runtime : Runtime) (address : NetworkAddress) :
+    IO DatagramPort := do
+  ensureSameRuntime runtime address.runtime "NetworkAddress"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeNetworkAddressBindDatagramPortImpl runtime.handle address.handle)
   }
 
 private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
@@ -3022,6 +3106,9 @@ After this call succeeds, the caller must not use `fd` directly.
 @[inline] def listenEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO Listener :=
   runtime.listen endpoint.address endpoint.portHint
 
+@[inline] def parseEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO NetworkAddress :=
+  runtime.parseAddress endpoint.address endpoint.portHint
+
 @[inline] def connectEndpoint (runtime : Runtime) (endpoint : Endpoint) : IO Connection :=
   runtime.connect endpoint.address endpoint.portHint
 
@@ -3382,6 +3469,62 @@ namespace Listener
     ffiRuntimeReleaseConnectionImpl listener.runtime.handle connection.handle
 
 end Listener
+
+namespace NetworkAddress
+
+@[inline] def release (address : NetworkAddress) : IO Unit :=
+  ffiRuntimeReleaseNetworkAddressImpl address.runtime.handle address.handle
+
+@[inline] def toString? (address : NetworkAddress) : IO (Option String) := do
+  let (hasValue, value) ←
+    ffiRuntimeNetworkAddressToStringImpl address.runtime.handle address.handle
+  if hasValue then
+    return some value
+  else
+    return none
+
+@[inline] def clone (address : NetworkAddress) : IO NetworkAddress := do
+  return {
+    runtime := address.runtime
+    handle := (← ffiRuntimeNetworkAddressCloneImpl address.runtime.handle address.handle)
+  }
+
+@[inline] def connect (address : NetworkAddress) : IO Connection := do
+  return {
+    runtime := address.runtime
+    handle := (← ffiRuntimeNetworkAddressConnectImpl address.runtime.handle address.handle)
+  }
+
+@[inline] def connectStart (address : NetworkAddress) : IO ConnectionPromiseRef := do
+  return {
+    runtime := address.runtime
+    handle := (← ffiRuntimeNetworkAddressConnectStartImpl address.runtime.handle address.handle)
+  }
+
+@[inline] def connectAsTask (address : NetworkAddress) :
+    IO (Task (Except IO.Error Connection)) := do
+  let pending ← address.connectStart
+  IO.asTask do
+    connectionPromiseAwaitCore pending.runtime pending.handle
+
+@[inline] def connectAsPromise (address : NetworkAddress) :
+    IO (Capnp.Async.Promise Connection) := do
+  pure (Capnp.Async.Promise.ofTask (← address.connectAsTask))
+
+@[inline] def listen (address : NetworkAddress) : IO Listener := do
+  return {
+    runtime := address.runtime
+    handle := (← ffiRuntimeNetworkAddressListenImpl address.runtime.handle address.handle)
+  }
+
+@[inline] def bindDatagramPort (address : NetworkAddress) : IO DatagramPort := do
+  return {
+    runtime := address.runtime
+    handle := (← ffiRuntimeNetworkAddressBindDatagramPortImpl
+      address.runtime.handle address.handle)
+  }
+
+end NetworkAddress
 
 namespace Connection
 
@@ -4626,6 +4769,44 @@ namespace RuntimeM
 @[inline] def connectStart (address : String) (portHint : UInt32 := 0) :
     RuntimeM ConnectionPromiseRef := do
   Runtime.connectStart (← runtime) address portHint
+
+@[inline] def parseAddress (address : String) (portHint : UInt32 := 0) :
+    RuntimeM NetworkAddress := do
+  Runtime.parseAddress (← runtime) address portHint
+
+@[inline] def releaseNetworkAddress (address : NetworkAddress) : RuntimeM Unit := do
+  Runtime.releaseNetworkAddress (← runtime) address
+
+@[inline] def networkAddressToString? (address : NetworkAddress) :
+    RuntimeM (Option String) := do
+  Runtime.networkAddressToString? (← runtime) address
+
+@[inline] def networkAddressClone (address : NetworkAddress) : RuntimeM NetworkAddress := do
+  Runtime.networkAddressClone (← runtime) address
+
+@[inline] def networkAddressConnect (address : NetworkAddress) : RuntimeM Connection := do
+  Runtime.networkAddressConnect (← runtime) address
+
+@[inline] def networkAddressConnectStart (address : NetworkAddress) :
+    RuntimeM ConnectionPromiseRef := do
+  Runtime.networkAddressConnectStart (← runtime) address
+
+@[inline] def networkAddressConnectAsTask (address : NetworkAddress) :
+    RuntimeM (Task (Except IO.Error Connection)) := do
+  ensureSameRuntime (← runtime) address.runtime "NetworkAddress"
+  address.connectAsTask
+
+@[inline] def networkAddressConnectAsPromise (address : NetworkAddress) :
+    RuntimeM (Capnp.Async.Promise Connection) := do
+  ensureSameRuntime (← runtime) address.runtime "NetworkAddress"
+  address.connectAsPromise
+
+@[inline] def networkAddressListen (address : NetworkAddress) : RuntimeM Listener := do
+  Runtime.networkAddressListen (← runtime) address
+
+@[inline] def networkAddressBindDatagramPort (address : NetworkAddress) :
+    RuntimeM DatagramPort := do
+  Runtime.networkAddressBindDatagramPort (← runtime) address
 
 @[inline] def connectAsTask (address : String) (portHint : UInt32 := 0) :
     RuntimeM (Task (Except IO.Error Connection)) := do
@@ -6085,6 +6266,9 @@ namespace RuntimeM
 
 @[inline] def listenEndpoint (endpoint : Endpoint) : RuntimeM Listener := do
   Runtime.listenEndpoint (← runtime) endpoint
+
+@[inline] def parseEndpoint (endpoint : Endpoint) : RuntimeM NetworkAddress := do
+  Runtime.parseEndpoint (← runtime) endpoint
 
 @[inline] def connectEndpoint (endpoint : Endpoint) : RuntimeM Connection := do
   Runtime.connectEndpoint (← runtime) endpoint

@@ -825,6 +825,118 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<HandleCompletion> enqueueParseAddress(std::string address, uint32_t portHint) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedParseAddress{std::move(address), portHint, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<UnitCompletion> enqueueReleaseNetworkAddress(uint32_t addressId) {
+    auto completion = std::make_shared<UnitCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeUnitFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedReleaseNetworkAddress{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<OptionalStringCompletion> enqueueNetworkAddressToString(uint32_t addressId) {
+    auto completion = std::make_shared<OptionalStringCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeOptionalStringFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressToString{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueNetworkAddressClone(uint32_t addressId) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressClone{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueNetworkAddressConnect(uint32_t addressId) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressConnect{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<PromiseIdCompletion> enqueueNetworkAddressConnectStart(uint32_t addressId) {
+    auto completion = std::make_shared<PromiseIdCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completePromiseIdFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressConnectStart{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueNetworkAddressListen(uint32_t addressId) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressListen{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueNetworkAddressBindDatagramPort(uint32_t addressId) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedNetworkAddressBindDatagramPort{addressId, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<HandleCompletion> enqueueAwaitConnectionPromise(uint32_t promiseId) {
     auto completion = std::make_shared<HandleCompletion>();
     {
@@ -2677,6 +2789,47 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<PromiseIdCompletion> completion;
   };
 
+  struct QueuedParseAddress {
+    std::string address;
+    uint32_t portHint;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedReleaseNetworkAddress {
+    uint32_t addressId;
+    std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressToString {
+    uint32_t addressId;
+    std::shared_ptr<OptionalStringCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressClone {
+    uint32_t addressId;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressConnect {
+    uint32_t addressId;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressConnectStart {
+    uint32_t addressId;
+    std::shared_ptr<PromiseIdCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressListen {
+    uint32_t addressId;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedNetworkAddressBindDatagramPort {
+    uint32_t addressId;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
   struct QueuedAwaitConnectionPromise {
     uint32_t promiseId;
     std::shared_ptr<HandleCompletion> completion;
@@ -3255,7 +3408,11 @@ class KjAsyncRuntimeLoop {
       std::variant<QueuedSleepNanos, QueuedAwaitPromise, QueuedCancelPromise,
                    QueuedReleasePromise, QueuedPromiseThenStart, QueuedPromiseCatchStart,
                    QueuedListen, QueuedReleaseListener, QueuedAccept,
-                   QueuedAcceptStart, QueuedConnect, QueuedConnectStart,
+                   QueuedAcceptStart, QueuedConnect, QueuedConnectStart, QueuedParseAddress,
+                   QueuedReleaseNetworkAddress, QueuedNetworkAddressToString,
+                   QueuedNetworkAddressClone, QueuedNetworkAddressConnect,
+                   QueuedNetworkAddressConnectStart, QueuedNetworkAddressListen,
+                   QueuedNetworkAddressBindDatagramPort,
                    QueuedAwaitConnectionPromise, QueuedAwaitConnectionPromiseWithTimeout,
                    QueuedCancelConnectionPromise,
                    QueuedReleaseConnectionPromise, QueuedReleaseConnection,
@@ -3380,6 +3537,15 @@ class KjAsyncRuntimeLoop {
     }
     listeners_.emplace(listenerId, kj::mv(listener));
     return listenerId;
+  }
+
+  uint32_t addNetworkAddress(kj::Own<kj::NetworkAddress>&& address) {
+    uint32_t addressId = nextNetworkAddressId_++;
+    while (networkAddresses_.find(addressId) != networkAddresses_.end()) {
+      addressId = nextNetworkAddressId_++;
+    }
+    networkAddresses_.emplace(addressId, kj::mv(address));
+    return addressId;
   }
 
   uint32_t addConnection(kj::Own<kj::AsyncIoStream>&& stream) {
@@ -4031,6 +4197,72 @@ class KjAsyncRuntimeLoop {
             .parseAddress(address.c_str(), portHint)
             .then([](kj::Own<kj::NetworkAddress>&& addr) { return addr->connect(); }));
     return addConnectionPromise(PendingConnectionPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t parseAddress(kj::AsyncIoProvider& ioProvider, kj::WaitScope& waitScope,
+                        const std::string& address, uint32_t portHint) {
+    auto parsed = ioProvider.getNetwork().parseAddress(address.c_str(), portHint).wait(waitScope);
+    return addNetworkAddress(kj::mv(parsed));
+  }
+
+  void releaseNetworkAddress(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    networkAddresses_.erase(it);
+  }
+
+  kj::Maybe<std::string> networkAddressToString(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    auto value = it->second->toString();
+    return std::string(value.cStr());
+  }
+
+  uint32_t networkAddressClone(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    return addNetworkAddress(it->second->clone());
+  }
+
+  uint32_t networkAddressConnect(kj::WaitScope& waitScope, uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    auto stream = it->second->connect().wait(waitScope).downcast<kj::AsyncIoStream>();
+    return addConnection(kj::mv(stream));
+  }
+
+  uint32_t networkAddressConnectStart(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    auto canceler = kj::heap<kj::Canceler>();
+    auto promise = canceler->wrap(it->second->clone()->connect());
+    return addConnectionPromise(PendingConnectionPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
+  uint32_t networkAddressListen(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    return addListener(it->second->listen());
+  }
+
+  uint32_t networkAddressBindDatagramPort(uint32_t addressId) {
+    auto it = networkAddresses_.find(addressId);
+    if (it == networkAddresses_.end()) {
+      throw std::runtime_error("unknown KJ network address id: " + std::to_string(addressId));
+    }
+    return addDatagramPort(it->second->bindDatagramPort());
   }
 
   void releaseConnection(uint32_t connectionId) {
@@ -5419,6 +5651,25 @@ class KjAsyncRuntimeLoop {
         completeHandleFailure(std::get<QueuedConnect>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectStart>(op)) {
         completePromiseIdFailure(std::get<QueuedConnectStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedParseAddress>(op)) {
+        completeHandleFailure(std::get<QueuedParseAddress>(op).completion, message);
+      } else if (std::holds_alternative<QueuedReleaseNetworkAddress>(op)) {
+        completeUnitFailure(std::get<QueuedReleaseNetworkAddress>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressToString>(op)) {
+        completeOptionalStringFailure(
+            std::get<QueuedNetworkAddressToString>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressClone>(op)) {
+        completeHandleFailure(std::get<QueuedNetworkAddressClone>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressConnect>(op)) {
+        completeHandleFailure(std::get<QueuedNetworkAddressConnect>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressConnectStart>(op)) {
+        completePromiseIdFailure(
+            std::get<QueuedNetworkAddressConnectStart>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressListen>(op)) {
+        completeHandleFailure(std::get<QueuedNetworkAddressListen>(op).completion, message);
+      } else if (std::holds_alternative<QueuedNetworkAddressBindDatagramPort>(op)) {
+        completeHandleFailure(
+            std::get<QueuedNetworkAddressBindDatagramPort>(op).completion, message);
       } else if (std::holds_alternative<QueuedAwaitConnectionPromise>(op)) {
         completeHandleFailure(std::get<QueuedAwaitConnectionPromise>(op).completion, message);
       } else if (std::holds_alternative<QueuedAwaitConnectionPromiseWithTimeout>(op)) {
@@ -5821,6 +6072,117 @@ class KjAsyncRuntimeLoop {
           } catch (...) {
             completePromiseIdFailure(connectReq.completion,
                                      "unknown exception in Capnp.KjAsync connectStart");
+          }
+        } else if (std::holds_alternative<QueuedParseAddress>(op)) {
+          auto parseReq = std::get<QueuedParseAddress>(std::move(op));
+          try {
+            auto addressId =
+                parseAddress(*io.provider, io.waitScope, parseReq.address, parseReq.portHint);
+            completeHandleSuccess(parseReq.completion, addressId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(parseReq.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(parseReq.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(parseReq.completion,
+                                  "unknown exception in Capnp.KjAsync parseAddress");
+          }
+        } else if (std::holds_alternative<QueuedReleaseNetworkAddress>(op)) {
+          auto release = std::get<QueuedReleaseNetworkAddress>(std::move(op));
+          try {
+            releaseNetworkAddress(release.addressId);
+            completeUnitSuccess(release.completion);
+          } catch (const kj::Exception& e) {
+            completeUnitFailure(release.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeUnitFailure(release.completion, e.what());
+          } catch (...) {
+            completeUnitFailure(
+                release.completion,
+                "unknown exception in Capnp.KjAsync release network address");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressToString>(op)) {
+          auto query = std::get<QueuedNetworkAddressToString>(std::move(op));
+          try {
+            completeOptionalStringSuccess(query.completion, networkAddressToString(query.addressId));
+          } catch (const kj::Exception& e) {
+            completeOptionalStringFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeOptionalStringFailure(query.completion, e.what());
+          } catch (...) {
+            completeOptionalStringFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address toString");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressClone>(op)) {
+          auto query = std::get<QueuedNetworkAddressClone>(std::move(op));
+          try {
+            auto addressId = networkAddressClone(query.addressId);
+            completeHandleSuccess(query.completion, addressId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(query.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address clone");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressConnect>(op)) {
+          auto query = std::get<QueuedNetworkAddressConnect>(std::move(op));
+          try {
+            auto connectionId = networkAddressConnect(io.waitScope, query.addressId);
+            completeHandleSuccess(query.completion, connectionId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(query.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address connect");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressConnectStart>(op)) {
+          auto query = std::get<QueuedNetworkAddressConnectStart>(std::move(op));
+          try {
+            auto promiseId = networkAddressConnectStart(query.addressId);
+            completePromiseIdSuccess(query.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completePromiseIdFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completePromiseIdFailure(query.completion, e.what());
+          } catch (...) {
+            completePromiseIdFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address connectStart");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressListen>(op)) {
+          auto query = std::get<QueuedNetworkAddressListen>(std::move(op));
+          try {
+            auto listenerId = networkAddressListen(query.addressId);
+            completeHandleSuccess(query.completion, listenerId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(query.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address listen");
+          }
+        } else if (std::holds_alternative<QueuedNetworkAddressBindDatagramPort>(op)) {
+          auto query = std::get<QueuedNetworkAddressBindDatagramPort>(std::move(op));
+          try {
+            auto portId = networkAddressBindDatagramPort(query.addressId);
+            completeHandleSuccess(query.completion, portId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(query.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(query.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(
+                query.completion,
+                "unknown exception in Capnp.KjAsync network address bindDatagramPort");
           }
         } else if (std::holds_alternative<QueuedAwaitConnectionPromise>(op)) {
           auto await = std::get<QueuedAwaitConnectionPromise>(std::move(op));
@@ -7221,6 +7583,7 @@ class KjAsyncRuntimeLoop {
       webSocketPromises_.clear();
       webSocketMessagePromises_.clear();
       listeners_.clear();
+      networkAddresses_.clear();
       connections_.clear();
       taskSets_.clear();
       datagramPorts_.clear();
@@ -7302,6 +7665,8 @@ class KjAsyncRuntimeLoop {
   std::unordered_map<uint32_t, PendingWebSocketMessagePromise> webSocketMessagePromises_;
   uint32_t nextListenerId_ = 1;
   std::unordered_map<uint32_t, kj::Own<kj::ConnectionReceiver>> listeners_;
+  uint32_t nextNetworkAddressId_ = 1;
+  std::unordered_map<uint32_t, kj::Own<kj::NetworkAddress>> networkAddresses_;
   uint32_t nextConnectionId_ = 1;
   std::unordered_map<uint32_t, kj::Own<kj::AsyncIoStream>> connections_;
   uint32_t nextTaskSetId_ = 1;
@@ -7927,6 +8292,228 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connect_start(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connect_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_parse_address(
+    uint64_t runtimeId, b_lean_obj_arg address, uint32_t portHint) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion =
+        runtime->enqueueParseAddress(std::string(lean_string_cstr(address)), portHint);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_parse_address");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_release_network_address(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueReleaseNetworkAddress(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+    }
+    lean_obj_res ok;
+    mkIoOkUnit(ok);
+    return ok;
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_release_network_address");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_network_address_to_string(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressToString(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      auto pair = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(pair, 0, lean_box(completion->hasValue ? 1 : 0));
+      lean_ctor_set(pair, 1, lean_mk_string(completion->value.c_str()));
+      return lean_io_result_mk_ok(pair);
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_to_string");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_network_address_clone(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressClone(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_clone");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_network_address_connect(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressConnect(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_connect");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_network_address_connect_start(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressConnectStart(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->promiseId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_connect_start");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_network_address_listen(
+    uint64_t runtimeId, uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressListen(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_listen");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res
+capnp_lean_kj_async_runtime_network_address_bind_datagram_port(uint64_t runtimeId,
+                                                               uint32_t addressId) {
+  auto runtime = getKjAsyncRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = runtime->enqueueNetworkAddressBindDatagramPort(addressId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_network_address_bind_datagram_port");
   }
 }
 
