@@ -1949,6 +1949,7 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let receiverPortNumber ← receiverPort.getPort
     let senderPort ← senderRuntime.datagramBind "127.0.0.1" 0
     let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 9))
+    let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
 
     let receiveTask ← receiverRuntime.datagramReceiveAsTask receiverPort (UInt32.ofNat 1024)
     let sendPromise ←
@@ -1974,15 +1975,21 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     assertEqual bytes2 payload
 
     let receivePromiseRef ← receiverPort.receiveAsPromiseRef (UInt32.ofNat 1024)
-    let sendTaskRefCase ← senderPort.sendAsTask "127.0.0.1" payload receiverPortNumber
+    let sendTaskRefCase ← senderPort.sendAsTaskRef "127.0.0.1" payloadRef receiverPortNumber
     let sentCount3 ←
       match (← IO.wait sendTaskRefCase) with
       | .ok value => pure value
       | .error err =>
-        throw (IO.userError s!"DatagramPort.sendAsTask (ref receive case) failed: {err}")
+        throw (IO.userError s!"DatagramPort.sendAsTaskRef failed: {err}")
     assertEqual sentCount3 (UInt32.ofNat payload.size)
     let (_source3, bytes3Ref) ← receivePromiseRef.await
     assertEqual (← bytes3Ref.toByteArray) payload
+
+    let receivePromiseRefAwait ← receiverPort.receiveAsPromiseRef (UInt32.ofNat 1024)
+    let sentCountAwaitRef ← senderPort.sendAwaitRef "127.0.0.1" payloadRef receiverPortNumber
+    assertEqual sentCountAwaitRef (UInt32.ofNat payload.size)
+    let (_source4, bytes4Ref) ← receivePromiseRefAwait.await
+    assertEqual (← bytes4Ref.toByteArray) payload
 
     let leftSeedPeer ← senderRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
     let rightSeedPeer ← receiverRuntime.datagramPeerBind "127.0.0.1" "127.0.0.1" 0
@@ -1991,20 +1998,21 @@ def testKjAsyncDatagramTaskAndPromiseHelpers : IO Unit := do
     let leftPeer : Capnp.KjAsync.DatagramPeer := { leftSeedPeer with remotePort := rightPortNumber }
     let rightPeer : Capnp.KjAsync.DatagramPeer := { rightSeedPeer with remotePort := leftPortNumber }
     let peerPayload := ByteArray.append payload (ByteArray.empty.push (UInt8.ofNat 3))
+    let peerPayloadRef ← Capnp.KjAsync.BytesRef.ofByteArray peerPayload
     try
       let peerReceivePromise ← rightPeer.receiveAsPromiseRef (UInt32.ofNat 1024)
-      let peerSendTask ← leftPeer.sendAsTask peerPayload
+      let peerSendTask ← leftPeer.sendAsTaskRef peerPayloadRef
       let peerSentCount ←
         match (← IO.wait peerSendTask) with
         | .ok value => pure value
         | .error err =>
-          throw (IO.userError s!"DatagramPeer.sendAsTask failed: {err}")
+          throw (IO.userError s!"DatagramPeer.sendAsTaskRef failed: {err}")
       assertEqual peerSentCount (UInt32.ofNat peerPayload.size)
       let (_peerSource, peerBytesRef) ← peerReceivePromise.await
       assertEqual (← peerBytesRef.toByteArray) peerPayload
 
       let reverseReceiveTask ← leftPeer.receiveAsTaskRef (UInt32.ofNat 1024)
-      let reverseSendPromise ← rightPeer.sendAsPromise payload
+      let reverseSendPromise ← rightPeer.sendAsPromiseRef payloadRef
       let reverseSentCount ← reverseSendPromise.await
       assertEqual reverseSentCount (UInt32.ofNat payload.size)
       let (_reverseSource, reverseBytesRef) ←
