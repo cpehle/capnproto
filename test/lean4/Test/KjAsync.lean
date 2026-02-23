@@ -378,6 +378,72 @@ def testKjAsyncRuntimeMBytesRefAndHttpPromiseHelpers : IO Unit := do
         assertEqual canceled true
       finally
         Capnp.KjAsync.RuntimeM.httpServerRelease server
+
+      let receiver ← Capnp.KjAsync.RuntimeM.datagramBind "127.0.0.1" 0
+      let sender ← Capnp.KjAsync.RuntimeM.datagramBind "127.0.0.1" 0
+      try
+        let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 82))
+        let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+        let receiverPortNumber ← Capnp.KjAsync.RuntimeM.datagramGetPort receiver
+
+        let receiveTaskRef ← Capnp.KjAsync.RuntimeM.datagramReceiveAsTaskRef receiver (UInt32.ofNat 1024)
+        let sentRefCount ←
+          Capnp.KjAsync.RuntimeM.datagramSendRef
+            sender "127.0.0.1" payloadRef receiverPortNumber
+        assertEqual sentRefCount (UInt32.ofNat payload.size)
+        let (_sourceA, receivedRefA) ←
+          match (← IO.wait receiveTaskRef) with
+          | .ok datagram => pure datagram
+          | .error err =>
+            throw (IO.userError s!"RuntimeM.datagramReceiveAsTaskRef failed: {err}")
+        assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedRefA) payload
+
+        let receivePromise ←
+          Capnp.KjAsync.RuntimeM.datagramReceiveStart receiver (UInt32.ofNat 1024)
+        let sendStartRef ←
+          Capnp.KjAsync.RuntimeM.datagramSendStartRef
+            sender "127.0.0.1" payloadRef receiverPortNumber
+        let sentStartRefCount ← Capnp.KjAsync.RuntimeM.awaitUInt32 sendStartRef
+        assertEqual sentStartRefCount (UInt32.ofNat payload.size)
+        let (_sourceB, receivedRefB) ← Capnp.KjAsync.RuntimeM.awaitDatagramReceive receivePromise
+        assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedRefB) payload
+
+        let receivePromiseRef ←
+          Capnp.KjAsync.RuntimeM.datagramReceiveAsPromiseRef receiver (UInt32.ofNat 1024)
+        let sentAwaitRefCount ←
+          Capnp.KjAsync.RuntimeM.datagramSendAwaitRef
+            sender "127.0.0.1" payloadRef receiverPortNumber
+        assertEqual sentAwaitRefCount (UInt32.ofNat payload.size)
+        let (_sourceC, receivedRefC) ← receivePromiseRef.await
+        assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedRefC) payload
+      finally
+        Capnp.KjAsync.RuntimeM.datagramReleasePort sender
+        Capnp.KjAsync.RuntimeM.datagramReleasePort receiver
+
+      let (wsLeft, wsRight) ← Capnp.KjAsync.RuntimeM.newWebSocketPipe
+      try
+        let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 83))
+        let payloadRef ← Capnp.KjAsync.BytesRef.ofByteArray payload
+
+        let recvA ← Capnp.KjAsync.RuntimeM.webSocketReceiveStart wsRight
+        let sendA ← Capnp.KjAsync.RuntimeM.webSocketSendBinaryStartRef wsLeft payloadRef
+        Capnp.KjAsync.RuntimeM.await sendA
+        match (← Capnp.KjAsync.RuntimeM.awaitWebSocketMessage recvA) with
+        | .binary bytesRef =>
+          assertEqual (← Capnp.KjAsync.BytesRef.toByteArray bytesRef) payload
+        | _ =>
+          throw (IO.userError "expected binary websocket payload from RuntimeM.webSocketSendBinaryStartRef")
+
+        let recvB ← Capnp.KjAsync.RuntimeM.webSocketReceiveStart wsRight
+        Capnp.KjAsync.RuntimeM.webSocketSendBinaryRef wsLeft payloadRef
+        match (← Capnp.KjAsync.RuntimeM.awaitWebSocketMessage recvB) with
+        | .binary bytesRef =>
+          assertEqual (← Capnp.KjAsync.BytesRef.toByteArray bytesRef) payload
+        | _ =>
+          throw (IO.userError "expected binary websocket payload from RuntimeM.webSocketSendBinaryRef")
+      finally
+        Capnp.KjAsync.RuntimeM.webSocketRelease wsLeft
+        Capnp.KjAsync.RuntimeM.webSocketRelease wsRight
   finally
     runtime.shutdown
 

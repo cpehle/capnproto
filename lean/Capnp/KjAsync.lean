@@ -1698,10 +1698,32 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   IO.asTask do
     runtime.uint32PromiseAwait pending
 
+@[inline] def datagramSendAsTaskRef (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let pending ← runtime.datagramSendStartRef port address bytes portHint
+  IO.asTask do
+    runtime.uint32PromiseAwait pending
+
 @[inline] def datagramSendAsPromise (runtime : Runtime) (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) :
     IO (Capnp.Async.Promise UInt32) := do
   pure (Capnp.Async.Promise.ofTask (← runtime.datagramSendAsTask port address bytes portHint))
+
+@[inline] def datagramSendAsPromiseRef (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.datagramSendAsTaskRef port address bytes portHint))
+
+@[inline] def datagramSendAwait (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
+  let pending ← runtime.datagramSendStart port address bytes portHint
+  runtime.uint32PromiseAwait pending
+
+@[inline] def datagramSendAwaitRef (runtime : Runtime) (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32 := do
+  let pending ← runtime.datagramSendStartRef port address bytes portHint
+  runtime.uint32PromiseAwait pending
 
 @[inline] def datagramReceive (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) := do
@@ -3742,10 +3764,21 @@ namespace DatagramPort
   let promise ← port.sendStart address bytes portHint
   promise.awaitAsTask
 
+@[inline] def sendAsTaskRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let promise ← port.sendStartRef address bytes portHint
+  promise.awaitAsTask
+
 @[inline] def sendAsPromise (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) :
     IO (Capnp.Async.Promise UInt32) := do
   pure (Capnp.Async.Promise.ofTask (← port.sendAsTask address bytes portHint))
+
+@[inline] def sendAsPromiseRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← port.sendAsTaskRef address bytes portHint))
 
 @[inline] def receiveAsTask (port : DatagramPort) (maxBytes : UInt32 := 0x2000) :
     IO (Task (Except IO.Error (String × ByteArray))) := do
@@ -3772,6 +3805,11 @@ namespace DatagramPort
 @[inline] def sendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : IO UInt32 := do
   let promise ← port.sendStart address bytes portHint
+  promise.await
+
+@[inline] def sendAwaitRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : IO UInt32 := do
+  let promise ← port.sendStartRef address bytes portHint
   promise.await
 
 @[inline] def receiveMany (port : DatagramPort) (count : UInt32)
@@ -3810,12 +3848,24 @@ namespace DatagramPeer
   let promise ← peer.sendStart bytes
   promise.awaitAsTask
 
+@[inline] def sendAsTaskRef (peer : DatagramPeer) (bytes : BytesRef) :
+    IO (Task (Except IO.Error UInt32)) := do
+  let promise ← peer.sendStartRef bytes
+  promise.awaitAsTask
+
 @[inline] def sendAsPromise (peer : DatagramPeer) (bytes : ByteArray) :
     IO (Capnp.Async.Promise UInt32) := do
   pure (Capnp.Async.Promise.ofTask (← peer.sendAsTask bytes))
 
+@[inline] def sendAsPromiseRef (peer : DatagramPeer) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise UInt32) := do
+  pure (Capnp.Async.Promise.ofTask (← peer.sendAsTaskRef bytes))
+
 @[inline] def sendAwait (peer : DatagramPeer) (bytes : ByteArray) : IO UInt32 := do
   peer.port.sendAwait peer.remoteAddress bytes peer.remotePort
+
+@[inline] def sendAwaitRef (peer : DatagramPeer) (bytes : BytesRef) : IO UInt32 := do
+  peer.port.sendAwaitRef peer.remoteAddress bytes peer.remotePort
 
 @[inline] def receive (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : IO (String × ByteArray) :=
@@ -4743,24 +4793,45 @@ namespace RuntimeM
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
   Runtime.datagramSend (← runtime) port address bytes portHint
 
+@[inline] def datagramSendRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
+  Runtime.datagramSendRef (← runtime) port address bytes portHint
+
 @[inline] def datagramSendStart (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32PromiseRef := do
   Runtime.datagramSendStart (← runtime) port address bytes portHint
+
+@[inline] def datagramSendStartRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : RuntimeM UInt32PromiseRef := do
+  Runtime.datagramSendStartRef (← runtime) port address bytes portHint
 
 @[inline] def datagramSendAsTask (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) :
     RuntimeM (Task (Except IO.Error UInt32)) := do
   Runtime.datagramSendAsTask (← runtime) port address bytes portHint
 
+@[inline] def datagramSendAsTaskRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    RuntimeM (Task (Except IO.Error UInt32)) := do
+  Runtime.datagramSendAsTaskRef (← runtime) port address bytes portHint
+
 @[inline] def datagramSendAsPromise (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) :
     RuntimeM (Capnp.Async.Promise UInt32) := do
   Runtime.datagramSendAsPromise (← runtime) port address bytes portHint
 
+@[inline] def datagramSendAsPromiseRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) :
+    RuntimeM (Capnp.Async.Promise UInt32) := do
+  Runtime.datagramSendAsPromiseRef (← runtime) port address bytes portHint
+
 @[inline] def datagramSendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
-  ensureSameRuntime (← runtime) port.runtime "DatagramPort"
-  port.sendAwait address bytes portHint
+  Runtime.datagramSendAwait (← runtime) port address bytes portHint
+
+@[inline] def datagramSendAwaitRef (port : DatagramPort) (address : String)
+    (bytes : BytesRef) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
+  Runtime.datagramSendAwaitRef (← runtime) port address bytes portHint
 
 @[inline] def datagramPeerBind (localAddress remoteAddress : String) (remotePort : UInt32)
     (localPortHint : UInt32 := 0) : RuntimeM DatagramPeer := do
@@ -4770,25 +4841,49 @@ namespace RuntimeM
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.send bytes
 
+@[inline] def datagramPeerSendRef (peer : DatagramPeer) (bytes : BytesRef) : RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendRef bytes
+
 @[inline] def datagramPeerSendStart (peer : DatagramPeer)
     (bytes : ByteArray) : RuntimeM UInt32PromiseRef := do
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendStart bytes
+
+@[inline] def datagramPeerSendStartRef (peer : DatagramPeer)
+    (bytes : BytesRef) : RuntimeM UInt32PromiseRef := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendStartRef bytes
 
 @[inline] def datagramPeerSendAsTask (peer : DatagramPeer) (bytes : ByteArray) :
     RuntimeM (Task (Except IO.Error UInt32)) := do
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendAsTask bytes
 
+@[inline] def datagramPeerSendAsTaskRef (peer : DatagramPeer) (bytes : BytesRef) :
+    RuntimeM (Task (Except IO.Error UInt32)) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendAsTaskRef bytes
+
 @[inline] def datagramPeerSendAsPromise (peer : DatagramPeer) (bytes : ByteArray) :
     RuntimeM (Capnp.Async.Promise UInt32) := do
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendAsPromise bytes
 
+@[inline] def datagramPeerSendAsPromiseRef (peer : DatagramPeer) (bytes : BytesRef) :
+    RuntimeM (Capnp.Async.Promise UInt32) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendAsPromiseRef bytes
+
 @[inline] def datagramPeerSendAwait (peer : DatagramPeer) (bytes : ByteArray) :
     RuntimeM UInt32 := do
   ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendAwait bytes
+
+@[inline] def datagramPeerSendAwaitRef (peer : DatagramPeer) (bytes : BytesRef) :
+    RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
+  peer.sendAwaitRef bytes
 
 @[inline] def datagramPeerReceive (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
@@ -4832,16 +4927,13 @@ namespace RuntimeM
   peer.release
 
 @[inline] def awaitUInt32 (promise : UInt32PromiseRef) : RuntimeM UInt32 := do
-  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
-  promise.await
+  Runtime.uint32PromiseAwait (← runtime) promise
 
 @[inline] def cancelUInt32 (promise : UInt32PromiseRef) : RuntimeM Unit := do
-  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
-  promise.cancel
+  Runtime.uint32PromiseCancel (← runtime) promise
 
 @[inline] def releaseUInt32Promise (promise : UInt32PromiseRef) : RuntimeM Unit := do
-  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
-  promise.release
+  Runtime.uint32PromiseRelease (← runtime) promise
 
 @[inline] def datagramReceive (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
@@ -5701,6 +5793,10 @@ namespace RuntimeM
     RuntimeM PromiseRef := do
   Runtime.webSocketSendBinaryStart (← runtime) webSocket bytes
 
+@[inline] def webSocketSendBinaryStartRef (webSocket : WebSocket) (bytes : BytesRef) :
+    RuntimeM PromiseRef := do
+  Runtime.webSocketSendBinaryStartRef (← runtime) webSocket bytes
+
 @[inline] def webSocketSendBinaryAsTask (webSocket : WebSocket) (bytes : ByteArray) :
     RuntimeM (Task (Except IO.Error Unit)) := do
   ensureSameRuntime (← runtime) webSocket.runtime "WebSocket"
@@ -5723,6 +5819,9 @@ namespace RuntimeM
 
 @[inline] def webSocketSendBinary (webSocket : WebSocket) (bytes : ByteArray) : RuntimeM Unit := do
   Runtime.webSocketSendBinary (← runtime) webSocket bytes
+
+@[inline] def webSocketSendBinaryRef (webSocket : WebSocket) (bytes : BytesRef) : RuntimeM Unit := do
+  Runtime.webSocketSendBinaryRef (← runtime) webSocket bytes
 
 @[inline] def webSocketReceiveStart (webSocket : WebSocket) :
     RuntimeM WebSocketMessagePromiseRef := do
