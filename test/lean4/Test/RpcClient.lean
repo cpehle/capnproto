@@ -354,6 +354,14 @@ def testGeneratedAsyncHelpers : IO Unit := do
 @[test]
 def testGeneratedPromiseHelpers : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
+  let typedPayload : Capnp.Rpc.Payload := Id.run do
+    let (_, builder) :=
+      (do
+        let root ← Capnp.getRootPointer
+        let s ← Capnp.initStructPointer root 0 1
+        Capnp.clearPointer (Capnp.getPointerBuilder s 0)
+      ).run (Capnp.initMessageBuilder 16)
+    { msg := Capnp.buildMessage builder, capTable := Capnp.emptyCapTable }
   let runtime ← Capnp.Rpc.Runtime.init
   try
     let target ← runtime.registerEchoTarget
@@ -368,6 +376,11 @@ def testGeneratedPromiseHelpers : IO Unit := do
     let response ← promise.awaitAndRelease
     assertEqual response.capTable.caps.size 1
     runtime.releaseCapTable response.capTable
+
+    let promiseTyped ← Echo.startFooPromise runtime target typedPayload
+    let typedResponse ← promiseTyped.awaitTypedAndRelease
+    assertEqual typedResponse.capTable.caps.size 0
+    runtime.releaseCapTable typedResponse.capTable
 
     runtime.releaseTarget pipelinedCap
     runtime.releaseTarget target
