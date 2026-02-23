@@ -4670,36 +4670,36 @@ namespace RuntimeM
   Runtime.taskSetNew (← runtime)
 
 @[inline] def taskSetRelease (taskSet : TaskSetRef) : RuntimeM Unit := do
-  taskSet.release
+  Runtime.taskSetRelease (← runtime) taskSet
 
 @[inline] def taskSetAddPromise (taskSet : TaskSetRef) (promise : PromiseRef) : RuntimeM Unit := do
-  taskSet.addPromise promise
+  Runtime.taskSetAddPromise (← runtime) taskSet promise
 
 @[inline] def taskSetClear (taskSet : TaskSetRef) : RuntimeM Unit := do
-  taskSet.clear
+  Runtime.taskSetClear (← runtime) taskSet
 
 @[inline] def taskSetIsEmpty (taskSet : TaskSetRef) : RuntimeM Bool := do
-  taskSet.isEmpty
+  Runtime.taskSetIsEmpty (← runtime) taskSet
 
 @[inline] def taskSetOnEmptyStart (taskSet : TaskSetRef) : RuntimeM PromiseRef := do
-  taskSet.onEmptyStart
+  Runtime.taskSetOnEmptyStart (← runtime) taskSet
 
 @[inline] def taskSetErrorCount (taskSet : TaskSetRef) : RuntimeM UInt32 := do
-  taskSet.errorCount
+  Runtime.taskSetErrorCount (← runtime) taskSet
 
 @[inline] def taskSetTakeLastError? (taskSet : TaskSetRef) : RuntimeM (Option String) := do
-  taskSet.takeLastError?
+  Runtime.taskSetTakeLastError? (← runtime) taskSet
 
 @[inline] def withTaskSet (action : TaskSetRef -> RuntimeM α) : RuntimeM α := do
   let taskSet ← taskSetNew
   try
     action taskSet
   finally
-    taskSet.release
+    taskSetRelease taskSet
 
 @[inline] def connectionWhenWriteDisconnectedStart (connection : Connection) :
     RuntimeM PromiseRef := do
-  connection.whenWriteDisconnectedStart
+  Runtime.connectionWhenWriteDisconnectedStart (← runtime) connection
 
 @[inline] def connectionWhenWriteDisconnectedAsTask (connection : Connection) :
     RuntimeM (Task (Except IO.Error Unit)) := do
@@ -4712,14 +4712,14 @@ namespace RuntimeM
   connection.whenWriteDisconnectedAsPromise
 
 @[inline] def connectionAbortRead (connection : Connection) : RuntimeM Unit := do
-  connection.abortRead
+  Runtime.connectionAbortRead (← runtime) connection
 
 @[inline] def connectionAbortWrite (connection : Connection)
     (reason : String := "Capnp.KjAsync connection abortWrite") : RuntimeM Unit := do
-  connection.abortWrite reason
+  Runtime.connectionAbortWrite (← runtime) connection reason
 
 @[inline] def connectionDupFd? (connection : Connection) : RuntimeM (Option UInt32) := do
-  connection.dupFd?
+  Runtime.connectionDupFd? (← runtime) connection
 
 @[inline] def newTwoWayPipe : RuntimeM (Connection × Connection) := do
   Runtime.newTwoWayPipe (← runtime)
@@ -4734,14 +4734,14 @@ namespace RuntimeM
   Runtime.datagramBindEndpoint (← runtime) endpoint
 
 @[inline] def datagramReleasePort (port : DatagramPort) : RuntimeM Unit := do
-  port.release
+  Runtime.datagramReleasePort (← runtime) port
 
 @[inline] def datagramGetPort (port : DatagramPort) : RuntimeM UInt32 := do
-  port.getPort
+  Runtime.datagramGetPort (← runtime) port
 
 @[inline] def datagramSend (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
-  port.send address bytes portHint
+  Runtime.datagramSend (← runtime) port address bytes portHint
 
 @[inline] def datagramSendStart (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32PromiseRef := do
@@ -4759,6 +4759,7 @@ namespace RuntimeM
 
 @[inline] def datagramSendAwait (port : DatagramPort) (address : String)
     (bytes : ByteArray) (portHint : UInt32 := 0) : RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) port.runtime "DatagramPort"
   port.sendAwait address bytes portHint
 
 @[inline] def datagramPeerBind (localAddress remoteAddress : String) (remotePort : UInt32)
@@ -4766,10 +4767,12 @@ namespace RuntimeM
   Runtime.datagramPeerBind (← runtime) localAddress remoteAddress remotePort localPortHint
 
 @[inline] def datagramPeerSend (peer : DatagramPeer) (bytes : ByteArray) : RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.send bytes
 
 @[inline] def datagramPeerSendStart (peer : DatagramPeer)
     (bytes : ByteArray) : RuntimeM UInt32PromiseRef := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendStart bytes
 
 @[inline] def datagramPeerSendAsTask (peer : DatagramPeer) (bytes : ByteArray) :
@@ -4784,14 +4787,17 @@ namespace RuntimeM
 
 @[inline] def datagramPeerSendAwait (peer : DatagramPeer) (bytes : ByteArray) :
     RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.sendAwait bytes
 
 @[inline] def datagramPeerReceive (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.receive maxBytes
 
 @[inline] def datagramPeerReceiveStart (peer : DatagramPeer)
     (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.receiveStart maxBytes
 
 @[inline] def datagramPeerReceiveAsTask (peer : DatagramPeer) (maxBytes : UInt32 := 0x2000) :
@@ -4818,23 +4824,28 @@ namespace RuntimeM
 
 @[inline] def datagramPeerReceiveMany (peer : DatagramPeer) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.receiveMany count maxBytes
 
 @[inline] def datagramPeerRelease (peer : DatagramPeer) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) peer.port.runtime "DatagramPort"
   peer.release
 
 @[inline] def awaitUInt32 (promise : UInt32PromiseRef) : RuntimeM UInt32 := do
+  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
   promise.await
 
 @[inline] def cancelUInt32 (promise : UInt32PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
   promise.cancel
 
 @[inline] def releaseUInt32Promise (promise : UInt32PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "UInt32PromiseRef"
   promise.release
 
 @[inline] def datagramReceive (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (String × ByteArray) := do
-  port.receive maxBytes
+  Runtime.datagramReceive (← runtime) port maxBytes
 
 @[inline] def datagramReceiveStart (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) : RuntimeM DatagramReceivePromiseRef := do
@@ -4858,22 +4869,23 @@ namespace RuntimeM
 
 @[inline] def datagramReceiveMany (port : DatagramPort) (count : UInt32)
     (maxBytes : UInt32 := 0x2000) : RuntimeM (Array (String × ByteArray)) := do
+  ensureSameRuntime (← runtime) port.runtime "DatagramPort"
   port.receiveMany count maxBytes
 
 @[inline] def awaitDatagramReceive (promise : DatagramReceivePromiseRef) :
     RuntimeM (String × BytesRef) := do
-  promise.await
+  Runtime.datagramReceivePromiseAwait (← runtime) promise
 
 @[inline] def awaitDatagramReceiveCopy (promise : DatagramReceivePromiseRef) :
     RuntimeM (String × ByteArray) := do
-  promise.awaitCopy
+  Runtime.datagramReceivePromiseAwaitCopy (← runtime) promise
 
 @[inline] def cancelDatagramReceive (promise : DatagramReceivePromiseRef) : RuntimeM Unit := do
-  promise.cancel
+  Runtime.datagramReceivePromiseCancel (← runtime) promise
 
 @[inline] def releaseDatagramReceivePromise (promise : DatagramReceivePromiseRef) :
     RuntimeM Unit := do
-  promise.release
+  Runtime.datagramReceivePromiseRelease (← runtime) promise
 
 @[inline] def withDatagramPort (address : String)
     (action : DatagramPort -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
@@ -4881,7 +4893,7 @@ namespace RuntimeM
   try
     action port
   finally
-    port.release
+    datagramReleasePort port
 
 @[inline] def httpRequest (method : HttpMethod) (address : String) (path : String)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : RuntimeM HttpResponse := do
@@ -5455,7 +5467,7 @@ namespace RuntimeM
   Runtime.httpServerListenSecureWithConfig (← runtime) address config portHint
 
 @[inline] def httpServerRelease (server : HttpServer) : RuntimeM Unit := do
-  server.release
+  Runtime.httpServerRelease (← runtime) server
 
 @[inline] def httpServerDrainStart (server : HttpServer) : RuntimeM PromiseRef := do
   Runtime.httpServerDrainStart (← runtime) server
@@ -5475,11 +5487,11 @@ namespace RuntimeM
 
 @[inline] def httpServerPollRequest? (server : HttpServer) :
     RuntimeM (Option HttpServerRequest) := do
-  server.pollRequest?
+  Runtime.httpServerPollRequest? (← runtime) server
 
 @[inline] def httpServerPollRequestStreaming? (server : HttpServer) :
     RuntimeM (Option HttpServerRequest) := do
-  server.pollRequestStreaming?
+  Runtime.httpServerPollRequestStreaming? (← runtime) server
 
 @[inline] def httpServerRespondWithEncodedHeaders (server : HttpServer) (requestId : UInt32)
     (status : UInt32) (statusText : String) (responseHeaders : ByteArray)
@@ -5496,12 +5508,12 @@ namespace RuntimeM
 @[inline] def httpServerRespond (server : HttpServer) (requestId : UInt32) (status : UInt32)
     (statusText : String) (responseHeaders : Array HttpHeader := #[])
     (body : ByteArray := ByteArray.empty) : RuntimeM Unit := do
-  server.respond requestId status statusText responseHeaders body
+  Runtime.httpServerRespond (← runtime) server requestId status statusText responseHeaders body
 
 @[inline] def httpServerRespondRef (server : HttpServer) (requestId : UInt32) (status : UInt32)
     (statusText : String) (responseHeaders : Array HttpHeader := #[]) (body : BytesRef) :
     RuntimeM Unit := do
-  server.respondRef requestId status statusText responseHeaders body
+  Runtime.httpServerRespondRef (← runtime) server requestId status statusText responseHeaders body
 
 @[inline] def httpServerRespondWebSocketWithEncodedHeaders (server : HttpServer)
     (requestId : UInt32) (responseHeaders : ByteArray) : RuntimeM WebSocket := do
@@ -5509,7 +5521,7 @@ namespace RuntimeM
 
 @[inline] def httpServerRespondWebSocket (server : HttpServer) (requestId : UInt32)
     (responseHeaders : Array HttpHeader := #[]) : RuntimeM WebSocket := do
-  server.respondWebSocket requestId responseHeaders
+  Runtime.httpServerRespondWebSocket (← runtime) server requestId responseHeaders
 
 @[inline] def httpServerRespondStartStreamingWithEncodedHeaders (server : HttpServer)
     (requestId : UInt32) (status : UInt32) (statusText : String) (responseHeaders : ByteArray) :
@@ -5657,16 +5669,16 @@ namespace RuntimeM
     (← runtime) address path requestHeaders portHint
 
 @[inline] def awaitWebSocket (promise : WebSocketPromiseRef) : RuntimeM WebSocket := do
-  promise.await
+  Runtime.webSocketPromiseAwait (← runtime) promise
 
 @[inline] def cancelWebSocket (promise : WebSocketPromiseRef) : RuntimeM Unit := do
-  promise.cancel
+  Runtime.webSocketPromiseCancel (← runtime) promise
 
 @[inline] def releaseWebSocketPromise (promise : WebSocketPromiseRef) : RuntimeM Unit := do
-  promise.release
+  Runtime.webSocketPromiseRelease (← runtime) promise
 
 @[inline] def webSocketRelease (webSocket : WebSocket) : RuntimeM Unit := do
-  webSocket.release
+  Runtime.webSocketRelease (← runtime) webSocket
 
 @[inline] def webSocketSendTextStart (webSocket : WebSocket) (text : String) :
     RuntimeM PromiseRef := do
@@ -5683,7 +5695,7 @@ namespace RuntimeM
   webSocket.sendTextAsPromise text
 
 @[inline] def webSocketSendText (webSocket : WebSocket) (text : String) : RuntimeM Unit := do
-  webSocket.sendText text
+  Runtime.webSocketSendText (← runtime) webSocket text
 
 @[inline] def webSocketSendBinaryStart (webSocket : WebSocket) (bytes : ByteArray) :
     RuntimeM PromiseRef := do
@@ -5710,7 +5722,7 @@ namespace RuntimeM
   webSocket.sendBinaryAsPromiseRef bytes
 
 @[inline] def webSocketSendBinary (webSocket : WebSocket) (bytes : ByteArray) : RuntimeM Unit := do
-  webSocket.sendBinary bytes
+  Runtime.webSocketSendBinary (← runtime) webSocket bytes
 
 @[inline] def webSocketReceiveStart (webSocket : WebSocket) :
     RuntimeM WebSocketMessagePromiseRef := do
@@ -5762,33 +5774,33 @@ namespace RuntimeM
 
 @[inline] def awaitWebSocketMessage (promise : WebSocketMessagePromiseRef) :
     RuntimeM WebSocketMessageRef := do
-  promise.await
+  Runtime.webSocketMessagePromiseAwait (← runtime) promise
 
 @[inline] def awaitWebSocketMessageCopy (promise : WebSocketMessagePromiseRef) :
     RuntimeM WebSocketMessage := do
-  promise.awaitCopy
+  Runtime.webSocketMessagePromiseAwaitCopy (← runtime) promise
 
 @[inline] def cancelWebSocketMessage (promise : WebSocketMessagePromiseRef) :
     RuntimeM Unit := do
-  promise.cancel
+  Runtime.webSocketMessagePromiseCancel (← runtime) promise
 
 @[inline] def releaseWebSocketMessagePromise (promise : WebSocketMessagePromiseRef) :
     RuntimeM Unit := do
-  promise.release
+  Runtime.webSocketMessagePromiseRelease (← runtime) promise
 
 @[inline] def webSocketReceive (webSocket : WebSocket) : RuntimeM WebSocketMessage := do
-  webSocket.receive
+  Runtime.webSocketReceive (← runtime) webSocket
 
 @[inline] def webSocketReceiveRef (webSocket : WebSocket) : RuntimeM WebSocketMessageRef := do
-  webSocket.receiveRef
+  Runtime.webSocketReceiveRef (← runtime) webSocket
 
 @[inline] def webSocketReceiveWithMax (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM WebSocketMessage := do
-  webSocket.receiveWithMax maxBytes
+  Runtime.webSocketReceiveWithMax (← runtime) webSocket maxBytes
 
 @[inline] def webSocketReceiveWithMaxRef (webSocket : WebSocket) (maxBytes : UInt32) :
     RuntimeM WebSocketMessageRef := do
-  webSocket.receiveWithMaxRef maxBytes
+  Runtime.webSocketReceiveWithMaxRef (← runtime) webSocket maxBytes
 
 @[inline] def webSocketCloseStartCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM PromiseRef := do
@@ -5806,13 +5818,13 @@ namespace RuntimeM
 
 @[inline] def webSocketCloseCode (webSocket : WebSocket) (code : UInt32)
     (reason : String := "") : RuntimeM Unit := do
-  webSocket.closeCode code reason
+  Runtime.webSocketCloseCode (← runtime) webSocket code reason
 
 @[inline] def webSocketDisconnect (webSocket : WebSocket) : RuntimeM Unit := do
-  webSocket.disconnect
+  Runtime.webSocketDisconnect (← runtime) webSocket
 
 @[inline] def webSocketAbort (webSocket : WebSocket) : RuntimeM Unit := do
-  webSocket.abort
+  Runtime.webSocketAbort (← runtime) webSocket
 
 @[inline] def newWebSocketPipe : RuntimeM (WebSocket × WebSocket) := do
   Runtime.newWebSocketPipe (← runtime)

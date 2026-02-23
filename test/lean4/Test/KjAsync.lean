@@ -2994,6 +2994,95 @@ def testKjAsyncRuntimeMMismatchGuardsForConnectionAndPromiseHelpers : IO Unit :=
     runtimeB.shutdown
 
 @[test]
+def testKjAsyncRuntimeMMismatchGuardsForDatagramWebSocketAndHttpHelpers : IO Unit := do
+  let runtimeA ← Capnp.KjAsync.Runtime.init
+  let runtimeB ← Capnp.KjAsync.Runtime.init
+  try
+    let portA ← runtimeA.datagramBind "127.0.0.1" 0
+    let datagramPortErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.datagramGetPort portA)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (datagramPortErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.datagramGetPort runtime mismatch guard"
+
+    let sendPromise ← runtimeA.datagramSendStart portA "127.0.0.1" ByteArray.empty 9
+    let awaitUInt32Err ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.awaitUInt32 sendPromise)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (awaitUInt32Err.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.awaitUInt32 runtime mismatch guard"
+    sendPromise.release
+
+    let recvPromise ← portA.receiveStart
+    let recvPromiseErr ←
+      try
+        Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.cancelDatagramReceive recvPromise)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (recvPromiseErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.cancelDatagramReceive runtime mismatch guard"
+    recvPromise.cancel
+
+    let peerA ← runtimeA.datagramPeerBind "127.0.0.1" "127.0.0.1" 9 0
+    let datagramPeerErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB
+          (Capnp.KjAsync.RuntimeM.datagramPeerReceive peerA 1)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (datagramPeerErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.datagramPeerReceive runtime mismatch guard"
+    peerA.release
+    portA.release
+
+    let (wsA, wsB) ← runtimeA.newWebSocketPipe
+    let webSocketSendErr ←
+      try
+        Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.webSocketSendText wsA "hello")
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (webSocketSendErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.webSocketSendText runtime mismatch guard"
+
+    let wsMsgPromise ← wsA.receiveStart
+    let webSocketPromiseErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB
+          (Capnp.KjAsync.RuntimeM.awaitWebSocketMessage wsMsgPromise)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (webSocketPromiseErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.awaitWebSocketMessage runtime mismatch guard"
+    wsMsgPromise.cancel
+    wsA.release
+    wsB.release
+
+    let serverA ← runtimeA.httpServerListen "127.0.0.1" 0
+    let httpServerPollErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB
+          (Capnp.KjAsync.RuntimeM.httpServerPollRequest? serverA)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (httpServerPollErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.httpServerPollRequest? runtime mismatch guard"
+    serverA.release
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+
+@[test]
 def testKjAsyncWebSocketServerAccept : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
