@@ -247,6 +247,27 @@ def BarPromise.callPipelinedTypedM (promise : BarPromise)
     (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM BarResponse := do
   callBarPipelinedTypedM promise.pendingCall pointerPath payload
 
+def restoreSturdyRef (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO Echo := do
+  peer.restoreSturdyRef sturdyRef
+def restoreSturdyRefM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM Echo := do
+  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRef peer sturdyRef
+def restoreSturdyRefStart (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO Capnp.Rpc.RuntimeRegisterPromiseRef := do
+  peer.restoreSturdyRefStart sturdyRef
+def restoreSturdyRefStartM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimeRegisterPromiseRef := do
+  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefStart peer sturdyRef
+def awaitRestoreSturdyRef (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO Echo := do
+  promise.awaitTarget
+def awaitRestoreSturdyRefAndRelease (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO Echo := do
+  promise.awaitTargetAndRelease
+def restoreSturdyRefAsTask (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO (Task (Except IO.Error Echo)) := do
+  peer.restoreSturdyRefAsTask sturdyRef
+def restoreSturdyRefAsTaskM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM (Task (Except IO.Error Echo)) := do
+  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsTask peer sturdyRef
+def restoreSturdyRefAsPromise (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO (Capnp.Async.Promise Echo) := do
+  peer.restoreSturdyRefAsPromise sturdyRef
+def restoreSturdyRefAsPromiseM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM (Capnp.Async.Promise Echo) := do
+  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsPromise peer sturdyRef
+
 abbrev Handler := Capnp.Rpc.Handler
 abbrev fooHandler := Handler
 abbrev barHandler := Handler

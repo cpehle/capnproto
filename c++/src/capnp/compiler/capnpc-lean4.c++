@@ -4022,6 +4022,85 @@ private:
       }
     }
 
+    auto restoreSturdyRefName = uniqueName("restoreSturdyRef", usedNames);
+    auto restoreSturdyRefMName = uniqueName("restoreSturdyRefM", usedNames);
+    auto restoreSturdyRefStartName = uniqueName("restoreSturdyRefStart", usedNames);
+    auto restoreSturdyRefStartMName = uniqueName("restoreSturdyRefStartM", usedNames);
+    auto awaitRestoreSturdyRefName = uniqueName("awaitRestoreSturdyRef", usedNames);
+    auto awaitRestoreSturdyRefAndReleaseName =
+        uniqueName("awaitRestoreSturdyRefAndRelease", usedNames);
+    auto restoreSturdyRefAsTaskName = uniqueName("restoreSturdyRefAsTask", usedNames);
+    auto restoreSturdyRefAsTaskMName = uniqueName("restoreSturdyRefAsTaskM", usedNames);
+    auto restoreSturdyRefAsPromiseName = uniqueName("restoreSturdyRefAsPromise", usedNames);
+    auto restoreSturdyRefAsPromiseMName = uniqueName("restoreSturdyRefAsPromiseM", usedNames);
+
+    out += "\n";
+    out += "def ";
+    out += restoreSturdyRefName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  peer.restoreSturdyRef sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefMName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRef peer sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefStartName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO Capnp.Rpc.RuntimeRegisterPromiseRef := do\n";
+    out += "  peer.restoreSturdyRefStart sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefStartMName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimeRegisterPromiseRef := do\n";
+    out += "  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefStart peer sturdyRef\n";
+
+    out += "def ";
+    out += awaitRestoreSturdyRefName;
+    out += " (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  promise.awaitTarget\n";
+
+    out += "def ";
+    out += awaitRestoreSturdyRefAndReleaseName;
+    out += " (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO ";
+    out += name.cStr();
+    out += " := do\n";
+    out += "  promise.awaitTargetAndRelease\n";
+
+    out += "def ";
+    out += restoreSturdyRefAsTaskName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO (Task (Except IO.Error ";
+    out += name.cStr();
+    out += ")) := do\n";
+    out += "  peer.restoreSturdyRefAsTask sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefAsTaskMName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM (Task (Except IO.Error ";
+    out += name.cStr();
+    out += ")) := do\n";
+    out += "  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsTask peer sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefAsPromiseName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO (Capnp.Async.Promise ";
+    out += name.cStr();
+    out += ") := do\n";
+    out += "  peer.restoreSturdyRefAsPromise sturdyRef\n";
+
+    out += "def ";
+    out += restoreSturdyRefAsPromiseMName;
+    out += " (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM (Capnp.Async.Promise ";
+    out += name.cStr();
+    out += ") := do\n";
+    out += "  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsPromise peer sturdyRef\n";
+
     auto handlerTypeName = uniqueName("Handler", usedNames);
     auto serverTypeName = uniqueName("Server", usedNames);
     auto dispatchName = uniqueName("dispatch", usedNames);

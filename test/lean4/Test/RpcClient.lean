@@ -388,6 +388,65 @@ def testGeneratedPromiseHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testGeneratedSturdyRefAsyncHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-generated-sturdy"
+    let bob ← runtime.newMultiVatServer "bob-generated-sturdy" bootstrap
+    let objectId := ByteArray.mk #[3, 1, 4, 1]
+    let sturdyRef : Capnp.Rpc.SturdyRef := {
+      vat := { host := "bob-generated-sturdy", unique := false }
+      objectId := objectId
+    }
+    bob.publishSturdyRef objectId bootstrap
+
+    let checkTarget (target : Echo) : IO Unit := do
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      assertEqual response.capTable.caps.size 0
+      runtime.releaseTarget target
+
+    let pending ← Echo.restoreSturdyRefStart alice sturdyRef
+    checkTarget (← Echo.awaitRestoreSturdyRefAndRelease pending)
+
+    let task ← Echo.restoreSturdyRefAsTask alice sturdyRef
+    match (← IO.wait task) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+
+    let promise ← Echo.restoreSturdyRefAsPromise alice sturdyRef
+    match (← promise.awaitResult) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+
+    checkTarget (← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.restoreSturdyRefM alice sturdyRef)
+
+    let pendingM ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.restoreSturdyRefStartM alice sturdyRef
+    checkTarget (← Echo.awaitRestoreSturdyRef pendingM)
+
+    let taskM ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.restoreSturdyRefAsTaskM alice sturdyRef
+    match (← IO.wait taskM) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+
+    let promiseM ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.restoreSturdyRefAsPromiseM alice sturdyRef
+    match (← promiseM.awaitResult) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimePayloadRefLifecycleRoundtrip : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
