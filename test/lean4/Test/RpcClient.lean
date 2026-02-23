@@ -6370,6 +6370,56 @@ def testRuntimeMultiVatPublishedSturdyRefLifecycleControls : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeMultiVatSturdyRefAsyncHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-sturdy-async"
+    let bob ← runtime.newMultiVatServer "bob-sturdy-async" bootstrap
+    let vat : Capnp.Rpc.VatId := { host := "bob-sturdy-async", unique := false }
+    let objectId := ByteArray.mk #[11, 22, 33]
+
+    let publishPending ← bob.publishSturdyRefStart objectId bootstrap
+    publishPending.await
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 1)
+
+    let restorePending ← alice.restoreSturdyRefStart { vat := vat, objectId := objectId }
+    let restored ← restorePending.awaitTarget
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooM restored payload
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget restored
+
+    let unpublishTask ← bob.unpublishSturdyRefAsTask objectId
+    match (← IO.wait unpublishTask) with
+    | .ok () => pure ()
+    | .error err => throw err
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 0)
+
+    bob.publishSturdyRef objectId bootstrap
+    let clearPromise ← bob.clearPublishedSturdyRefsAsPromise
+    match (← clearPromise.awaitResult) with
+    | .ok () => pure ()
+    | .error err => throw err
+    assertEqual (← bob.publishedSturdyRefCount) (UInt64.ofNat 0)
+
+    let restorePromise ← alice.restoreSturdyRefAsPromise { vat := vat, objectId := objectId }
+    match (← restorePromise.awaitResult) with
+    | .ok target =>
+        runtime.releaseTarget target
+        throw (IO.userError "restoreSturdyRefAsPromise should fail after clear")
+    | .error err =>
+        if !((toString err).containsSubstr "no sturdy refs published for host:") then
+          throw (IO.userError s!"unexpected restoreSturdyRefAsPromise error text: {err}")
+
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeVatNetworkBootstrapPeer : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

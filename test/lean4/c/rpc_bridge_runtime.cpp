@@ -2054,6 +2054,22 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatPublishSturdyRefStart(
+      uint32_t hostPeerId, LeanByteArrayRef objectId, uint32_t targetId) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatPublishSturdyRefStart{
+          hostPeerId, std::move(objectId), targetId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueMultiVatUnpublishSturdyRef(
       uint32_t hostPeerId, LeanByteArrayRef objectId) {
     auto completion = std::make_shared<UnitCompletion>();
@@ -2070,6 +2086,22 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatUnpublishSturdyRefStart(
+      uint32_t hostPeerId, LeanByteArrayRef objectId) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatUnpublishSturdyRefStart{
+          hostPeerId, std::move(objectId), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<UnitCompletion> enqueueMultiVatClearPublishedSturdyRefs(uint32_t hostPeerId) {
     auto completion = std::make_shared<UnitCompletion>();
     {
@@ -2079,6 +2111,21 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedMultiVatClearPublishedSturdyRefs{hostPeerId, completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatClearPublishedSturdyRefsStart(
+      uint32_t hostPeerId) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatClearPublishedSturdyRefsStart{hostPeerId, completion});
     }
     notifyWorker();
     return completion;
@@ -2108,6 +2155,22 @@ class RuntimeLoop {
         return completion;
       }
       queue_.emplace_back(QueuedMultiVatRestoreSturdyRef{
+          sourcePeerId, std::move(host), unique, std::move(objectId), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRefStart(
+      uint32_t sourcePeerId, std::string host, bool unique, LeanByteArrayRef objectId) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedMultiVatRestoreSturdyRefStart{
           sourcePeerId, std::move(host), unique, std::move(objectId), completion});
     }
     notifyWorker();
@@ -2975,15 +3038,33 @@ class RuntimeLoop {
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedMultiVatPublishSturdyRefStart {
+    uint32_t hostPeerId;
+    LeanByteArrayRef objectId;
+    uint32_t targetId;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedMultiVatUnpublishSturdyRef {
     uint32_t hostPeerId;
     LeanByteArrayRef objectId;
     std::shared_ptr<UnitCompletion> completion;
   };
 
+  struct QueuedMultiVatUnpublishSturdyRefStart {
+    uint32_t hostPeerId;
+    LeanByteArrayRef objectId;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedMultiVatClearPublishedSturdyRefs {
     uint32_t hostPeerId;
     std::shared_ptr<UnitCompletion> completion;
+  };
+
+  struct QueuedMultiVatClearPublishedSturdyRefsStart {
+    uint32_t hostPeerId;
+    std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
   struct QueuedMultiVatPublishedSturdyRefCount {
@@ -2992,6 +3073,14 @@ class RuntimeLoop {
   };
 
   struct QueuedMultiVatRestoreSturdyRef {
+    uint32_t sourcePeerId;
+    std::string host;
+    bool unique;
+    LeanByteArrayRef objectId;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedMultiVatRestoreSturdyRefStart {
     uint32_t sourcePeerId;
     std::string host;
     bool unique;
@@ -3099,9 +3188,13 @@ class RuntimeLoop {
                    QueuedMultiVatDeniedForwardCount,
                    QueuedMultiVatHasConnection, QueuedMultiVatSetRestorer,
                    QueuedMultiVatClearRestorer, QueuedMultiVatPublishSturdyRef,
-                   QueuedMultiVatUnpublishSturdyRef, QueuedMultiVatClearPublishedSturdyRefs,
+                   QueuedMultiVatPublishSturdyRefStart, QueuedMultiVatUnpublishSturdyRef,
+                   QueuedMultiVatUnpublishSturdyRefStart,
+                   QueuedMultiVatClearPublishedSturdyRefs,
+                   QueuedMultiVatClearPublishedSturdyRefsStart,
                    QueuedMultiVatPublishedSturdyRefCount,
-                   QueuedMultiVatRestoreSturdyRef, QueuedMultiVatGetDiagnostics,
+                   QueuedMultiVatRestoreSturdyRef, QueuedMultiVatRestoreSturdyRefStart,
+                   QueuedMultiVatGetDiagnostics,
                    QueuedMultiVatConnectionBlock,
                    QueuedMultiVatConnectionUnblock, QueuedMultiVatConnectionDisconnect,
                    QueuedMultiVatConnectionResolveDisembargoCounts,
@@ -4507,6 +4600,17 @@ class RuntimeLoop {
     hostRefs.insert_or_assign(sturdyObjectKey(objectIdData, objectIdSize), targetIt->second);
   }
 
+  uint32_t multiVatPublishSturdyRefStart(uint32_t hostPeerId, LeanByteArrayRef objectId,
+                                         uint32_t targetId) {
+    auto canceler = kj::heap<kj::Canceler>();
+    kj::Promise<void> ready = kj::READY_NOW;
+    auto promise = canceler->wrap(kj::mv(ready).then(
+        [this, hostPeerId, objectId = std::move(objectId), targetId]() mutable {
+          multiVatPublishSturdyRef(hostPeerId, objectId.data(), objectId.size(), targetId);
+        }));
+    return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
   void multiVatUnpublishSturdyRef(uint32_t hostPeerId, const uint8_t* objectIdData,
                                   size_t objectIdSize) {
     requireMultiVatPeer(hostPeerId);
@@ -4525,9 +4629,27 @@ class RuntimeLoop {
     }
   }
 
+  uint32_t multiVatUnpublishSturdyRefStart(uint32_t hostPeerId, LeanByteArrayRef objectId) {
+    auto canceler = kj::heap<kj::Canceler>();
+    kj::Promise<void> ready = kj::READY_NOW;
+    auto promise = canceler->wrap(kj::mv(ready).then(
+        [this, hostPeerId, objectId = std::move(objectId)]() mutable {
+          multiVatUnpublishSturdyRef(hostPeerId, objectId.data(), objectId.size());
+        }));
+    return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
+  }
+
   void multiVatClearPublishedSturdyRefs(uint32_t hostPeerId) {
     requireMultiVatPeer(hostPeerId);
     sturdyRefs_.erase(hostPeerId);
+  }
+
+  uint32_t multiVatClearPublishedSturdyRefsStart(uint32_t hostPeerId) {
+    auto canceler = kj::heap<kj::Canceler>();
+    kj::Promise<void> ready = kj::READY_NOW;
+    auto promise = canceler->wrap(kj::mv(ready).then(
+        [this, hostPeerId]() { multiVatClearPublishedSturdyRefs(hostPeerId); }));
+    return addUnitPromise(PendingUnitPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   uint64_t multiVatPublishedSturdyRefCount(uint32_t hostPeerId) {
@@ -4569,6 +4691,19 @@ class RuntimeLoop {
       throw std::runtime_error("unknown sturdy ref object id");
     }
     return addTarget(refIt->second);
+  }
+
+  uint32_t multiVatRestoreSturdyRefStart(uint32_t sourcePeerId, std::string host, bool unique,
+                                         LeanByteArrayRef objectId) {
+    auto canceler = kj::heap<kj::Canceler>();
+    kj::Promise<void> ready = kj::READY_NOW;
+    auto promise = canceler->wrap(kj::mv(ready).then(
+        [this, sourcePeerId, host = std::move(host), unique,
+         objectId = std::move(objectId)]() mutable {
+          return multiVatRestoreSturdyRef(sourcePeerId, LeanVatId{host, unique}, objectId.data(),
+                                          objectId.size());
+        }));
+    return addRegisterPromise(PendingRegisterPromise(kj::mv(promise), kj::mv(canceler)));
   }
 
   uint32_t awaitRegisterPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
@@ -7497,6 +7632,21 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_publish_sturdy_ref");
           }
+        } else if (std::holds_alternative<QueuedMultiVatPublishSturdyRefStart>(op)) {
+          auto request = std::get<QueuedMultiVatPublishSturdyRefStart>(std::move(op));
+          try {
+            auto promiseId = multiVatPublishSturdyRefStart(
+                request.hostPeerId, std::move(request.objectId), request.targetId);
+            completeRegisterSuccess(request.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_publish_sturdy_ref_start");
+          }
         } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRef>(op)) {
           auto request = std::get<QueuedMultiVatUnpublishSturdyRef>(std::move(op));
           try {
@@ -7512,6 +7662,21 @@ class RuntimeLoop {
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_unpublish_sturdy_ref");
           }
+        } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRefStart>(op)) {
+          auto request = std::get<QueuedMultiVatUnpublishSturdyRefStart>(std::move(op));
+          try {
+            auto promiseId = multiVatUnpublishSturdyRefStart(
+                request.hostPeerId, std::move(request.objectId));
+            completeRegisterSuccess(request.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_unpublish_sturdy_ref_start");
+          }
         } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefs>(op)) {
           auto request = std::get<QueuedMultiVatClearPublishedSturdyRefs>(std::move(op));
           try {
@@ -7525,6 +7690,20 @@ class RuntimeLoop {
             completeUnitFailure(
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_clear_published_sturdy_refs");
+          }
+        } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefsStart>(op)) {
+          auto request = std::get<QueuedMultiVatClearPublishedSturdyRefsStart>(std::move(op));
+          try {
+            auto promiseId = multiVatClearPublishedSturdyRefsStart(request.hostPeerId);
+            completeRegisterSuccess(request.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_clear_published_sturdy_refs_start");
           }
         } else if (std::holds_alternative<QueuedMultiVatPublishedSturdyRefCount>(op)) {
           auto request = std::get<QueuedMultiVatPublishedSturdyRefCount>(std::move(op));
@@ -7555,6 +7734,22 @@ class RuntimeLoop {
             completeRegisterFailure(
                 request.completion,
                 "unknown exception in capnp_lean_rpc_runtime_multivat_restore_sturdy_ref");
+          }
+        } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRefStart>(op)) {
+          auto request = std::get<QueuedMultiVatRestoreSturdyRefStart>(std::move(op));
+          try {
+            auto promiseId = multiVatRestoreSturdyRefStart(
+                request.sourcePeerId, std::move(request.host), request.unique,
+                std::move(request.objectId));
+            completeRegisterSuccess(request.completion, promiseId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(request.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(request.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                request.completion,
+                "unknown exception in capnp_lean_rpc_runtime_multivat_restore_sturdy_ref_start");
           }
         } else if (std::holds_alternative<QueuedMultiVatGetDiagnostics>(op)) {
           auto request = std::get<QueuedMultiVatGetDiagnostics>(std::move(op));
@@ -8002,16 +8197,28 @@ class RuntimeLoop {
         completeUnitFailure(std::get<QueuedMultiVatClearRestorer>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatPublishSturdyRef>(op)) {
         completeUnitFailure(std::get<QueuedMultiVatPublishSturdyRef>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatPublishSturdyRefStart>(op)) {
+        completeRegisterFailure(std::get<QueuedMultiVatPublishSturdyRefStart>(op).completion,
+                                message);
       } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRef>(op)) {
         completeUnitFailure(std::get<QueuedMultiVatUnpublishSturdyRef>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatUnpublishSturdyRefStart>(op)) {
+        completeRegisterFailure(std::get<QueuedMultiVatUnpublishSturdyRefStart>(op).completion,
+                                message);
       } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefs>(op)) {
         completeUnitFailure(std::get<QueuedMultiVatClearPublishedSturdyRefs>(op).completion,
                             message);
+      } else if (std::holds_alternative<QueuedMultiVatClearPublishedSturdyRefsStart>(op)) {
+        completeRegisterFailure(
+            std::get<QueuedMultiVatClearPublishedSturdyRefsStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatPublishedSturdyRefCount>(op)) {
         completeUInt64Failure(std::get<QueuedMultiVatPublishedSturdyRefCount>(op).completion,
                               message);
       } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRef>(op)) {
         completeRegisterFailure(std::get<QueuedMultiVatRestoreSturdyRef>(op).completion, message);
+      } else if (std::holds_alternative<QueuedMultiVatRestoreSturdyRefStart>(op)) {
+        completeRegisterFailure(
+            std::get<QueuedMultiVatRestoreSturdyRefStart>(op).completion, message);
       } else if (std::holds_alternative<QueuedMultiVatGetDiagnostics>(op)) {
         auto& request = std::get<QueuedMultiVatGetDiagnostics>(op);
         lean_dec(request.targetVatId);
@@ -8799,15 +9006,30 @@ std::shared_ptr<UnitCompletion> enqueueMultiVatPublishSturdyRef(RuntimeLoop& run
   return runtime.enqueueMultiVatPublishSturdyRef(hostPeerId, std::move(objectId), targetId);
 }
 
+std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatPublishSturdyRefStart(
+    RuntimeLoop& runtime, uint32_t hostPeerId, LeanByteArrayRef objectId, uint32_t targetId) {
+  return runtime.enqueueMultiVatPublishSturdyRefStart(hostPeerId, std::move(objectId), targetId);
+}
+
 std::shared_ptr<UnitCompletion> enqueueMultiVatUnpublishSturdyRef(RuntimeLoop& runtime,
                                                                   uint32_t hostPeerId,
                                                                   LeanByteArrayRef objectId) {
   return runtime.enqueueMultiVatUnpublishSturdyRef(hostPeerId, std::move(objectId));
 }
 
+std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatUnpublishSturdyRefStart(
+    RuntimeLoop& runtime, uint32_t hostPeerId, LeanByteArrayRef objectId) {
+  return runtime.enqueueMultiVatUnpublishSturdyRefStart(hostPeerId, std::move(objectId));
+}
+
 std::shared_ptr<UnitCompletion> enqueueMultiVatClearPublishedSturdyRefs(RuntimeLoop& runtime,
                                                                          uint32_t hostPeerId) {
   return runtime.enqueueMultiVatClearPublishedSturdyRefs(hostPeerId);
+}
+
+std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatClearPublishedSturdyRefsStart(
+    RuntimeLoop& runtime, uint32_t hostPeerId) {
+  return runtime.enqueueMultiVatClearPublishedSturdyRefsStart(hostPeerId);
 }
 
 std::shared_ptr<UInt64Completion> enqueueMultiVatPublishedSturdyRefCount(RuntimeLoop& runtime,
@@ -8820,6 +9042,13 @@ std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRef(
     LeanByteArrayRef objectId) {
   return runtime.enqueueMultiVatRestoreSturdyRef(sourcePeerId, std::move(host), unique,
                                                  std::move(objectId));
+}
+
+std::shared_ptr<RegisterTargetCompletion> enqueueMultiVatRestoreSturdyRefStart(
+    RuntimeLoop& runtime, uint32_t sourcePeerId, std::string host, bool unique,
+    LeanByteArrayRef objectId) {
+  return runtime.enqueueMultiVatRestoreSturdyRefStart(sourcePeerId, std::move(host), unique,
+                                                      std::move(objectId));
 }
 
 std::shared_ptr<DiagnosticsCompletion> enqueueMultiVatGetDiagnostics(
