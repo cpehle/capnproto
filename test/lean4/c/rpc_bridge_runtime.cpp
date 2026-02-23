@@ -4830,9 +4830,10 @@ class RuntimeLoop {
       return kj::String();
     }
     auto traceObj = lean_io_result_take_value(ioResult);
-    auto traceCStr = lean_string_cstr(traceObj);
+    // Copy the Lean string before dropping its reference; `lean_string_cstr()` borrows storage.
+    auto traceCopy = kj::str(lean_string_cstr(traceObj));
     lean_dec(traceObj);
-    return kj::str(traceCStr);
+    return traceCopy;
   }
 
   kj::String encodeTrace(const kj::Exception& e) {
