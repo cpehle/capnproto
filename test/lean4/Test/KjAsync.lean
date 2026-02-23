@@ -1738,6 +1738,20 @@ def testKjAsyncConnectionReadAllAndPipeHelpers : IO Unit := do
     sourceRead.release
     targetWrite.release
     targetRead.release
+
+    let (sourceWriteRef, sourceReadRef) ← runtime.newTwoWayPipe
+    let (targetWriteRef, targetReadRef) ← runtime.newTwoWayPipe
+    sourceWriteRef.write payload1
+    sourceWriteRef.write payload2
+    sourceWriteRef.shutdownWrite
+    let copiedRef ← sourceReadRef.pipeToRefAndShutdownWrite targetWriteRef (4 : UInt32)
+    assertEqual copiedRef expected.size.toUInt64
+    let pipedRef ← targetReadRef.readAll (4 : UInt32)
+    assertEqual pipedRef expected
+    sourceWriteRef.release
+    sourceReadRef.release
+    targetWriteRef.release
+    targetReadRef.release
   finally
     runtime.shutdown
 

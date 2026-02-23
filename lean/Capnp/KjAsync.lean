@@ -3446,9 +3446,33 @@ namespace Connection
       copied := copied + chunk.size.toUInt64
   pure copied
 
+@[inline] def pipeToRef (source target : Connection) (chunkSize : UInt32 := 0x1000) :
+    IO UInt64 := do
+  if source.runtime.handle != target.runtime.handle then
+    throw (IO.userError "Connection.pipeToRef requires both connections to share the same runtime")
+  if chunkSize == 0 then
+    throw (IO.userError "Connection.pipeToRef requires chunkSize > 0")
+  let mut copied : UInt64 := 0
+  let mut done := false
+  while !done do
+    let chunkRef ← source.readRef (1 : UInt32) chunkSize
+    let chunkSizeBytes ← chunkRef.size
+    if chunkSizeBytes == 0 then
+      done := true
+    else
+      target.writeRef chunkRef
+      copied := copied + chunkSizeBytes
+  pure copied
+
 @[inline] def pipeToAndShutdownWrite (source target : Connection)
     (chunkSize : UInt32 := 0x1000) : IO UInt64 := do
   let copied ← source.pipeTo target chunkSize
+  target.shutdownWrite
+  pure copied
+
+@[inline] def pipeToRefAndShutdownWrite (source target : Connection)
+    (chunkSize : UInt32 := 0x1000) : IO UInt64 := do
+  let copied ← source.pipeToRef target chunkSize
   target.shutdownWrite
   pure copied
 
@@ -4560,9 +4584,17 @@ namespace RuntimeM
     RuntimeM UInt64 := do
   source.pipeTo target chunkSize
 
+@[inline] def pipeToRef (source target : Connection) (chunkSize : UInt32 := 0x1000) :
+    RuntimeM UInt64 := do
+  source.pipeToRef target chunkSize
+
 @[inline] def pipeToAndShutdownWrite (source target : Connection)
     (chunkSize : UInt32 := 0x1000) : RuntimeM UInt64 := do
   source.pipeToAndShutdownWrite target chunkSize
+
+@[inline] def pipeToRefAndShutdownWrite (source target : Connection)
+    (chunkSize : UInt32 := 0x1000) : RuntimeM UInt64 := do
+  source.pipeToRefAndShutdownWrite target chunkSize
 
 @[inline] def awaitConnection (promise : ConnectionPromiseRef) : RuntimeM Connection := do
   promise.await
