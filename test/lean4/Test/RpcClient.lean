@@ -3244,6 +3244,75 @@ def testRuntimeParityDisembargoNullPipelineDoesNotDisconnect : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeParityEmbargoErrorKeepsConnectionAlive : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let rejectMessage := "embargo parity rejection"
+  let rejectDetail := "embargo-parity-detail".toUTF8
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  let assertRejectedOutcome (label : String) (outcome : Capnp.Rpc.RawCallOutcome) : IO Unit := do
+    match outcome with
+    | .ok _ _ =>
+        throw (IO.userError s!"{label}: expected pipelined call to fail")
+    | .error ex =>
+        assertEqual ex.type .disconnected
+        if !(ex.description.containsSubstr rejectMessage) then
+          throw (IO.userError s!"{label}: missing reject message in: {ex.description}")
+        assertEqual ex.detail rejectDetail
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let client ← runtime.newClient address
+    server.accept listener
+
+    let remoteTarget ← client.bootstrap
+    let (promiseCap, fulfiller) ← runtime.newPromiseCapability
+
+    let pendingEcho ← runtime.startCall remoteTarget Echo.fooMethod (mkCapabilityPayload promiseCap)
+    let pipelineCap ← pendingEcho.getPipelinedCap
+    let call0Pending ← runtime.startCall pipelineCap Echo.fooMethod payload
+    let call1Pending ← runtime.startCall pipelineCap Echo.fooMethod payload
+    let call2Pending ← runtime.startCall pipelineCap Echo.fooMethod payload
+
+    let echoResponse ← pendingEcho.await
+    assertEqual echoResponse.capTable.caps.size 1
+    runtime.releaseCapTable echoResponse.capTable
+
+    fulfiller.reject .disconnected rejectMessage rejectDetail
+
+    let call0Outcome ← call0Pending.awaitOutcome
+    let call1Outcome ← call1Pending.awaitOutcome
+    let call2Outcome ← call2Pending.awaitOutcome
+    assertRejectedOutcome "embargo parity call0" call0Outcome
+    assertRejectedOutcome "embargo parity call1" call1Outcome
+    assertRejectedOutcome "embargo parity call2" call2Outcome
+
+    let healthCheck ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM remoteTarget payload
+    assertEqual healthCheck.capTable.caps.size 0
+
+    runtime.releaseTarget pipelineCap
+    runtime.releaseTarget promiseCap
+    fulfiller.release
+    runtime.releaseTarget remoteTarget
+    client.release
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
 def testRuntimeParityTailCallPipelineOrdering : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try

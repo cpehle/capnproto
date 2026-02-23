@@ -29,6 +29,7 @@
     "leanTests": [
       "Test.RpcClient.testRuntimeParityResolvePipelineOrdering",
       "Test.RpcClient.testRuntimeParityDisembargoNullPipelineDoesNotDisconnect",
+      "Test.RpcClient.testRuntimeParityEmbargoErrorKeepsConnectionAlive",
       "Test.RpcClient.testRuntimeParityTailCallPipelineOrdering",
       "Test.RpcClient.testRuntimeParityAdvancedDeferredSetPipelineOrdering",
       "Test.RpcClient.testRuntimeTwoHopPipelinedResolveOrdering",

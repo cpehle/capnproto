@@ -43,6 +43,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   -- Ordering-sensitive resolve/disembargo/tail-call behavior.
   `testRuntimeParityResolvePipelineOrdering,
   `testRuntimeParityDisembargoNullPipelineDoesNotDisconnect,
+  `testRuntimeParityEmbargoErrorKeepsConnectionAlive,
   `testRuntimeParityTailCallPipelineOrdering,
   `testRuntimeParityAdvancedDeferredSetPipelineOrdering,
   `testRuntimeTwoHopPipelinedResolveOrdering,
