@@ -236,6 +236,70 @@ def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeProtocolNullPipelineDoesNotEmitDisembargo : IO Unit := do
+  let payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let vatNetwork := runtime.vatNetwork
+    let bobBootstrap ← runtime.registerHandlerTarget (fun _ _ _ => pure mkNullPayload)
+    let bob ← vatNetwork.newServer "bob-null-disembargo" bobBootstrap
+    let alice ← vatNetwork.newClient "alice-null-disembargo"
+    let aliceToBob ← alice.bootstrapPeer bob
+
+    let baselineAliceToBob ← alice.resolveDisembargoCountsTo bob
+    let baselineBobToAlice ← bob.resolveDisembargoCountsTo alice
+
+    alice.resetResolveDisembargoTraceTo bob
+    bob.resetResolveDisembargoTraceTo alice
+
+    let pending ← runtime.startCall aliceToBob Echo.fooMethod payload
+    let nullPipelineCap ← pending.getPipelinedCap
+
+    let firstResult ← runtime.callResult nullPipelineCap Echo.fooMethod payload
+    match firstResult with
+    | .ok _ =>
+        throw (IO.userError "expected first null pipelined call to fail")
+    | .error _ =>
+        pure ()
+
+    let response ← pending.await
+    assertEqual (Capnp.isNullPointer (Capnp.getRoot response.msg)) true
+    assertEqual response.capTable.caps.size 0
+
+    let secondResult ← runtime.callResult nullPipelineCap Echo.fooMethod payload
+    match secondResult with
+    | .ok _ =>
+        throw (IO.userError "expected second null pipelined call to fail")
+    | .error _ =>
+        pure ()
+
+    let healthCheck ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM aliceToBob payload
+    assertEqual healthCheck.capTable.caps.size 0
+
+    runtime.pump
+    runtime.pump
+
+    let afterAliceToBob ← alice.resolveDisembargoCountsTo bob
+    let afterBobToAlice ← bob.resolveDisembargoCountsTo alice
+    let baselineDisembargo := baselineAliceToBob.disembargoCount + baselineBobToAlice.disembargoCount
+    let afterDisembargo := afterAliceToBob.disembargoCount + afterBobToAlice.disembargoCount
+    assertEqual afterDisembargo baselineDisembargo
+
+    let traceAliceToBob ← alice.resolveDisembargoTraceTo bob
+    let traceBobToAlice ← bob.resolveDisembargoTraceTo alice
+    assertEqual (countTraceTag traceAliceToBob .disembargo) 0
+    assertEqual (countTraceTag traceBobToAlice .disembargo) 0
+
+    runtime.releaseTarget nullPipelineCap
+    runtime.releaseTarget aliceToBob
+    alice.release
+    bob.release
+    runtime.releaseTarget bobBootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeProtocolBlockingOrdering : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try

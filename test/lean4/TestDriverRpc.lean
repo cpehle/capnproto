@@ -49,6 +49,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRuntimeOrderingResolveHoldControlsDisembargo,
   `testRuntimeOrderingResolveHooksTrackHeldCount,
   `testRuntimeProtocolResolveDisembargoMessageCounters,
+  `testRuntimeProtocolNullPipelineDoesNotEmitDisembargo,
   `testRuntimeProtocolBlockingOrdering,
 
   -- Lifecycle and disconnect visibility.

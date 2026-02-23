@@ -35,6 +35,7 @@
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHoldControlsDisembargo",
       "Test.RpcOrderingControl.testRuntimeOrderingResolveHooksTrackHeldCount",
       "Test.RpcOrderingControl.testRuntimeProtocolResolveDisembargoMessageCounters",
+      "Test.RpcOrderingControl.testRuntimeProtocolNullPipelineDoesNotEmitDisembargo",
       "Test.RpcOrderingControl.testRuntimeProtocolBlockingOrdering"
     ],
     "status": "partial",
