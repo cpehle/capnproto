@@ -97,12 +97,22 @@ def callFoo (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target fooMethod payload
 def callFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target fooMethod payload
+def callFooWithPayloadRef (runtime : Capnp.Rpc.Runtime) (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePayloadRef := do
+  Capnp.Rpc.Runtime.callWithPayloadRef runtime target fooMethod payloadRef
+def callFooWithPayloadRefM (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePayloadRef := do
+  Capnp.Rpc.RuntimeM.callWithPayloadRef target fooMethod payloadRef
 def startFoo (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
   Capnp.Rpc.Runtime.startCall runtime target fooMethod payload
 def startFooM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
   Capnp.Rpc.RuntimeM.startCall target fooMethod payload
+def startFooWithPayloadRef (runtime : Capnp.Rpc.Runtime) (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCallWithPayloadRef runtime target fooMethod payloadRef
+def startFooWithPayloadRefM (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCallWithPayloadRef target fooMethod payloadRef
 def awaitFoo (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
+def awaitFooPayloadRef (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.RuntimePayloadRef := do
+  pendingCall.awaitPayloadRef
 abbrev FooResponse := Capnp.Rpc.TypedPayload Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.foo_Results.Reader
 abbrev FooPromise := Capnp.Rpc.Promise FooResponse
 def startFooPromise (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO FooPromise := do
@@ -111,6 +121,8 @@ def startFooPromiseM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.empty
   return { pendingCall := (← startFooM target payload) }
 def FooPromise.await (promise : FooPromise) : IO Capnp.Rpc.Payload := do
   awaitFoo promise.pendingCall
+def FooPromise.awaitPayloadRef (promise : FooPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
+  awaitFooPayloadRef promise.pendingCall
 def FooPromise.release (promise : FooPromise) : IO Unit :=
   promise.pendingCall.release
 def FooPromise.releaseDeferred (promise : FooPromise) : IO Unit :=
@@ -141,6 +153,8 @@ def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
 def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
   promise.pendingCall.awaitAndRelease
+def FooPromise.awaitPayloadRefAndRelease (promise : FooPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
+  promise.pendingCall.awaitPayloadRefAndRelease
 def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
   let response ← promise.pendingCall.awaitAndRelease
   fooResponseOfPayload response
@@ -175,12 +189,22 @@ def callBar (backend : Capnp.Rpc.Backend) (target : Echo) (payload : Capnp.Rpc.P
   Capnp.Rpc.call backend target barMethod payload
 def callBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.Payload := do
   Capnp.Rpc.RuntimeM.call target barMethod payload
+def callBarWithPayloadRef (runtime : Capnp.Rpc.Runtime) (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePayloadRef := do
+  Capnp.Rpc.Runtime.callWithPayloadRef runtime target barMethod payloadRef
+def callBarWithPayloadRefM (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePayloadRef := do
+  Capnp.Rpc.RuntimeM.callWithPayloadRef target barMethod payloadRef
 def startBar (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO Capnp.Rpc.RuntimePendingCallRef := do
   Capnp.Rpc.Runtime.startCall runtime target barMethod payload
 def startBarM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
   Capnp.Rpc.RuntimeM.startCall target barMethod payload
+def startBarWithPayloadRef (runtime : Capnp.Rpc.Runtime) (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.Runtime.startCallWithPayloadRef runtime target barMethod payloadRef
+def startBarWithPayloadRefM (target : Echo) (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do
+  Capnp.Rpc.RuntimeM.startCallWithPayloadRef target barMethod payloadRef
 def awaitBar (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do
   pendingCall.await
+def awaitBarPayloadRef (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.RuntimePayloadRef := do
+  pendingCall.awaitPayloadRef
 abbrev BarResponse := Capnp.Rpc.TypedPayload Capnp.Gen.test.lean4.fixtures.rpc_echo.Echo.bar_Results.Reader
 abbrev BarPromise := Capnp.Rpc.Promise BarResponse
 def startBarPromise (runtime : Capnp.Rpc.Runtime) (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.emptyRpcEnvelope) : IO BarPromise := do
@@ -189,6 +213,8 @@ def startBarPromiseM (target : Echo) (payload : Capnp.Rpc.Payload := Capnp.empty
   return { pendingCall := (← startBarM target payload) }
 def BarPromise.await (promise : BarPromise) : IO Capnp.Rpc.Payload := do
   awaitBar promise.pendingCall
+def BarPromise.awaitPayloadRef (promise : BarPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
+  awaitBarPayloadRef promise.pendingCall
 def BarPromise.release (promise : BarPromise) : IO Unit :=
   promise.pendingCall.release
 def BarPromise.releaseDeferred (promise : BarPromise) : IO Unit :=
@@ -219,6 +245,8 @@ def BarPromise.awaitTyped (promise : BarPromise) : IO BarResponse := do
   awaitBarTyped promise.pendingCall
 def BarPromise.awaitAndRelease (promise : BarPromise) : IO Capnp.Rpc.Payload := do
   promise.pendingCall.awaitAndRelease
+def BarPromise.awaitPayloadRefAndRelease (promise : BarPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
+  promise.pendingCall.awaitPayloadRefAndRelease
 def BarPromise.awaitTypedAndRelease (promise : BarPromise) : IO BarResponse := do
   let response ← promise.pendingCall.awaitAndRelease
   barResponseOfPayload response

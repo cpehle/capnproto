@@ -44,6 +44,13 @@ structure VatId where
   unique : Bool := false
   deriving Inhabited, BEq, Repr
 
+namespace VatId
+
+@[inline] def ofHost (host : String) (unique : Bool := false) : VatId :=
+  { host := host, unique := unique }
+
+end VatId
+
 inductive TwoPartyVatSide where
   | client
   | server
@@ -70,6 +77,20 @@ structure SturdyRef where
   vat : VatId
   objectId : ByteArray := ByteArray.empty
   deriving Inhabited, BEq
+
+namespace SturdyRef
+
+@[inline] def ofVat (vat : VatId) (objectId : ByteArray := ByteArray.empty) : SturdyRef :=
+  { vat := vat, objectId := objectId }
+
+@[inline] def ofHost (host : String) (objectId : ByteArray := ByteArray.empty)
+    (unique : Bool := false) : SturdyRef :=
+  { vat := VatId.ofHost host unique, objectId := objectId }
+
+@[inline] def withObjectId (sturdyRef : SturdyRef) (objectId : ByteArray) : SturdyRef :=
+  { sturdyRef with objectId := objectId }
+
+end SturdyRef
 
 structure MultiVatStats where
   forwardCount : UInt64
@@ -2131,6 +2152,15 @@ namespace RuntimeVatPeerRef
     (objectId : ByteArray) (target : Client) : IO (Capnp.Async.Promise Unit) :=
   Runtime.multiVatPublishSturdyRefAsPromise peer objectId target
 
+@[inline] def withPublishedSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client)
+    (action : RuntimeVatPeerRef -> IO α) : IO α := do
+  peer.publishSturdyRef objectId target
+  try
+    action peer
+  finally
+    Runtime.multiVatUnpublishSturdyRef peer objectId
+
 @[inline] def unpublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) : IO Unit :=
   Runtime.multiVatUnpublishSturdyRef peer objectId
@@ -2169,17 +2199,36 @@ namespace RuntimeVatPeerRef
     (sturdyRef : SturdyRef) : IO Client :=
   Runtime.multiVatRestoreSturdyRef peer sturdyRef
 
+@[inline] def restoreSturdyRefAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) : IO Client :=
+  peer.restoreSturdyRef (SturdyRef.ofHost host objectId unique)
+
 @[inline] def restoreSturdyRefStart (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO RuntimeRegisterPromiseRef :=
   Runtime.multiVatRestoreSturdyRefStart peer sturdyRef
+
+@[inline] def restoreSturdyRefStartAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO RuntimeRegisterPromiseRef :=
+  peer.restoreSturdyRefStart (SturdyRef.ofHost host objectId unique)
 
 @[inline] def restoreSturdyRefAsTask (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO (Task (Except IO.Error Client)) :=
   Runtime.multiVatRestoreSturdyRefAsTask peer sturdyRef
 
+@[inline] def restoreSturdyRefAsTaskAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO (Task (Except IO.Error Client)) :=
+  peer.restoreSturdyRefAsTask (SturdyRef.ofHost host objectId unique)
+
 @[inline] def restoreSturdyRefAsPromise (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO (Capnp.Async.Promise Client) :=
   Runtime.multiVatRestoreSturdyRefAsPromise peer sturdyRef
+
+@[inline] def restoreSturdyRefAsPromiseAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO (Capnp.Async.Promise Client) :=
+  peer.restoreSturdyRefAsPromise (SturdyRef.ofHost host objectId unique)
 
 end RuntimeVatPeerRef
 
@@ -2248,6 +2297,16 @@ namespace VatNetwork
   ensurePeerRuntime network peer "publishSturdyRefAsPromise"
   Runtime.multiVatPublishSturdyRefAsPromise peer objectId target
 
+@[inline] def withPublishedSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client)
+    (action : RuntimeVatPeerRef -> IO α) : IO α := do
+  ensurePeerRuntime network peer "withPublishedSturdyRef"
+  Runtime.multiVatPublishSturdyRef peer objectId target
+  try
+    action peer
+  finally
+    Runtime.multiVatUnpublishSturdyRef peer objectId
+
 @[inline] def unpublishSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) : IO Unit := do
   ensurePeerRuntime network peer "unpublishSturdyRef"
@@ -2297,20 +2356,43 @@ namespace VatNetwork
   ensurePeerRuntime network peer "restoreSturdyRef"
   Runtime.multiVatRestoreSturdyRef peer sturdyRef
 
+@[inline] def restoreSturdyRefAt (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) : IO Client := do
+  ensurePeerRuntime network peer "restoreSturdyRefAt"
+  Runtime.multiVatRestoreSturdyRef peer (SturdyRef.ofHost host objectId unique)
+
 @[inline] def restoreSturdyRefStart (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO RuntimeRegisterPromiseRef := do
   ensurePeerRuntime network peer "restoreSturdyRefStart"
   Runtime.multiVatRestoreSturdyRefStart peer sturdyRef
+
+@[inline] def restoreSturdyRefStartAt (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO RuntimeRegisterPromiseRef := do
+  ensurePeerRuntime network peer "restoreSturdyRefStartAt"
+  Runtime.multiVatRestoreSturdyRefStart peer (SturdyRef.ofHost host objectId unique)
 
 @[inline] def restoreSturdyRefAsTask (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO (Task (Except IO.Error Client)) := do
   ensurePeerRuntime network peer "restoreSturdyRefAsTask"
   Runtime.multiVatRestoreSturdyRefAsTask peer sturdyRef
 
+@[inline] def restoreSturdyRefAsTaskAt (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO (Task (Except IO.Error Client)) := do
+  ensurePeerRuntime network peer "restoreSturdyRefAsTaskAt"
+  Runtime.multiVatRestoreSturdyRefAsTask peer (SturdyRef.ofHost host objectId unique)
+
 @[inline] def restoreSturdyRefAsPromise (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO (Capnp.Async.Promise Client) := do
   ensurePeerRuntime network peer "restoreSturdyRefAsPromise"
   Runtime.multiVatRestoreSturdyRefAsPromise peer sturdyRef
+
+@[inline] def restoreSturdyRefAsPromiseAt (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    IO (Capnp.Async.Promise Client) := do
+  ensurePeerRuntime network peer "restoreSturdyRefAsPromiseAt"
+  Runtime.multiVatRestoreSturdyRefAsPromise peer (SturdyRef.ofHost host objectId unique)
 
 @[inline] def setForwardingEnabled (network : VatNetwork) (enabled : Bool) : IO Unit :=
   Runtime.multiVatSetForwardingEnabled network.runtime enabled
@@ -2435,6 +2517,11 @@ namespace RuntimePendingCallRef
 @[inline] def awaitAndRelease (pendingCall : RuntimePendingCallRef) : IO Payload := do
   -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
   pendingCall.await
+
+@[inline] def awaitPayloadRefAndRelease (pendingCall : RuntimePendingCallRef) :
+    IO RuntimePayloadRef := do
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  pendingCall.awaitPayloadRef
 
 @[inline] def awaitOutcomeAndRelease (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome := do
   -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
@@ -2918,6 +3005,16 @@ namespace RuntimeM
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatPublishSturdyRefAsPromise peer objectId target
 
+@[inline] def multiVatWithPublishedSturdyRef (peer : RuntimeVatPeerRef)
+    (objectId : ByteArray) (target : Client)
+    (action : RuntimeVatPeerRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatPublishSturdyRef peer objectId target
+  try
+    action peer
+  finally
+    Runtime.multiVatUnpublishSturdyRef peer objectId
+
 @[inline] def multiVatUnpublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) : RuntimeM Unit := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
@@ -2966,20 +3063,43 @@ namespace RuntimeM
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatRestoreSturdyRef peer sturdyRef
 
+@[inline] def multiVatRestoreSturdyRefAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) : RuntimeM Client := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatRestoreSturdyRef peer (SturdyRef.ofHost host objectId unique)
+
 @[inline] def multiVatRestoreSturdyRefStart (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : RuntimeM RuntimeRegisterPromiseRef := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatRestoreSturdyRefStart peer sturdyRef
+
+@[inline] def multiVatRestoreSturdyRefStartAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    RuntimeM RuntimeRegisterPromiseRef := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatRestoreSturdyRefStart peer (SturdyRef.ofHost host objectId unique)
 
 @[inline] def multiVatRestoreSturdyRefAsTask (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : RuntimeM (Task (Except IO.Error Client)) := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatRestoreSturdyRefAsTask peer sturdyRef
 
+@[inline] def multiVatRestoreSturdyRefAsTaskAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    RuntimeM (Task (Except IO.Error Client)) := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatRestoreSturdyRefAsTask peer (SturdyRef.ofHost host objectId unique)
+
 @[inline] def multiVatRestoreSturdyRefAsPromise (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : RuntimeM (Capnp.Async.Promise Client) := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatRestoreSturdyRefAsPromise peer sturdyRef
+
+@[inline] def multiVatRestoreSturdyRefAsPromiseAt (peer : RuntimeVatPeerRef)
+    (host : String) (objectId : ByteArray) (unique : Bool := false) :
+    RuntimeM (Capnp.Async.Promise Client) := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatRestoreSturdyRefAsPromise peer (SturdyRef.ofHost host objectId unique)
 
 @[inline] def vatNetwork : RuntimeM VatNetwork := do
   return Runtime.vatNetwork (← runtime)
@@ -3295,6 +3415,12 @@ namespace RuntimeM
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
   Runtime.pendingCallAwait pendingCall
+
+@[inline] def pendingCallAwaitPayloadRefAndRelease
+    (pendingCall : RuntimePendingCallRef) : RuntimeM RuntimePayloadRef := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  Runtime.pendingCallAwaitPayloadRef pendingCall
 
 @[inline] def pendingCallAwaitOutcomeAndRelease
     (pendingCall : RuntimePendingCallRef) : RuntimeM RawCallOutcome := do

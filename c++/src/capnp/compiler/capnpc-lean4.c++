@@ -3647,9 +3647,14 @@ private:
       std::string methodName;
       std::string callName;
       std::string callMName;
+      std::string callWithPayloadRefName;
+      std::string callWithPayloadRefMName;
       std::string startCallName;
       std::string startCallMName;
+      std::string startCallWithPayloadRefName;
+      std::string startCallWithPayloadRefMName;
       std::string awaitCallName;
+      std::string awaitPayloadRefCallName;
       std::string responseTypeName;
       std::string promiseTypeName;
       std::string startPromiseName;
@@ -3686,9 +3691,19 @@ private:
       auto methodName = uniqueName(methodBase + "Method", usedNames);
       auto callName = uniqueName("call" + std::string(cap.cStr()), usedNames);
       auto callMName = uniqueName("call" + std::string(cap.cStr()) + "M", usedNames);
+      auto callWithPayloadRefName =
+          uniqueName("call" + std::string(cap.cStr()) + "WithPayloadRef", usedNames);
+      auto callWithPayloadRefMName =
+          uniqueName("call" + std::string(cap.cStr()) + "WithPayloadRefM", usedNames);
       auto startCallName = uniqueName("start" + std::string(cap.cStr()), usedNames);
       auto startCallMName = uniqueName("start" + std::string(cap.cStr()) + "M", usedNames);
+      auto startCallWithPayloadRefName =
+          uniqueName("start" + std::string(cap.cStr()) + "WithPayloadRef", usedNames);
+      auto startCallWithPayloadRefMName =
+          uniqueName("start" + std::string(cap.cStr()) + "WithPayloadRefM", usedNames);
       auto awaitCallName = uniqueName("await" + std::string(cap.cStr()), usedNames);
+      auto awaitPayloadRefCallName =
+          uniqueName("await" + std::string(cap.cStr()) + "PayloadRef", usedNames);
       auto responseTypeName = uniqueName(std::string(cap.cStr()) + "Response", usedNames);
       auto promiseTypeName = uniqueName(std::string(cap.cStr()) + "Promise", usedNames);
       auto startPromiseName = uniqueName("start" + std::string(cap.cStr()) + "Promise", usedNames);
@@ -3707,12 +3722,14 @@ private:
       auto resultTypeName = absoluteTypeName(method.getResultType().getProto().getId());
       rpcMethods.push_back({fieldName, handlerName, typedHandlerName, advancedTypedHandlerName,
                             streamingTypedHandlerName, methodIdName, methodName, callName,
-                            callMName, startCallName, startCallMName, awaitCallName,
-                            responseTypeName, promiseTypeName, startPromiseName, startPromiseMName,
-                            awaitTypedCallName, pipelinedCapName, pipelinedCallMName,
-                            pipelinedTypedCallMName, typedCallName, typedCallMName,
-                            encodeRequestName, decodeRequestName, encodeResponseName,
-                            decodeResponseName, paramTypeName, resultTypeName});
+                            callMName, callWithPayloadRefName, callWithPayloadRefMName,
+                            startCallName, startCallMName, startCallWithPayloadRefName,
+                            startCallWithPayloadRefMName, awaitCallName,
+                            awaitPayloadRefCallName, responseTypeName, promiseTypeName,
+                            startPromiseName, startPromiseMName, awaitTypedCallName,
+                            pipelinedCapName, pipelinedCallMName, pipelinedTypedCallMName,
+                            typedCallName, typedCallMName, encodeRequestName, decodeRequestName,
+                            encodeResponseName, decodeResponseName, paramTypeName, resultTypeName});
 
       out += "\n";
       out += "def ";
@@ -3746,6 +3763,24 @@ private:
       out += " payload\n";
 
       out += "def ";
+      out += callWithPayloadRefName;
+      out += " (runtime : Capnp.Rpc.Runtime) (target : ";
+      out += name.cStr();
+      out += ") (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePayloadRef := do\n";
+      out += "  Capnp.Rpc.Runtime.callWithPayloadRef runtime target ";
+      out += methodName;
+      out += " payloadRef\n";
+
+      out += "def ";
+      out += callWithPayloadRefMName;
+      out += " (target : ";
+      out += name.cStr();
+      out += ") (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePayloadRef := do\n";
+      out += "  Capnp.Rpc.RuntimeM.callWithPayloadRef target ";
+      out += methodName;
+      out += " payloadRef\n";
+
+      out += "def ";
       out += startCallName;
       out += " (runtime : Capnp.Rpc.Runtime) (target : ";
       out += name.cStr();
@@ -3764,9 +3799,32 @@ private:
       out += " payload\n";
 
       out += "def ";
+      out += startCallWithPayloadRefName;
+      out += " (runtime : Capnp.Rpc.Runtime) (target : ";
+      out += name.cStr();
+      out += ") (payloadRef : Capnp.Rpc.RuntimePayloadRef) : IO Capnp.Rpc.RuntimePendingCallRef := do\n";
+      out += "  Capnp.Rpc.Runtime.startCallWithPayloadRef runtime target ";
+      out += methodName;
+      out += " payloadRef\n";
+
+      out += "def ";
+      out += startCallWithPayloadRefMName;
+      out += " (target : ";
+      out += name.cStr();
+      out += ") (payloadRef : Capnp.Rpc.RuntimePayloadRef) : Capnp.Rpc.RuntimeM Capnp.Rpc.RuntimePendingCallRef := do\n";
+      out += "  Capnp.Rpc.RuntimeM.startCallWithPayloadRef target ";
+      out += methodName;
+      out += " payloadRef\n";
+
+      out += "def ";
       out += awaitCallName;
       out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.Payload := do\n";
       out += "  pendingCall.await\n";
+
+      out += "def ";
+      out += awaitPayloadRefCallName;
+      out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Capnp.Rpc.RuntimePayloadRef := do\n";
+      out += "  pendingCall.awaitPayloadRef\n";
 
       auto paramReaderTypeName = paramTypeName + ".Reader";
       auto resultReaderTypeName = resultTypeName + ".Reader";
@@ -3812,6 +3870,15 @@ private:
       out += ") : IO Capnp.Rpc.Payload := do\n";
       out += "  ";
       out += awaitCallName;
+      out += " promise.pendingCall\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".awaitPayloadRef (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Capnp.Rpc.RuntimePayloadRef := do\n";
+      out += "  ";
+      out += awaitPayloadRefCallName;
       out += " promise.pendingCall\n";
 
       out += "def ";
@@ -3929,6 +3996,13 @@ private:
       out += promiseTypeName;
       out += ") : IO Capnp.Rpc.Payload := do\n";
       out += "  promise.pendingCall.awaitAndRelease\n";
+
+      out += "def ";
+      out += promiseTypeName;
+      out += ".awaitPayloadRefAndRelease (promise : ";
+      out += promiseTypeName;
+      out += ") : IO Capnp.Rpc.RuntimePayloadRef := do\n";
+      out += "  promise.pendingCall.awaitPayloadRefAndRelease\n";
 
       out += "def ";
       out += promiseTypeName;

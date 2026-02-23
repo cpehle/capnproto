@@ -388,6 +388,71 @@ def testGeneratedPromiseHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testGeneratedPayloadRefHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+
+    let requestA ← runtime.payloadRefFromPayload payload
+    let responseA ← Echo.callFooWithPayloadRef runtime target requestA
+    let decodedA ← responseA.decodeAndRelease
+    assertEqual decodedA.capTable.caps.size 0
+    requestA.release
+
+    let requestB ← runtime.payloadRefFromPayload payload
+    let pendingB ← Echo.startFooWithPayloadRef runtime target requestB
+    let responseB ← Echo.awaitFooPayloadRef pendingB
+    let decodedB ← responseB.decodeAndRelease
+    assertEqual decodedB.capTable.caps.size 0
+    requestB.release
+
+    let promiseC ← Echo.startFooPromise runtime target payload
+    let responseC ← promiseC.awaitPayloadRef
+    let decodedC ← responseC.decodeAndRelease
+    assertEqual decodedC.capTable.caps.size 0
+
+    let promiseD ← Echo.startFooPromise runtime target payload
+    let responseD ← promiseD.awaitPayloadRefAndRelease
+    let decodedD ← responseD.decodeAndRelease
+    assertEqual decodedD.capTable.caps.size 0
+
+    let requestE ← runtime.payloadRefFromPayload payload
+    let responseE ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callFooWithPayloadRefM target requestE
+    let decodedE ← responseE.decodeAndRelease
+    assertEqual decodedE.capTable.caps.size 0
+    requestE.release
+
+    let requestF ← runtime.payloadRefFromPayload payload
+    let pendingF ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.startFooWithPayloadRefM target requestF
+    let responseF ← Echo.awaitFooPayloadRef pendingF
+    let decodedF ← responseF.decodeAndRelease
+    assertEqual decodedF.capTable.caps.size 0
+    requestF.release
+
+    let requestG ← runtime.payloadRefFromPayload payload
+    let pendingG ← Echo.startFooWithPayloadRef runtime target requestG
+    let responseG ← pendingG.awaitPayloadRefAndRelease
+    let decodedG ← responseG.decodeAndRelease
+    assertEqual decodedG.capTable.caps.size 0
+    requestG.release
+
+    let requestH ← runtime.payloadRefFromPayload payload
+    let pendingH ← Capnp.Rpc.RuntimeM.run runtime do
+      Echo.startFooWithPayloadRefM target requestH
+    let responseH ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.pendingCallAwaitPayloadRefAndRelease pendingH
+    let decodedH ← responseH.decodeAndRelease
+    assertEqual decodedH.capTable.caps.size 0
+    requestH.release
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testGeneratedSturdyRefAsyncHelpers : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init
@@ -6471,6 +6536,119 @@ def testRuntimeMultiVatSturdyRefAsyncHelpers : IO Unit := do
     | .error err =>
         if !((toString err).containsSubstr "no sturdy refs published for host:") then
           throw (IO.userError s!"unexpected restoreSturdyRefAsPromise error text: {err}")
+
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMultiVatSturdyRefErgonomicHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let network := runtime.vatNetwork
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-sturdy-ergonomic"
+    let bob ← runtime.newMultiVatServer "bob-sturdy-ergonomic" bootstrap
+    let host := "bob-sturdy-ergonomic"
+
+    let checkTarget (target : Echo) : IO Unit := do
+      let response ← Capnp.Rpc.RuntimeM.run runtime do
+        Echo.callFooM target payload
+      assertEqual response.capTable.caps.size 0
+      runtime.releaseTarget target
+
+    let objectIdPeer := ByteArray.mk #[31, 32, 33]
+    let objectIdRuntimeM := ByteArray.mk #[41, 42, 43]
+    let objectIdRuntimeMScope := ByteArray.mk #[51, 52, 53]
+    let objectIdNetwork := ByteArray.mk #[61, 62, 63]
+
+    bob.withPublishedSturdyRef objectIdPeer bootstrap (fun _ => do
+      checkTarget (← alice.restoreSturdyRefAt host objectIdPeer)
+      let pending ← alice.restoreSturdyRefStartAt host objectIdPeer
+      checkTarget (← pending.awaitTargetAndRelease)
+
+      let task ← alice.restoreSturdyRefAsTaskAt host objectIdPeer
+      match (← IO.wait task) with
+      | .ok target => checkTarget target
+      | .error err => throw err
+
+      let promise ← alice.restoreSturdyRefAsPromiseAt host objectIdPeer
+      match (← promise.awaitResult) with
+      | .ok target => checkTarget target
+      | .error err => throw err)
+
+    let peerMissingErr ←
+      try
+        let restored ← alice.restoreSturdyRefAt host objectIdPeer
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(peerMissingErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing peer helper cleanup error text: {peerMissingErr}")
+
+    Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatPublishSturdyRef bob objectIdRuntimeM bootstrap
+    checkTarget (← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAt alice host objectIdRuntimeM)
+    let pendingM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefStartAt alice host objectIdRuntimeM
+    checkTarget (← pendingM.awaitTargetAndRelease)
+    let taskM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsTaskAt alice host objectIdRuntimeM
+    match (← IO.wait taskM) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+    let promiseM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsPromiseAt alice host objectIdRuntimeM
+    match (← promiseM.awaitResult) with
+    | .ok target => checkTarget target
+    | .error err => throw err
+    Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatUnpublishSturdyRef bob objectIdRuntimeM
+
+    let restoredScopedM ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.multiVatWithPublishedSturdyRef bob objectIdRuntimeMScope bootstrap
+        (fun _ => Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAt alice host objectIdRuntimeMScope)
+    checkTarget restoredScopedM
+    let scopedMMissingErr ←
+      try
+        let restored ← Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAt alice host objectIdRuntimeMScope
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(scopedMMissingErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing RuntimeM helper cleanup error text: {scopedMMissingErr}")
+
+    network.withPublishedSturdyRef bob objectIdNetwork bootstrap (fun _ => do
+      checkTarget (← network.restoreSturdyRefAt alice host objectIdNetwork)
+      let pending ← network.restoreSturdyRefStartAt alice host objectIdNetwork
+      checkTarget (← pending.awaitTargetAndRelease)
+
+      let task ← network.restoreSturdyRefAsTaskAt alice host objectIdNetwork
+      match (← IO.wait task) with
+      | .ok target => checkTarget target
+      | .error err => throw err
+
+      let promise ← network.restoreSturdyRefAsPromiseAt alice host objectIdNetwork
+      match (← promise.awaitResult) with
+      | .ok target => checkTarget target
+      | .error err => throw err)
+
+    let networkMissingErr ←
+      try
+        let restored ← network.restoreSturdyRefAt alice host objectIdNetwork
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(networkMissingErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing vat-network helper cleanup error text: {networkMissingErr}")
 
     alice.release
     bob.release
