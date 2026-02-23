@@ -2949,6 +2949,51 @@ def testKjAsyncRuntimeMismatchGuardForCorePrimitives : IO Unit := do
     runtimeB.shutdown
 
 @[test]
+def testKjAsyncRuntimeMMismatchGuardsForConnectionAndPromiseHelpers : IO Unit := do
+  let runtimeA ← Capnp.KjAsync.Runtime.init
+  let runtimeB ← Capnp.KjAsync.Runtime.init
+  try
+    let (connARead, connAWrite) ← runtimeA.newTwoWayPipe
+    let (connBRead, connBWrite) ← runtimeB.newTwoWayPipe
+
+    let readAllErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.readAll connARead)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (readAllErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.readAll runtime mismatch guard"
+
+    let pipeErr ←
+      try
+        let _ ← Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.pipeToRef connARead connAWrite)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (pipeErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.pipeToRef runtime mismatch guard"
+
+    let promiseA ← runtimeA.sleepMillisStart (UInt32.ofNat 1)
+    let awaitErr ←
+      try
+        Capnp.KjAsync.RuntimeM.run runtimeB (Capnp.KjAsync.RuntimeM.await promiseA)
+        pure ""
+      catch e =>
+        pure (toString e)
+    assertTrue (awaitErr.contains "different Capnp.KjAsync runtime")
+      "expected RuntimeM.await runtime mismatch guard"
+    promiseA.release
+
+    connARead.release
+    connAWrite.release
+    connBRead.release
+    connBWrite.release
+  finally
+    runtimeA.shutdown
+    runtimeB.shutdown
+
+@[test]
 def testKjAsyncWebSocketServerAccept : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try

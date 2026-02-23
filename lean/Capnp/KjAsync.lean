@@ -4558,6 +4558,7 @@ namespace RuntimeM
 
 @[inline] def readAll (connection : Connection) (chunkSize : UInt32 := 0x1000) :
     RuntimeM ByteArray := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.readAll chunkSize
 
 @[inline] def shutdownWrite (connection : Connection) : RuntimeM Unit := do
@@ -4578,55 +4579,79 @@ namespace RuntimeM
 
 @[inline] def writeAndShutdownWrite (connection : Connection) (bytes : ByteArray) :
     RuntimeM Unit := do
+  ensureSameRuntime (← runtime) connection.runtime "Connection"
   connection.writeAndShutdownWrite bytes
 
 @[inline] def pipeTo (source target : Connection) (chunkSize : UInt32 := 0x1000) :
     RuntimeM UInt64 := do
+  let current ← runtime
+  ensureSameRuntime current source.runtime "Connection"
+  ensureSameRuntime current target.runtime "Connection"
   source.pipeTo target chunkSize
 
 @[inline] def pipeToRef (source target : Connection) (chunkSize : UInt32 := 0x1000) :
     RuntimeM UInt64 := do
+  let current ← runtime
+  ensureSameRuntime current source.runtime "Connection"
+  ensureSameRuntime current target.runtime "Connection"
   source.pipeToRef target chunkSize
 
 @[inline] def pipeToAndShutdownWrite (source target : Connection)
     (chunkSize : UInt32 := 0x1000) : RuntimeM UInt64 := do
+  let current ← runtime
+  ensureSameRuntime current source.runtime "Connection"
+  ensureSameRuntime current target.runtime "Connection"
   source.pipeToAndShutdownWrite target chunkSize
 
 @[inline] def pipeToRefAndShutdownWrite (source target : Connection)
     (chunkSize : UInt32 := 0x1000) : RuntimeM UInt64 := do
+  let current ← runtime
+  ensureSameRuntime current source.runtime "Connection"
+  ensureSameRuntime current target.runtime "Connection"
   source.pipeToRefAndShutdownWrite target chunkSize
 
 @[inline] def awaitConnection (promise : ConnectionPromiseRef) : RuntimeM Connection := do
+  ensureSameRuntime (← runtime) promise.runtime "ConnectionPromiseRef"
   promise.await
 
 @[inline] def cancelConnection (promise : ConnectionPromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "ConnectionPromiseRef"
   promise.cancel
 
 @[inline] def releaseConnectionPromise (promise : ConnectionPromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "ConnectionPromiseRef"
   promise.release
 
 @[inline] def awaitBytes (promise : BytesPromiseRef) : RuntimeM BytesRef := do
+  ensureSameRuntime (← runtime) promise.runtime "BytesPromiseRef"
   promise.await
 
 @[inline] def awaitBytesCopy (promise : BytesPromiseRef) : RuntimeM ByteArray := do
+  ensureSameRuntime (← runtime) promise.runtime "BytesPromiseRef"
   promise.awaitCopy
 
 @[inline] def cancelBytes (promise : BytesPromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "BytesPromiseRef"
   promise.cancel
 
 @[inline] def releaseBytesPromise (promise : BytesPromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "BytesPromiseRef"
   promise.release
 
 @[inline] def await (promise : PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "PromiseRef"
   promise.await
 
 @[inline] def cancel (promise : PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "PromiseRef"
   promise.cancel
 
 @[inline] def release (promise : PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "PromiseRef"
   promise.release
 
 @[inline] def awaitAndRelease (promise : PromiseRef) : RuntimeM Unit := do
+  ensureSameRuntime (← runtime) promise.runtime "PromiseRef"
   promise.awaitAndRelease
 
 @[inline] def promiseThenStart (first second : PromiseRef) : RuntimeM PromiseRef := do
