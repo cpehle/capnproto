@@ -140,9 +140,10 @@ def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooRespon
 def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
 def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
-  promise.await
+  promise.pendingCall.awaitAndRelease
 def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
-  promise.awaitTyped
+  let response ← promise.pendingCall.awaitAndRelease
+  fooResponseOfPayload response
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath
@@ -217,9 +218,10 @@ def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO BarRespon
 def BarPromise.awaitTyped (promise : BarPromise) : IO BarResponse := do
   awaitBarTyped promise.pendingCall
 def BarPromise.awaitAndRelease (promise : BarPromise) : IO Capnp.Rpc.Payload := do
-  promise.await
+  promise.pendingCall.awaitAndRelease
 def BarPromise.awaitTypedAndRelease (promise : BarPromise) : IO BarResponse := do
-  promise.awaitTyped
+  let response ← promise.pendingCall.awaitAndRelease
+  barResponseOfPayload response
 def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath

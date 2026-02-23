@@ -1996,23 +1996,17 @@ namespace RuntimePendingCallRef
     pendingCall.release
 
 @[inline] def awaitAndRelease (pendingCall : RuntimePendingCallRef) : IO Payload := do
-  try
-    pendingCall.await
-  finally
-    pendingCall.release
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  pendingCall.await
 
 @[inline] def awaitOutcomeAndRelease (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome := do
-  try
-    pendingCall.awaitOutcome
-  finally
-    pendingCall.release
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  pendingCall.awaitOutcome
 
 @[inline] def awaitResultAndRelease (pendingCall : RuntimePendingCallRef) :
     IO (Except RemoteException Payload) := do
-  try
-    pendingCall.awaitResult
-  finally
-    pendingCall.release
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  pendingCall.awaitResult
 
 @[inline] def getPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client :=
@@ -2706,18 +2700,21 @@ namespace RuntimeM
     Runtime.pendingCallRelease pendingCall
 
 @[inline] def pendingCallAwaitAndRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
-  withPendingCall pendingCall fun call =>
-    Runtime.pendingCallAwait call
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  Runtime.pendingCallAwait pendingCall
 
 @[inline] def pendingCallAwaitOutcomeAndRelease
     (pendingCall : RuntimePendingCallRef) : RuntimeM RawCallOutcome := do
-  withPendingCall pendingCall fun call =>
-    Runtime.pendingCallAwaitOutcome call
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  Runtime.pendingCallAwaitOutcome pendingCall
 
 @[inline] def pendingCallAwaitResultAndRelease
     (pendingCall : RuntimePendingCallRef) : RuntimeM (Except RemoteException Payload) := do
-  withPendingCall pendingCall fun call =>
-    Runtime.pendingCallAwaitResult call
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
+  Runtime.pendingCallAwaitResult pendingCall
 
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : RuntimeM Client := do

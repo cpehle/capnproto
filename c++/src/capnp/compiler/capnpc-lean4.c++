@@ -3928,7 +3928,7 @@ private:
       out += ".awaitAndRelease (promise : ";
       out += promiseTypeName;
       out += ") : IO Capnp.Rpc.Payload := do\n";
-      out += "  promise.await\n";
+      out += "  promise.pendingCall.awaitAndRelease\n";
 
       out += "def ";
       out += promiseTypeName;
@@ -3937,7 +3937,10 @@ private:
       out += ") : IO ";
       out += responseTypeName;
       out += " := do\n";
-      out += "  promise.awaitTyped\n";
+      out += "  let response ← promise.pendingCall.awaitAndRelease\n";
+      out += "  ";
+      out += decodeResponseName;
+      out += " response\n";
 
       out += "def ";
       out += pipelinedCapName;

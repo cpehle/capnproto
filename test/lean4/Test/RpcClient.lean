@@ -3710,6 +3710,28 @@ def testRuntimePendingCallRelease : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimePendingCallAwaitAndReleaseConsumes : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+    let pending ← runtime.startCall target Echo.fooMethod capPayload
+    let response ← pending.awaitAndRelease
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    let releaseFailed ←
+      try
+        pending.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimePendingCallWithReleasesOnException : IO Unit := do
   let released ← IO.mkRef false
   let runtime ← Capnp.Rpc.Runtime.init
@@ -3761,6 +3783,30 @@ def testRuntimePendingCallWithReleasesOnException : IO Unit := do
     waitForPendingCount 200 (UInt64.ofNat 0)
     released.set true
     runtime.releaseTarget blocker
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMPendingCallAwaitAndReleaseConsumes : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let capPayload := mkCapabilityPayload target
+    let pending ← runtime.startCall target Echo.fooMethod capPayload
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.pendingCallAwaitAndRelease pending
+    assertEqual response.capTable.caps.size 1
+    runtime.releaseCapTable response.capTable
+
+    let releaseFailed ←
+      try
+        Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.pendingCallRelease pending
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+    runtime.releaseTarget target
   finally
     runtime.shutdown
 
