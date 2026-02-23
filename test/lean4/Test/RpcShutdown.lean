@@ -61,3 +61,12 @@ def testRuntimeAdvancedHandlerRejectsKjAsyncShutdownOnWorkerThread : IO Unit := 
     runtime.releaseTarget sink
   finally
     runtime.shutdown
+
+@[test]
+def testKjAsyncShutdownReleasesRpcRuntimeHandle : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  let kjRuntime : Capnp.KjAsync.Runtime := { handle := runtime.handle }
+  assertEqual (← runtime.isAlive) true
+  kjRuntime.shutdown
+  assertEqual (← runtime.isAlive) false
+  runtime.shutdown
