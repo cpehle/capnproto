@@ -10,6 +10,10 @@ Deliver a production-ready Lean RPC stack with:
 - first-class async composition (`KjAsync` + `Capnp.Async`) without semantic drift
 - clear parity matrix against C++ behavior classes
 
+Related roadmap:
+- `doc/lean4-kjasync-goals.md` tracks additional RPC-independent KJ async/runtime
+  surface goals for Lean.
+
 ## Status Snapshot (2026-02-23)
 
 Implemented baseline:

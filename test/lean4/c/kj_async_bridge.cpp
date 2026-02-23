@@ -1258,6 +1258,34 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<HandleCompletion> enqueueWrapSocketFd(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapSocketFd{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueWrapSocketFdTake(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapSocketFdTake{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<HandlePairCompletion> enqueueNewTwoWayPipe() {
     auto completion = std::make_shared<HandlePairCompletion>();
     {
@@ -2797,6 +2825,16 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<OptionalUInt32Completion> completion;
   };
 
+  struct QueuedWrapSocketFd {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedWrapSocketFdTake {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
   struct QueuedNewTwoWayPipe {
     std::shared_ptr<HandlePairCompletion> completion;
   };
@@ -3230,6 +3268,7 @@ class KjAsyncRuntimeLoop {
                    QueuedTaskSetIsEmpty, QueuedTaskSetOnEmptyStart, QueuedTaskSetErrorCount,
                    QueuedTaskSetTakeLastError, QueuedConnectionWhenWriteDisconnectedStart,
                    QueuedConnectionAbortRead, QueuedConnectionAbortWrite, QueuedConnectionDupFd,
+                   QueuedWrapSocketFd, QueuedWrapSocketFdTake,
                    QueuedNewTwoWayPipe, QueuedNewCapabilityPipe,
                    QueuedDatagramBind, QueuedDatagramReleasePort, QueuedDatagramGetPort,
                    QueuedDatagramSend, QueuedDatagramSendStart, QueuedUInt32PromiseAwait,
@@ -4139,6 +4178,42 @@ class KjAsyncRuntimeLoop {
     }
 
     return kj::none;
+#endif
+  }
+
+  uint32_t wrapSocketFdTake(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapSocketFdTake is not supported on Windows");
+#else
+    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxFd) {
+      throw std::runtime_error("fd exceeds supported range for wrapSocketFdTake");
+    }
+    auto stream = lowLevelProvider.wrapSocketFd(
+        static_cast<int>(fd), kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addConnection(kj::mv(stream));
+#endif
+  }
+
+  uint32_t wrapSocketFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapSocketFd is not supported on Windows");
+#else
+    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxFd) {
+      throw std::runtime_error("fd exceeds supported range for wrapSocketFd");
+    }
+    int duplicatedFd = dup(static_cast<int>(fd));
+    if (duplicatedFd < 0) {
+      throw std::runtime_error("dup() failed while wrapping socket fd");
+    }
+    auto stream = lowLevelProvider.wrapSocketFd(
+        duplicatedFd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addConnection(kj::mv(stream));
 #endif
   }
 
@@ -5403,6 +5478,10 @@ class KjAsyncRuntimeLoop {
         completeUnitFailure(std::get<QueuedConnectionAbortWrite>(op).completion, message);
       } else if (std::holds_alternative<QueuedConnectionDupFd>(op)) {
         completeOptionalUInt32Failure(std::get<QueuedConnectionDupFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapSocketFd>(op)) {
+        completeHandleFailure(std::get<QueuedWrapSocketFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapSocketFdTake>(op)) {
+        completeHandleFailure(std::get<QueuedWrapSocketFdTake>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
         completeHandlePairFailure(std::get<QueuedNewTwoWayPipe>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewCapabilityPipe>(op)) {
@@ -6114,6 +6193,32 @@ class KjAsyncRuntimeLoop {
             completeOptionalUInt32Failure(
                 dup.completion,
                 "unknown exception in Capnp.KjAsync connection dupFd");
+          }
+        } else if (std::holds_alternative<QueuedWrapSocketFd>(op)) {
+          auto wrap = std::get<QueuedWrapSocketFd>(std::move(op));
+          try {
+            auto connectionId = wrapSocketFd(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, connectionId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapSocketFd");
+          }
+        } else if (std::holds_alternative<QueuedWrapSocketFdTake>(op)) {
+          auto wrap = std::get<QueuedWrapSocketFdTake>(std::move(op));
+          try {
+            auto connectionId = wrapSocketFdTake(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, connectionId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapSocketFdTake");
           }
         } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
           auto create = std::get<QueuedNewTwoWayPipe>(std::move(op));
@@ -8918,6 +9023,76 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_connection_dup_f
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_connection_dup_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_socket_fd(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapSocketFd(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      auto completion = capnp_lean_rpc::enqueueNewTransportFromFd(*rpcRuntime, fd);
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_wrap_socket_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_socket_fd_take(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapSocketFdTake(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    if (auto rpcRuntime = capnp_lean_rpc::getRuntime(runtimeId)) {
+      auto completion = capnp_lean_rpc::enqueueNewTransportFromFdTake(*rpcRuntime, fd);
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_wrap_socket_fd_take");
   }
 }
 

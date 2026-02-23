@@ -345,6 +345,12 @@ opaque ffiRuntimeConnectionAbortWriteImpl
 @[extern "capnp_lean_kj_async_runtime_connection_dup_fd"]
 opaque ffiRuntimeConnectionDupFdImpl (runtime : UInt64) (connection : UInt32) : IO (Bool × UInt32)
 
+@[extern "capnp_lean_kj_async_runtime_wrap_socket_fd"]
+opaque ffiRuntimeWrapSocketFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_wrap_socket_fd_take"]
+opaque ffiRuntimeWrapSocketFdTakeImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_new_two_way_pipe"]
 opaque ffiRuntimeNewTwoWayPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 
@@ -1298,6 +1304,29 @@ namespace Runtime
 @[inline] def pump (runtime : Runtime) (delayMillis : UInt32 := 5) : IO Unit :=
   runtime.sleepMillis delayMillis
 
+/-- Schedule continuation on the next runtime loop turn. -/
+@[inline] def yieldNowStart (runtime : Runtime) : IO PromiseRef :=
+  runtime.sleepNanosStart 0
+
+/-- Yield once to the runtime loop. -/
+@[inline] def yieldNow (runtime : Runtime) : IO Unit :=
+  runtime.sleepNanos 0
+
+/-- Pump the runtime loop for a nanosecond-resolution delay. -/
+@[inline] def pumpNanos (runtime : Runtime) (delayNanos : UInt64 := 0) : IO Unit :=
+  runtime.sleepNanos delayNanos
+
+/--
+Sleep until `deadlineNanos` measured against Lean's monotonic clock.
+If the deadline is in the past, this yields once.
+-/
+@[inline] def sleepUntilMonoNanos (runtime : Runtime) (deadlineNanos : UInt64) : IO Unit := do
+  let nowNanos : UInt64 := (← IO.monoNanosNow).toUInt64
+  if nowNanos >= deadlineNanos then
+    runtime.yieldNow
+  else
+    runtime.sleepNanos (deadlineNanos - nowNanos)
+
 @[inline] def listen (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener := do
   return {
@@ -1608,6 +1637,26 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     return some fd
   else
     return none
+
+/--
+Wrap a socket fd as a `Connection` by first duplicating it.
+The runtime owns and closes the duplicated descriptor when the `Connection` is released.
+-/
+@[inline] def wrapSocketFd (runtime : Runtime) (fd : UInt32) : IO Connection := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapSocketFdImpl runtime.handle fd)
+  }
+
+/--
+Wrap a socket fd as a `Connection`, transferring ownership of `fd` to the runtime.
+After this call succeeds, the caller must not use `fd` directly.
+-/
+@[inline] def wrapSocketFdTake (runtime : Runtime) (fd : UInt32) : IO Connection := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapSocketFdTakeImpl runtime.handle fd)
+  }
 
 @[inline] def newTwoWayPipe (runtime : Runtime) : IO (Connection × Connection) := do
   let (first, second) ← ffiRuntimeNewTwoWayPipeImpl runtime.handle
@@ -3528,6 +3577,14 @@ namespace Connection
   else
     return none
 
+/-- Wrap `fd` as a `Connection` in the given runtime by duplicating it first. -/
+@[inline] def ofFd (runtime : Runtime) (fd : UInt32) : IO Connection :=
+  runtime.wrapSocketFd fd
+
+/-- Wrap `fd` as a `Connection` in the given runtime, transferring fd ownership. -/
+@[inline] def ofFdTake (runtime : Runtime) (fd : UInt32) : IO Connection :=
+  runtime.wrapSocketFdTake fd
+
 end Connection
 
 namespace ConnectionPromiseRef
@@ -4266,6 +4323,86 @@ namespace HttpServerResponseBody
 
 end HttpServerResponseBody
 
+namespace Stream
+
+/-- Generic zero-copy readable stream surface aligned with KJ `AsyncInputStream`. -/
+class ReadableRef (σ : Type) where
+  readRef : σ → (minBytes maxBytes : UInt32) → IO BytesRef
+  readStart : σ → (minBytes maxBytes : UInt32) → IO BytesPromiseRef
+
+/-- Generic zero-copy writable stream surface aligned with KJ `AsyncOutputStream`. -/
+class WritableRef (σ : Type) where
+  writeRef : σ → BytesRef → IO Unit
+  writeStartRef : σ → BytesRef → IO PromiseRef
+
+@[inline] def readRef [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) : IO BytesRef :=
+  ReadableRef.readRef stream minBytes maxBytes
+
+@[inline] def read [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) : IO ByteArray := do
+  (← readRef stream minBytes maxBytes).toByteArray
+
+@[inline] def readStart [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) :
+    IO BytesPromiseRef :=
+  ReadableRef.readStart stream minBytes maxBytes
+
+@[inline] def readAsTaskRef [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error BytesRef)) := do
+  let promise ← readStart stream minBytes maxBytes
+  promise.awaitAsTask
+
+@[inline] def readAsTask [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) :
+    IO (Task (Except IO.Error ByteArray)) := do
+  let promise ← readStart stream minBytes maxBytes
+  promise.awaitCopyAsTask
+
+@[inline] def writeRef [WritableRef σ] (stream : σ) (bytes : BytesRef) : IO Unit :=
+  WritableRef.writeRef stream bytes
+
+@[inline] def write [WritableRef σ] (stream : σ) (bytes : ByteArray) : IO Unit := do
+  writeRef stream (← BytesRef.ofByteArray bytes)
+
+@[inline] def writeStartRef [WritableRef σ] (stream : σ) (bytes : BytesRef) : IO PromiseRef :=
+  WritableRef.writeStartRef stream bytes
+
+@[inline] def writeStart [WritableRef σ] (stream : σ) (bytes : ByteArray) : IO PromiseRef := do
+  writeStartRef stream (← BytesRef.ofByteArray bytes)
+
+@[inline] def writeAsTaskRef [WritableRef σ] (stream : σ) (bytes : BytesRef) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← writeStartRef stream bytes
+  promise.awaitAsTask
+
+@[inline] def writeAsTask [WritableRef σ] (stream : σ) (bytes : ByteArray) :
+    IO (Task (Except IO.Error Unit)) := do
+  let promise ← writeStart stream bytes
+  promise.awaitAsTask
+
+instance : ReadableRef Connection where
+  readRef := Connection.readRef
+  readStart := Connection.readStart
+
+instance : WritableRef Connection where
+  writeRef := Connection.writeRef
+  writeStartRef := Connection.writeStartRef
+
+instance : WritableRef HttpRequestBody where
+  writeRef := HttpRequestBody.writeRef
+  writeStartRef := HttpRequestBody.writeStartRef
+
+instance : ReadableRef HttpResponseBody where
+  readRef := HttpResponseBody.readRef
+  readStart := HttpResponseBody.readStart
+
+instance : ReadableRef HttpServerRequestBody where
+  readRef := HttpServerRequestBody.readRef
+  readStart := HttpServerRequestBody.readStart
+
+instance : WritableRef HttpServerResponseBody where
+  writeRef := HttpServerResponseBody.writeRef
+  writeStartRef := HttpServerResponseBody.writeStartRef
+
+end Stream
+
 namespace WebSocket
 
 @[inline] def release (webSocket : WebSocket) : IO Unit :=
@@ -4467,6 +4604,18 @@ namespace RuntimeM
 
 @[inline] def pump (delayMillis : UInt32 := 5) : RuntimeM Unit := do
   Runtime.pump (← runtime) delayMillis
+
+@[inline] def yieldNowStart : RuntimeM PromiseRef := do
+  Runtime.yieldNowStart (← runtime)
+
+@[inline] def yieldNow : RuntimeM Unit := do
+  Runtime.yieldNow (← runtime)
+
+@[inline] def pumpNanos (delayNanos : UInt64 := 0) : RuntimeM Unit := do
+  Runtime.pumpNanos (← runtime) delayNanos
+
+@[inline] def sleepUntilMonoNanos (deadlineNanos : UInt64) : RuntimeM Unit := do
+  Runtime.sleepUntilMonoNanos (← runtime) deadlineNanos
 
 @[inline] def listen (address : String) (portHint : UInt32 := 0) : RuntimeM Listener := do
   Runtime.listen (← runtime) address portHint
@@ -4770,6 +4919,12 @@ namespace RuntimeM
 
 @[inline] def connectionDupFd? (connection : Connection) : RuntimeM (Option UInt32) := do
   Runtime.connectionDupFd? (← runtime) connection
+
+@[inline] def wrapSocketFd (fd : UInt32) : RuntimeM Connection := do
+  Runtime.wrapSocketFd (← runtime) fd
+
+@[inline] def wrapSocketFdTake (fd : UInt32) : RuntimeM Connection := do
+  Runtime.wrapSocketFdTake (← runtime) fd
 
 @[inline] def newTwoWayPipe : RuntimeM (Connection × Connection) := do
   Runtime.newTwoWayPipe (← runtime)

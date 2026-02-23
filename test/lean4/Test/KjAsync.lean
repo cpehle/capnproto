@@ -166,6 +166,20 @@ def testKjAsyncSleepCancel : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testKjAsyncYieldAndDeadlineHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let yieldPromise ← runtime.yieldNowStart
+    yieldPromise.await
+    runtime.yieldNow
+    runtime.pumpNanos 0
+
+    let nowNanos ← IO.monoNanosNow
+    runtime.sleepUntilMonoNanos nowNanos.toUInt64
+  finally
+    runtime.shutdown
+
+@[test]
 def testKjAsyncAwaitAsTask : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
@@ -479,6 +493,58 @@ def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
     recovered.await
   finally
     rpcRuntime.shutdown
+
+@[test]
+def testKjAsyncWrapSocketFdAndStreamAbstractions : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ wrapSocketFd test skipped on Windows"
+  else
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      let (left, right) ← runtime.newTwoWayPipe
+      try
+        let leftProbeFd? ← left.dupFd?
+        match leftProbeFd? with
+        | none =>
+          throw (IO.userError "expected fd from left connection")
+        | some leftProbeFd =>
+          let wrappedDup ← runtime.wrapSocketFd leftProbeFd
+          wrappedDup.release
+          let wrappedTake ← runtime.wrapSocketFdTake leftProbeFd
+          wrappedTake.release
+
+        let leftFd? ← left.dupFd?
+        let rightFd? ← right.dupFd?
+        let (some leftFd, some rightFd) := (leftFd?, rightFd?)
+          | throw (IO.userError "expected fds for both ends of test pipe")
+
+        let wrappedLeft ← runtime.wrapSocketFdTake leftFd
+        let wrappedRight ← runtime.wrapSocketFdTake rightFd
+        try
+          let payloadA := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 84))
+          let payloadARef ← Capnp.KjAsync.BytesRef.ofByteArray payloadA
+          let sendTaskA ← Capnp.KjAsync.Stream.writeAsTaskRef wrappedLeft payloadARef
+          match (← IO.wait sendTaskA) with
+          | .ok () => pure ()
+          | .error err =>
+            throw (IO.userError s!"Stream.writeAsTaskRef failed: {err}")
+
+          let receivedA ← Capnp.KjAsync.Stream.read wrappedRight (UInt32.ofNat 1) (UInt32.ofNat 1024)
+          assertEqual receivedA payloadA
+
+          let payloadB := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 85))
+          Capnp.KjAsync.Stream.write wrappedRight payloadB
+          let receivedBRef ←
+            Capnp.KjAsync.Stream.readRef wrappedLeft (UInt32.ofNat 1) (UInt32.ofNat 1024)
+          assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedBRef) payloadB
+        finally
+          wrappedLeft.release
+          wrappedRight.release
+      finally
+        left.release
+        right.release
+    finally
+      runtime.shutdown
 
 @[test]
 def testKjAsyncRuntimeShutdownViaRpcHandle : IO Unit := do
