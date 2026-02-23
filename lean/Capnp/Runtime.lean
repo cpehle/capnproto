@@ -89,12 +89,13 @@ structure CapTable where
 @[inline] def emptyCapTable : CapTable := { caps := #[] }
 
 @[inline] def capTableAdd (t : CapTable) (cap : Capability) : Capability × CapTable :=
-  let idx := UInt32.ofNat t.caps.size
+  let idx := t.caps.size.toUInt32
   (idx, { caps := t.caps.push cap })
 
 @[inline] def capTableGet (t : CapTable) (idx : Capability) : Option Capability :=
-  if _h : idx.toNat < t.caps.size then
-    some (t.caps.getD idx.toNat 0)
+  let idxNat := idx.toNat
+  if _h : idxNat < t.caps.size then
+    some (t.caps.getD idxNat 0)
   else
     none
 
@@ -385,10 +386,10 @@ def writeMessageTo (h : IO.FS.Handle) (msg : Message) : IO Unit := do
       IO.FS.Handle.write h (seg.bytes.extract seg.off (seg.off + seg.len))
 
 @[inline] def bitMask8 (i : Nat) : UInt8 :=
-  UInt8.ofNat (Nat.pow 2 i)
+  (1 : UInt8) <<< (UInt8.ofNat i)
 
 @[inline] def testBit8 (tag : UInt8) (i : Nat) : Bool :=
-  ((tag.toNat / (Nat.pow 2 i)) % 2) == 1
+  (((tag >>> (UInt8.ofNat i)) &&& (1 : UInt8)) == (1 : UInt8))
 
 @[inline] def wordIsZeroBytes (bytes : ByteArray) (wordOff : Nat) : Bool :=
   Id.run do
@@ -1024,30 +1025,29 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
   let v := (getUInt32 r byteOff) ^^^ mask
   Int32.ofInt (signExtend 32 v.toUInt64)
 
-@[inline] def getInt64 (r : StructReader) (byteOff : Nat) : Int64 :=
-  let u := getUInt64 r byteOff
+@[inline] private def twoPow64Int : Int :=
+  18446744073709551616
+
+@[inline] private def int64FromBits (u : UInt64) : Int64 :=
   let signBit := (u &&& 0x8000000000000000) != 0
-  let two64 : Int := Int.ofNat (Nat.pow 2 64)
-  let v : Int := if signBit then Int.ofNat u.toNat - two64 else Int.ofNat u.toNat
+  let v : Int := if signBit then Int.ofNat u.toNat - twoPow64Int else Int.ofNat u.toNat
   Int64.ofInt v
 
+@[inline] def getInt64 (r : StructReader) (byteOff : Nat) : Int64 :=
+  int64FromBits (getUInt64 r byteOff)
+
 @[inline] def getInt64Masked (r : StructReader) (byteOff : Nat) (mask : UInt64) : Int64 :=
-  let u := (getUInt64 r byteOff) ^^^ mask
-  let signBit := (u &&& 0x8000000000000000) != 0
-  let two64 : Int := Int.ofNat (Nat.pow 2 64)
-  let v : Int := if signBit then Int.ofNat u.toNat - two64 else Int.ofNat u.toNat
-  Int64.ofInt v
+  int64FromBits ((getUInt64 r byteOff) ^^^ mask)
 
 @[inline] def float32FromBits (bits : UInt32) : Float :=
   let signBit := (bits &&& 0x80000000) != 0
   let exp := (shr32 bits 23) &&& 0xff
   let mant := bits &&& 0x7fffff
+  let frac := UInt64.toFloat mant.toUInt64 / 8388608.0
   if exp == 0 then
     if mant == 0 then
       if signBit then -0.0 else 0.0
     else
-      let frac := UInt64.toFloat (UInt64.ofNat mant.toNat) /
-        UInt64.toFloat (UInt64.ofNat (Nat.pow 2 23))
       let value := Float.scaleB frac (-126)
       if signBit then -value else value
   else if exp == 255 then
@@ -1056,8 +1056,6 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
     else
       Float.ofBits 0x7ff8000000000000
   else
-    let frac := UInt64.toFloat (UInt64.ofNat mant.toNat) /
-      UInt64.toFloat (UInt64.ofNat (Nat.pow 2 23))
     let value := Float.scaleB (1.0 + frac) (Int.ofNat exp.toNat - 127)
     if signBit then -value else value
 
@@ -1242,11 +1240,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
     (readListUInt32Reader p)
 
 @[inline] def readListInt64Reader (p : AnyPointer) : ListReader Int64 :=
-  ListReader.map (fun v =>
-    let signBit := (v &&& 0x8000000000000000) != 0
-    let two64 : Int := Int.ofNat (Nat.pow 2 64)
-    let i : Int := if signBit then Int.ofNat v.toNat - two64 else Int.ofNat v.toNat
-    Int64.ofInt i) (readListUInt64Reader p)
+  ListReader.map int64FromBits (readListUInt64Reader p)
 
 @[inline] def readListFloat32Reader (p : AnyPointer) : ListReader Float :=
   ListReader.map float32FromBits (readListUInt32Reader p)
@@ -1442,11 +1436,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
 
 @[inline] def readListInt64CheckedReader (p : AnyPointer) : Except String (ListReader Int64) := do
   let r ← readListUInt64CheckedReader p
-  return ListReader.map (fun v =>
-    let signBit := (v &&& 0x8000000000000000) != 0
-    let two64 : Int := Int.ofNat (Nat.pow 2 64)
-    let i : Int := if signBit then Int.ofNat v.toNat - two64 else Int.ofNat v.toNat
-    Int64.ofInt i) r
+  return ListReader.map int64FromBits r
 
 @[inline] def readListFloat32CheckedReader (p : AnyPointer) : Except String (ListReader Float) := do
   let r ← readListUInt32CheckedReader p
@@ -2119,7 +2109,7 @@ def readMessagePackedChecked (opts : ReaderOptions) (bytes : ByteArray) : Except
 
 @[inline] def encodeCapabilityPointer (index : Capability) : UInt64 :=
   -- Cap'n Proto wire format: low 32 bits are exactly 3, high 32 bits store cap index.
-  (3 : UInt64) ||| ((UInt64.ofNat index.toNat) <<< 32)
+  (3 : UInt64) ||| (index.toUInt64 <<< 32)
 
 @[inline] def writeCapability (p : AnyPointerBuilder) (cap : Capability) : BuilderM Unit :=
   writeWordLE p.seg p.word (encodeCapabilityPointer cap)
