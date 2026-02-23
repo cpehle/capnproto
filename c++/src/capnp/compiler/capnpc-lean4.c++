@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -397,7 +398,7 @@ private:
 
   void collectImportsForType(Type type,
                              kj::StringPtr currentModule,
-                             std::unordered_set<std::string>& imports) {
+                             std::set<std::string>& imports) {
     switch (type.which()) {
       case schema::Type::STRUCT: {
         addImportForTypeId(type.asStruct().getProto().getId(), currentModule, imports);
@@ -421,7 +422,7 @@ private:
 
   void collectImportsForTypeProto(schema::Type::Reader type,
                                   kj::StringPtr currentModule,
-                                  std::unordered_set<std::string>& imports) {
+                                  std::set<std::string>& imports) {
     switch (type.which()) {
       case schema::Type::STRUCT:
         addImportForTypeId(type.getStruct().getTypeId(), currentModule, imports);
@@ -442,7 +443,7 @@ private:
 
   void collectImportsForAnnotationList(AnnotationList annotations,
                                        kj::StringPtr currentModule,
-                                       std::unordered_set<std::string>& imports) {
+                                       std::set<std::string>& imports) {
     for (auto ann: annotations) {
       auto annSchema = schemaLoader.get(ann.getId());
       collectImportsForTypeProto(annSchema.getProto().getAnnotation().getType(),
@@ -452,7 +453,7 @@ private:
 
   void collectImportsForNode(Schema schema,
                              kj::StringPtr currentModule,
-                             std::unordered_set<std::string>& imports) {
+                             std::set<std::string>& imports) {
     auto proto = schema.getProto();
     collectImportsForAnnotationList(proto.getAnnotations(), currentModule, imports);
     switch (proto.which()) {
@@ -505,7 +506,7 @@ private:
 
   void addImportForTypeId(uint64_t typeId,
                           kj::StringPtr currentModule,
-                          std::unordered_set<std::string>& imports) {
+                          std::set<std::string>& imports) {
     auto it = nameTable.find(typeId);
     if (it == nameTable.end()) return;
     if (it->second.moduleName == currentModule) return;
@@ -1045,7 +1046,7 @@ private:
     }
   }
 
-  std::string uniqueName(const std::string& base, std::unordered_set<std::string>& used) {
+  std::string uniqueName(const std::string& base, std::set<std::string>& used) {
     std::string candidate = base;
     int counter = 1;
     while (used.count(candidate) != 0) {
@@ -1081,7 +1082,7 @@ private:
     if (noneConflict) noneName = "none_";
     info.noneName = noneName;
 
-    std::unordered_set<std::string> usedUnion;
+    std::set<std::string> usedUnion;
     usedUnion.insert(noneName);
     for (auto field: unionFields) {
       auto rawName = sanitizeIdentifier(field.getProto().getName());
@@ -1644,7 +1645,7 @@ private:
     out += name.cStr();
     out += " where\n";
 
-    std::unordered_set<std::string> used;
+    std::set<std::string> used;
     std::vector<std::string> ctorNames;
     ctorNames.reserve(enumSchema.getEnumerants().size());
     for (auto enumerant: enumSchema.getEnumerants()) {
@@ -1941,7 +1942,7 @@ private:
     out += name.cStr();
     out += " where\n";
 
-    std::unordered_set<std::string> usedFields;
+    std::set<std::string> usedFields;
     for (auto field: nonUnionFields) {
       auto rawName = sanitizeIdentifier(field.getProto().getName());
       auto fieldName = uniqueName(rawName.cStr(), usedFields);
@@ -1982,7 +1983,7 @@ private:
       unionCases = info.cases;
     }
 
-    std::unordered_set<std::string> usedAccessors;
+    std::set<std::string> usedAccessors;
     std::unordered_map<uint, std::string> accessorByIndex;
     for (auto field: structSchema.getFields()) {
       auto raw = sanitizeIdentifier(field.getProto().getName());
@@ -2002,7 +2003,7 @@ private:
       checkedAccessorByIndex[field.getIndex()] = unique;
     }
 
-    std::unordered_set<std::string> usedHas;
+    std::set<std::string> usedHas;
     std::unordered_map<uint, std::string> hasByIndex;
     for (auto field: structSchema.getFields()) {
       if (field.getProto().isGroup()) continue;
@@ -2015,7 +2016,7 @@ private:
     }
 
     std::unordered_map<uint, std::string> defaultPointers;
-    std::unordered_set<std::string> usedDefaults;
+    std::set<std::string> usedDefaults;
     for (auto field: structSchema.getFields()) {
       if (field.getProto().isGroup()) continue;
       auto type = field.getType();
@@ -2224,9 +2225,9 @@ private:
     out += std::to_string(ptrCount);
     out += "\n  return { struct := sb }\n";
 
-    std::unordered_set<std::string> usedSetters;
-    std::unordered_set<std::string> usedInits;
-    std::unordered_set<std::string> usedClears;
+    std::set<std::string> usedSetters;
+    std::set<std::string> usedInits;
+    std::set<std::string> usedClears;
     std::unordered_map<uint, std::string> setterByIndex;
     std::unordered_map<uint, std::string> readerSetterByIndex;
     std::unordered_map<uint, std::string> initByIndex;
@@ -3206,7 +3207,7 @@ private:
     auto unionFields = structSchema.getUnionFields();
     auto nonUnionFields = structSchema.getNonUnionFields();
 
-    std::unordered_set<std::string> usedAccessors;
+    std::set<std::string> usedAccessors;
     std::unordered_map<uint, std::string> accessorByIndex;
     for (auto field: structSchema.getFields()) {
       auto raw = sanitizeIdentifier(field.getProto().getName());
@@ -3216,7 +3217,7 @@ private:
       accessorByIndex[field.getIndex()] = unique;
     }
 
-    std::unordered_set<std::string> usedFields;
+    std::set<std::string> usedFields;
     std::unordered_map<uint, std::string> fieldNameByIndex;
     for (auto field: nonUnionFields) {
       auto rawName = sanitizeIdentifier(field.getProto().getName());
@@ -3282,7 +3283,7 @@ private:
       unionFieldIndex.insert(field.getIndex());
     }
 
-    std::unordered_set<std::string> usedSetters;
+    std::set<std::string> usedSetters;
     std::unordered_map<uint, std::string> setterByIndex;
     for (auto field: structSchema.getFields()) {
       auto raw = sanitizeIdentifier(field.getProto().getName());
@@ -3376,7 +3377,7 @@ private:
     auto unionFields = structSchema.getUnionFields();
     auto nonUnionFields = structSchema.getNonUnionFields();
 
-    std::unordered_set<std::string> usedAccessors;
+    std::set<std::string> usedAccessors;
     std::unordered_map<uint, std::string> accessorByIndex;
     for (auto field: structSchema.getFields()) {
       auto raw = sanitizeIdentifier(field.getProto().getName());
@@ -3386,8 +3387,8 @@ private:
       accessorByIndex[field.getIndex()] = unique;
     }
 
-    std::unordered_set<std::string> usedSetters;
-    std::unordered_set<std::string> usedInits;
+    std::set<std::string> usedSetters;
+    std::set<std::string> usedInits;
     std::unordered_map<uint, std::string> setterByIndex;
     std::unordered_map<uint, std::string> initByIndex;
     for (auto field: structSchema.getFields()) {
@@ -3399,7 +3400,7 @@ private:
       initByIndex[field.getIndex()] = uniqueName(initName, usedInits);
     }
 
-    std::unordered_set<std::string> usedFields;
+    std::set<std::string> usedFields;
     std::unordered_map<uint, std::string> fieldNameByIndex;
     for (auto field: nonUnionFields) {
       auto rawName = sanitizeIdentifier(field.getProto().getName());
@@ -3674,7 +3675,7 @@ private:
     };
     std::vector<RpcMethodOut> rpcMethods;
 
-    std::unordered_set<std::string> usedNames;
+    std::set<std::string> usedNames;
     usedNames.insert(std::string("interfaceId"));
 
     for (auto method: interfaceSchema.getMethods()) {
@@ -4626,7 +4627,7 @@ private:
                                 kj::StringPtr currentModule,
                                 kj::StringPtr prefix) {
     if (annotations.size() == 0) return "";
-    std::unordered_set<std::string> used;
+    std::set<std::string> used;
     std::string out;
     for (auto ann: annotations) {
       auto annSchema = schemaLoader.get(ann.getId());
@@ -4723,7 +4724,7 @@ private:
   std::string genFile(Schema fileSchema,
                       kj::StringPtr filename,
                       kj::StringPtr moduleName) {
-    std::unordered_set<std::string> imports;
+    std::set<std::string> imports;
     collectImportsForNode(fileSchema, moduleName, imports);
 
     std::vector<std::string> importList;
