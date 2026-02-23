@@ -22,6 +22,7 @@
       "c++/src/capnp/rpc-test.c++::KJ_TEST(\"pipelining\")",
       "c++/src/capnp/rpc-test.c++::KJ_TEST(\"resolve promise\")",
       "c++/src/capnp/rpc-test.c++::KJ_TEST(\"embargo\")",
+      "c++/src/capnp/rpc-test.c++::KJ_TEST(\"embargo error\")",
       "c++/src/capnp/rpc-test.c++::KJ_TEST(\"don't embargo null capability\")",
       "c++/src/capnp/rpc-test.c++::KJ_TEST(\"tail call\")",
       "c++/src/capnp/rpc-twoparty-test.c++::KJ_TEST(\"Two-hop embargo\")"
@@ -39,8 +40,8 @@
       "Test.RpcOrderingControl.testRuntimeProtocolNullPipelineDoesNotEmitDisembargo",
       "Test.RpcOrderingControl.testRuntimeProtocolBlockingOrdering"
     ],
-    "status": "partial",
-    "notes": "Behavioral ordering coverage is high and includes protocol-level Resolve/Disembargo message counters; exact full-sequence assertions for every edge-case path remain open."
+    "status": "covered",
+    "notes": "Pipelining, resolve/disembargo ordering, null-pipeline no-disembargo behavior, embargo-error rejection/liveness, tail-call ordering, and two-hop ordering are covered with protocol-level counters and trace assertions."
   },
   {
     "behaviorClass": "Transport connect/listen/disconnect lifecycle",
