@@ -1767,6 +1767,20 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Async.Promise Payload) := do
   pure (Capnp.Async.Promise.ofTask (← runtime.startCallAsTask target method payload))
 
+@[inline] def startCallWithPayloadRefAsTask (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO (Task (Except IO.Error RuntimePayloadRef)) := do
+  let pending ← runtime.startCallWithPayloadRef target method payloadRef
+  IO.asTask do
+    return {
+      runtime := runtime
+      handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.raw)
+    }
+
+@[inline] def startCallWithPayloadRefAsPromise
+    (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO (Capnp.Async.Promise RuntimePayloadRef) := do
+  pure (Capnp.Async.Promise.ofTask (← runtime.startCallWithPayloadRefAsTask target method payloadRef))
+
 @[inline] def withStartedCall (runtime : Runtime) (target : Client) (method : Method)
     (action : RuntimePendingCallRef -> IO α)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO α := do
@@ -2546,6 +2560,11 @@ instance : Capnp.Async.Releasable RuntimePendingCallRef where
     IO (Task (Except IO.Error Payload)) :=
   Capnp.Async.awaitAsTask pendingCall
 
+@[inline] def awaitPayloadRefAsTask (pendingCall : RuntimePendingCallRef) :
+    IO (Task (Except IO.Error RuntimePayloadRef)) :=
+  IO.asTask do
+    pendingCall.awaitPayloadRef
+
 @[inline] def awaitOutcomeAsTask (pendingCall : RuntimePendingCallRef) :
     IO (Task (Except IO.Error RawCallOutcome)) :=
   IO.asTask do
@@ -2559,6 +2578,10 @@ instance : Capnp.Async.Releasable RuntimePendingCallRef where
 @[inline] def toPromise (pendingCall : RuntimePendingCallRef) :
     IO (Capnp.Async.Promise Payload) := do
   pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitAsTask))
+
+@[inline] def toPromisePayloadRef (pendingCall : RuntimePendingCallRef) :
+    IO (Capnp.Async.Promise RuntimePayloadRef) := do
+  pure (Capnp.Async.Promise.ofTask (← pendingCall.awaitPayloadRefAsTask))
 
 @[inline] def toPromiseOutcome (pendingCall : RuntimePendingCallRef) :
     IO (Capnp.Async.Promise RawCallOutcome) := do
@@ -3326,6 +3349,18 @@ namespace RuntimeM
   let pending ← startCall target method payload
   pending.toPromise
 
+@[inline] def startCallWithPayloadRefAsTask (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) :
+    RuntimeM (Task (Except IO.Error RuntimePayloadRef)) := do
+  let pending ← startCallWithPayloadRef target method payloadRef
+  pending.awaitPayloadRefAsTask
+
+@[inline] def startCallWithPayloadRefAsPromise (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) :
+    RuntimeM (Capnp.Async.Promise RuntimePayloadRef) := do
+  let pending ← startCallWithPayloadRef target method payloadRef
+  pending.toPromisePayloadRef
+
 @[inline] def withStartedCall (target : Client) (method : Method)
     (action : RuntimePendingCallRef -> RuntimeM α)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM α := do
@@ -3380,6 +3415,11 @@ namespace RuntimeM
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   pendingCall.awaitOutcomeAsTask
 
+@[inline] def pendingCallAwaitPayloadRefAsTask (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Task (Except IO.Error RuntimePayloadRef)) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.awaitPayloadRefAsTask
+
 @[inline] def pendingCallAwaitResultAsTask (pendingCall : RuntimePendingCallRef) :
     RuntimeM (Task (Except IO.Error (Except RemoteException Payload))) := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
@@ -3389,6 +3429,11 @@ namespace RuntimeM
     RuntimeM (Capnp.Async.Promise RawCallOutcome) := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   pendingCall.toPromiseOutcome
+
+@[inline] def pendingCallToPromisePayloadRef (pendingCall : RuntimePendingCallRef) :
+    RuntimeM (Capnp.Async.Promise RuntimePayloadRef) := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  pendingCall.toPromisePayloadRef
 
 @[inline] def pendingCallToPromiseResult (pendingCall : RuntimePendingCallRef) :
     RuntimeM (Capnp.Async.Promise (Except RemoteException Payload)) := do

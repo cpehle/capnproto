@@ -636,6 +636,86 @@ def testRuntimeMPayloadRefRoundtrip : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimePayloadRefAsyncTaskPromiseHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let checkPayloadRef (responseRef : Capnp.Rpc.RuntimePayloadRef) : IO Unit := do
+      let response ← responseRef.decodeAndRelease
+      assertEqual response.capTable.caps.size 0
+
+    let requestA ← runtime.payloadRefFromPayload payload
+    let taskA ← runtime.startCallWithPayloadRefAsTask target Echo.fooMethod requestA
+    match (← IO.wait taskA) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestA.release
+
+    let requestB ← runtime.payloadRefFromPayload payload
+    let promiseB ← runtime.startCallWithPayloadRefAsPromise target Echo.fooMethod requestB
+    match (← promiseB.awaitResult) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestB.release
+
+    let requestC ← runtime.payloadRefFromPayload payload
+    let pendingC ← runtime.startCallWithPayloadRef target Echo.fooMethod requestC
+    let taskC ← pendingC.awaitPayloadRefAsTask
+    match (← IO.wait taskC) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestC.release
+
+    let requestD ← runtime.payloadRefFromPayload payload
+    let pendingD ← runtime.startCallWithPayloadRef target Echo.fooMethod requestD
+    let promiseD ← pendingD.toPromisePayloadRef
+    match (← promiseD.awaitResult) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestD.release
+
+    let requestE ← runtime.payloadRefFromPayload payload
+    let taskE ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallWithPayloadRefAsTask target Echo.fooMethod requestE
+    match (← IO.wait taskE) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestE.release
+
+    let requestF ← runtime.payloadRefFromPayload payload
+    let promiseF ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallWithPayloadRefAsPromise target Echo.fooMethod requestF
+    match (← promiseF.awaitResult) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestF.release
+
+    let requestH ← runtime.payloadRefFromPayload payload
+    let pendingH ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallWithPayloadRef target Echo.fooMethod requestH
+    let taskH ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.pendingCallAwaitPayloadRefAsTask pendingH
+    match (← IO.wait taskH) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestH.release
+
+    let requestI ← runtime.payloadRefFromPayload payload
+    let pendingI ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallWithPayloadRef target Echo.fooMethod requestI
+    let promiseI ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.pendingCallToPromisePayloadRef pendingI
+    match (← promiseI.awaitResult) with
+    | .ok responseRef => checkPayloadRef responseRef
+    | .error err => throw err
+    requestI.release
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimePromiseCapabilityPipelining : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
