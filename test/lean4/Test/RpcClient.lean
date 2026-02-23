@@ -1023,6 +1023,118 @@ def testRuntimeAsyncConnectAndWhenResolvedStart : IO Unit := do
       pure ()
 
 @[test]
+def testRuntimeRegisterPromiseAwaitAndReleaseConsumes : IO Unit := do
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let connectPromise ← runtime.connectStart address
+    server.accept listener
+    let target ← connectPromise.awaitTargetAndRelease
+
+    let releaseFailed ←
+      try
+        connectPromise.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+
+    runtime.releaseTarget target
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeMRegisterPromiseAwaitAndReleaseConsumes : IO Unit := do
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let connectPromise ← runtime.connectStart address
+    server.accept listener
+    let target ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.registerPromiseAwaitAndRelease connectPromise
+
+    let releaseFailed ←
+      try
+        Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.registerPromiseRelease connectPromise
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+
+    runtime.releaseTarget target
+    server.release
+    runtime.releaseListener listener
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeUnitPromiseAwaitAndReleaseConsumes : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let promise ← runtime.targetWhenResolvedStart target
+    promise.awaitAndRelease
+    let releaseFailed ←
+      try
+        promise.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMUnitPromiseAwaitAndReleaseConsumes : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let promise ← runtime.targetWhenResolvedStart target
+    Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.unitPromiseAwaitAndRelease promise
+    let releaseFailed ←
+      try
+        Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.unitPromiseRelease promise
+        pure false
+      catch _ =>
+        pure true
+    assertEqual releaseFailed true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress
