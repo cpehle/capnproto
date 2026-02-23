@@ -47,6 +47,7 @@ private def parityCriticalTests : Array Lean.Name := #[
   `testRuntimeParityTailCallPipelineOrdering,
   `testRuntimeParityAdvancedDeferredSetPipelineOrdering,
   `testRuntimeTwoHopPipelinedResolveOrdering,
+  `testRuntimeTwoHopPipelinedResolveOrderingWithNestedPromise,
   `testRuntimeOrderingResolveHoldControlsDisembargo,
   `testRuntimeOrderingResolveHooksTrackHeldCount,
   `testRuntimeProtocolResolveDisembargoMessageCounters,

@@ -3577,6 +3577,121 @@ def testRuntimeTwoHopPipelinedResolveOrdering : IO Unit := do
     cleanupSocket backSocketPath
 
 @[test]
+def testRuntimeTwoHopPipelinedResolveOrderingWithNestedPromise : IO Unit := do
+  let (frontAddress, frontSocketPath) ← mkUnixTestAddress
+  let (backAddress, backSocketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  let cleanupSocket (path : String) : IO Unit := do
+    try
+      IO.FS.removeFile path
+    catch _ =>
+      pure ()
+  let step {α : Type} (label : String) (action : IO α) : IO α := do
+    try
+      action
+    catch err =>
+      throw (IO.userError s!"{label}: {err}")
+  try
+    cleanupSocket frontSocketPath
+    cleanupSocket backSocketPath
+
+    let nextExpected ← IO.mkRef (UInt64.ofNat 0)
+    let callOrder ← step "register nested call-order target" <|
+      runtime.registerHandlerTarget (fun _ method req => do
+        if method.interfaceId != Echo.interfaceId || method.methodId != Echo.fooMethodId then
+          throw (IO.userError
+            s!"unexpected method in nested call-order target: {method.interfaceId}/{method.methodId}")
+        let expected ← readUInt64Payload req
+        let current ← nextExpected.get
+        if expected != current then
+          throw (IO.userError s!"nested call-order mismatch: expected {current}, got {expected}")
+        nextExpected.set (current + (UInt64.ofNat 1))
+        pure (mkUInt64Payload current))
+
+    let (innerPromiseCap, innerFulfiller) ← step "new inner promise capability" <|
+      runtime.newPromiseCapability
+    let (outerPromiseCap, outerFulfiller) ← step "new outer promise capability" <|
+      runtime.newPromiseCapability
+
+    let backBootstrap ← step "register nested back bootstrap" <| runtime.registerEchoTarget
+    let backServer ← step "new nested back server" <| runtime.newServer backBootstrap
+    let backListener ← step "listen nested back server" <| backServer.listen backAddress
+
+    let proxyBootstrap ← step "connect nested proxy bootstrap to back" <| runtime.connect backAddress
+    step "accept nested back server connection" <| backServer.accept backListener
+
+    let frontServer ← step "new nested front server" <| runtime.newServer proxyBootstrap
+    let frontListener ← step "listen nested front server" <| frontServer.listen frontAddress
+    let frontClient ← step "new nested front client" <| runtime.newClient frontAddress
+    step "accept nested front server connection" <| frontServer.accept frontListener
+
+    let remoteBootstrap ← step "bootstrap nested front client" <| frontClient.bootstrap
+    let pendingEcho ← step "start nested echo call through front" <|
+      runtime.startCall remoteBootstrap Echo.fooMethod (mkCapabilityPayload outerPromiseCap)
+    let pipelineCap ← step "get nested pipelined cap" <| pendingEcho.getPipelinedCap
+
+    let call0Pending ← step "start nested call0" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 0))
+    let call1Pending ← step "start nested call1" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 1))
+
+    let earlyResponse ← step "nested early bar call" <| Capnp.Rpc.RuntimeM.run runtime do
+      Echo.callBarM remoteBootstrap mkNullPayload
+    assertEqual earlyResponse.capTable.caps.size 0
+
+    step "fulfill outer promise to inner promise" <|
+      outerFulfiller.fulfill innerPromiseCap
+
+    let call2Pending ← step "start nested call2" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 2))
+
+    let echoResponse ← step "await nested echo call" <| pendingEcho.await
+    assertEqual echoResponse.capTable.caps.size 1
+    let resolvedCap? := Capnp.readCapabilityFromTable echoResponse.capTable (Capnp.getRoot echoResponse.msg)
+    assertEqual resolvedCap?.isSome true
+
+    step "fulfill inner promise to call-order target" <|
+      innerFulfiller.fulfill callOrder
+
+    let call3Pending ← step "start nested call3" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 3))
+    let call4Pending ← step "start nested call4" <|
+      runtime.startCall pipelineCap Echo.fooMethod (mkUInt64Payload (UInt64.ofNat 4))
+
+    let call0Response ← step "await nested call0" <| call0Pending.await
+    let call1Response ← step "await nested call1" <| call1Pending.await
+    let call2Response ← step "await nested call2" <| call2Pending.await
+    let call3Response ← step "await nested call3" <| call3Pending.await
+    let call4Response ← step "await nested call4" <| call4Pending.await
+
+    assertEqual (← readUInt64Payload call0Response) (UInt64.ofNat 0)
+    assertEqual (← readUInt64Payload call1Response) (UInt64.ofNat 1)
+    assertEqual (← readUInt64Payload call2Response) (UInt64.ofNat 2)
+    assertEqual (← readUInt64Payload call3Response) (UInt64.ofNat 3)
+    assertEqual (← readUInt64Payload call4Response) (UInt64.ofNat 4)
+    assertEqual (← nextExpected.get) (UInt64.ofNat 5)
+
+    runtime.releaseCapTable echoResponse.capTable
+    runtime.releaseTarget pipelineCap
+    runtime.releaseTarget remoteBootstrap
+    frontClient.release
+    runtime.releaseListener frontListener
+    frontServer.release
+    runtime.releaseTarget proxyBootstrap
+    runtime.releaseListener backListener
+    backServer.release
+    runtime.releaseTarget backBootstrap
+    innerFulfiller.release
+    runtime.releaseTarget innerPromiseCap
+    outerFulfiller.release
+    runtime.releaseTarget outerPromiseCap
+    runtime.releaseTarget callOrder
+  finally
+    runtime.shutdown
+    cleanupSocket frontSocketPath
+    cleanupSocket backSocketPath
+
+@[test]
 def testRuntimePendingCallRelease : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
