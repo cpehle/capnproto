@@ -205,7 +205,7 @@ def testKjAsyncSharedAsyncHelpers : IO Unit := do
     try
       let payload := mkPayload
       let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
-      let readTask ← Capnp.Async.awaitAsTask readPromise
+      let readTask ← readPromise.awaitCopyAsTask
       left.write payload
       let readTaskResult ← IO.wait readTask
       match readTaskResult with
@@ -1259,7 +1259,7 @@ def testKjAsyncTypedPromiseHelpersConnectionAndDatagram : IO Unit := do
     let writePendingCopy ← left.writeStartRef payloadRef
     let writePromiseCopy ← writePendingCopy.toPromise
     let readPendingCopy ← right.readStart (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
-    let readPromiseCopy ← readPendingCopy.toPromise
+    let readPromiseCopy ← readPendingCopy.toPromiseCopy
     let _ ← writePromiseCopy.await
     let readCopy ← readPromiseCopy.await
     assertEqual readCopy payload
@@ -1441,7 +1441,7 @@ def testKjAsyncTwoWayPipeAsyncReadWritePrimitives : IO Unit := do
     let writePromise ← left.writeStart payload
     let readPromise ← right.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
     writePromise.await
-    let received ← readPromise.await
+    let received ← readPromise.awaitCopy
     assertEqual received payload
 
     let shutdownPromise ← left.shutdownWriteStart
@@ -1753,7 +1753,7 @@ def testKjAsyncDatagramAsyncPromiseRefs : IO Unit := do
       let sentCount ← sendPromise.await
       assertEqual sentCount (UInt32.ofNat payload.size)
 
-      let (_source, bytes) ← receivePromise.await
+      let (_source, bytes) ← receivePromise.awaitCopy
       assertEqual bytes payload
 
       senderPort.release

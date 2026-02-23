@@ -1365,14 +1365,16 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
       runtime.handle connection.handle minBytes maxBytes)
   }
 
-@[inline] def bytesPromiseAwait (runtime : Runtime) (promise : BytesPromiseRef) : IO ByteArray := do
-  ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
-  let bytesRef ← ffiRuntimeBytesPromiseAwaitRefImpl runtime.handle promise.handle
-  bytesRef.toByteArray
-
-@[inline] def bytesPromiseAwaitRef (runtime : Runtime) (promise : BytesPromiseRef) : IO BytesRef := do
+@[inline] def bytesPromiseAwait (runtime : Runtime) (promise : BytesPromiseRef) : IO BytesRef := do
   ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
   ffiRuntimeBytesPromiseAwaitRefImpl runtime.handle promise.handle
+
+@[inline] def bytesPromiseAwaitCopy (runtime : Runtime)
+    (promise : BytesPromiseRef) : IO ByteArray := do
+  (← runtime.bytesPromiseAwait promise).toByteArray
+
+@[inline] def bytesPromiseAwaitRef (runtime : Runtime) (promise : BytesPromiseRef) : IO BytesRef :=
+  runtime.bytesPromiseAwait promise
 
 @[inline] def bytesPromiseCancel (runtime : Runtime) (promise : BytesPromiseRef) : IO Unit := do
   ensureSameRuntime runtime promise.runtime "BytesPromiseRef"
@@ -1619,16 +1621,19 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   }
 
 @[inline] def datagramReceivePromiseAwait (runtime : Runtime)
-    (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
-  ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
-  let (source, bytesRef) ← ffiRuntimeDatagramReceivePromiseAwaitRefImpl
-    runtime.handle promise.handle
-  pure (source, ← BytesRef.toByteArray bytesRef)
-
-@[inline] def datagramReceivePromiseAwaitRef (runtime : Runtime)
     (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) := do
   ensureSameRuntime runtime promise.runtime "DatagramReceivePromiseRef"
-  ffiRuntimeDatagramReceivePromiseAwaitRefImpl runtime.handle promise.handle
+  ffiRuntimeDatagramReceivePromiseAwaitRefImpl
+    runtime.handle promise.handle
+
+@[inline] def datagramReceivePromiseAwaitCopy (runtime : Runtime)
+    (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
+  let (source, bytesRef) ← runtime.datagramReceivePromiseAwait promise
+  pure (source, ← bytesRef.toByteArray)
+
+@[inline] def datagramReceivePromiseAwaitRef (runtime : Runtime)
+    (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) :=
+  runtime.datagramReceivePromiseAwait promise
 
 @[inline] def datagramReceivePromiseCancel (runtime : Runtime)
     (promise : DatagramReceivePromiseRef) : IO Unit := do
@@ -1645,7 +1650,7 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     IO (Task (Except IO.Error (String × ByteArray))) := do
   let pending ← runtime.datagramReceiveStart port maxBytes
   IO.asTask do
-    runtime.datagramReceivePromiseAwait pending
+    runtime.datagramReceivePromiseAwaitCopy pending
 
 @[inline] def datagramReceiveAsPromise (runtime : Runtime) (port : DatagramPort)
     (maxBytes : UInt32 := 0x2000) :
@@ -2128,6 +2133,13 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
     (encodeHeaders requestHeaders) responseBodyLimit body portHint
 
 @[inline] def httpResponsePromiseAwait (runtime : Runtime)
+    (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
+  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
+  let (status, responseBody) ←
+    ffiRuntimeHttpResponsePromiseAwaitRefImpl runtime.handle promise.handle
+  return { status := status, body := responseBody }
+
+@[inline] def httpResponsePromiseAwaitCopy (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponse := do
   ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
   let (status, responseBody) ←
@@ -2135,11 +2147,8 @@ private partial def connectWithRetryLoop (runtime : Runtime) (address : String)
   return { status := status, body := responseBody }
 
 @[inline] def httpResponsePromiseAwaitRef (runtime : Runtime)
-    (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
-  ensureSameRuntime runtime promise.runtime "HttpResponsePromiseRef"
-  let (status, responseBody) ←
-    ffiRuntimeHttpResponsePromiseAwaitRefImpl runtime.handle promise.handle
-  return { status := status, body := responseBody }
+    (promise : HttpResponsePromiseRef) : IO HttpResponseRef :=
+  runtime.httpResponsePromiseAwait promise
 
 @[inline] def httpResponsePromiseAwaitWithEncodedHeaders (runtime : Runtime)
     (promise : HttpResponsePromiseRef) : IO HttpResponseEncoded := do
@@ -2960,11 +2969,14 @@ end PromiseRef
 
 namespace HttpResponsePromiseRef
 
-@[inline] def await (promise : HttpResponsePromiseRef) : IO HttpResponse := do
+@[inline] def await (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
   promise.runtime.httpResponsePromiseAwait promise
 
-@[inline] def awaitRef (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
-  promise.runtime.httpResponsePromiseAwaitRef promise
+@[inline] def awaitCopy (promise : HttpResponsePromiseRef) : IO HttpResponse := do
+  promise.runtime.httpResponsePromiseAwaitCopy promise
+
+@[inline] def awaitRef (promise : HttpResponsePromiseRef) : IO HttpResponseRef :=
+  promise.await
 
 @[inline] def awaitWithEncodedHeaders (promise : HttpResponsePromiseRef) :
     IO HttpResponseEncoded := do
@@ -2994,13 +3006,16 @@ namespace HttpResponsePromiseRef
 @[inline] def release (promise : HttpResponsePromiseRef) : IO Unit :=
   ffiRuntimeHttpResponsePromiseReleaseImpl promise.runtime.handle promise.handle
 
-@[inline] def awaitAndRelease (promise : HttpResponsePromiseRef) : IO HttpResponse := do
+@[inline] def awaitAndRelease (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
   promise.await
+
+@[inline] def awaitAndReleaseCopy (promise : HttpResponsePromiseRef) : IO HttpResponse := do
+  promise.awaitCopy
 
 @[inline] def awaitAndReleaseRef (promise : HttpResponsePromiseRef) : IO HttpResponseRef := do
   promise.awaitRef
 
-instance : Capnp.Async.Awaitable HttpResponsePromiseRef HttpResponse where
+instance : Capnp.Async.Awaitable HttpResponsePromiseRef HttpResponseRef where
   await := HttpResponsePromiseRef.await
 
 instance : Capnp.Async.Cancelable HttpResponsePromiseRef where
@@ -3010,8 +3025,13 @@ instance : Capnp.Async.Releasable HttpResponsePromiseRef where
   release := HttpResponsePromiseRef.release
 
 @[inline] def awaitAsTask (promise : HttpResponsePromiseRef) :
-    IO (Task (Except IO.Error HttpResponse)) :=
+    IO (Task (Except IO.Error HttpResponseRef)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def awaitCopyAsTask (promise : HttpResponsePromiseRef) :
+    IO (Task (Except IO.Error HttpResponse)) :=
+  IO.asTask do
+    promise.awaitCopy
 
 @[inline] def awaitRefAsTask (promise : HttpResponsePromiseRef) :
     IO (Task (Except IO.Error HttpResponseRef)) :=
@@ -3019,15 +3039,19 @@ instance : Capnp.Async.Releasable HttpResponsePromiseRef where
     promise.awaitRef
 
 @[inline] def toPromise (promise : HttpResponsePromiseRef) :
-    IO (Capnp.Async.Promise HttpResponse) := do
+    IO (Capnp.Async.Promise HttpResponseRef) := do
   pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
+@[inline] def toPromiseCopy (promise : HttpResponsePromiseRef) :
+    IO (Capnp.Async.Promise HttpResponse) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitCopyAsTask))
+
 @[inline] def toPromiseRef (promise : HttpResponsePromiseRef) :
-    IO (Capnp.Async.Promise HttpResponseRef) := do
-  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
+    IO (Capnp.Async.Promise HttpResponseRef) :=
+  promise.toPromise
 
 def toIOPromise (promise : HttpResponsePromiseRef) :
-    IO (IO.Promise (Except String HttpResponse)) := do
+    IO (IO.Promise (Except String HttpResponseRef)) := do
   Capnp.Async.toIOPromise promise
 
 end HttpResponsePromiseRef
@@ -3231,7 +3255,7 @@ namespace Connection
     IO (Task (Except IO.Error ByteArray)) := do
   let pending ← connection.readStart minBytes maxBytes
   IO.asTask do
-    Runtime.bytesPromiseAwait connection.runtime pending
+    Runtime.bytesPromiseAwaitCopy connection.runtime pending
 
 @[inline] def readAsPromise (connection : Connection) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
@@ -3374,12 +3398,14 @@ end ConnectionPromiseRef
 
 namespace BytesPromiseRef
 
-@[inline] def await (promise : BytesPromiseRef) : IO ByteArray := do
-  let bytesRef ← ffiRuntimeBytesPromiseAwaitRefImpl promise.runtime.handle promise.handle
-  BytesRef.toByteArray bytesRef
+@[inline] def await (promise : BytesPromiseRef) : IO BytesRef :=
+  ffiRuntimeBytesPromiseAwaitRefImpl promise.runtime.handle promise.handle
+
+@[inline] def awaitCopy (promise : BytesPromiseRef) : IO ByteArray := do
+  (← promise.await).toByteArray
 
 @[inline] def awaitRef (promise : BytesPromiseRef) : IO BytesRef :=
-  ffiRuntimeBytesPromiseAwaitRefImpl promise.runtime.handle promise.handle
+  promise.await
 
 @[inline] def cancel (promise : BytesPromiseRef) : IO Unit :=
   ffiRuntimeBytesPromiseCancelImpl promise.runtime.handle promise.handle
@@ -3387,10 +3413,13 @@ namespace BytesPromiseRef
 @[inline] def release (promise : BytesPromiseRef) : IO Unit :=
   ffiRuntimeBytesPromiseReleaseImpl promise.runtime.handle promise.handle
 
-@[inline] def awaitAndRelease (promise : BytesPromiseRef) : IO ByteArray := do
+@[inline] def awaitAndRelease (promise : BytesPromiseRef) : IO BytesRef := do
   promise.await
 
-instance : Capnp.Async.Awaitable BytesPromiseRef ByteArray where
+@[inline] def awaitAndReleaseCopy (promise : BytesPromiseRef) : IO ByteArray := do
+  promise.awaitCopy
+
+instance : Capnp.Async.Awaitable BytesPromiseRef BytesRef where
   await := BytesPromiseRef.await
 
 instance : Capnp.Async.Cancelable BytesPromiseRef where
@@ -3400,8 +3429,13 @@ instance : Capnp.Async.Releasable BytesPromiseRef where
   release := BytesPromiseRef.release
 
 @[inline] def awaitAsTask (promise : BytesPromiseRef) :
-    IO (Task (Except IO.Error ByteArray)) :=
+    IO (Task (Except IO.Error BytesRef)) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def awaitCopyAsTask (promise : BytesPromiseRef) :
+    IO (Task (Except IO.Error ByteArray)) :=
+  IO.asTask do
+    promise.awaitCopy
 
 @[inline] def awaitRefAsTask (promise : BytesPromiseRef) :
     IO (Task (Except IO.Error BytesRef)) :=
@@ -3409,15 +3443,19 @@ instance : Capnp.Async.Releasable BytesPromiseRef where
     promise.awaitRef
 
 @[inline] def toPromise (promise : BytesPromiseRef) :
-    IO (Capnp.Async.Promise ByteArray) := do
+    IO (Capnp.Async.Promise BytesRef) := do
   pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
+@[inline] def toPromiseCopy (promise : BytesPromiseRef) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitCopyAsTask))
+
 @[inline] def toPromiseRef (promise : BytesPromiseRef) :
-    IO (Capnp.Async.Promise BytesRef) := do
-  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
+    IO (Capnp.Async.Promise BytesRef) :=
+  promise.toPromise
 
 def toIOPromise (promise : BytesPromiseRef) :
-    IO (IO.Promise (Except String ByteArray)) := do
+    IO (IO.Promise (Except String BytesRef)) := do
   Capnp.Async.toIOPromise promise
 
 end BytesPromiseRef
@@ -3651,13 +3689,15 @@ end DatagramPeer
 
 namespace DatagramReceivePromiseRef
 
-@[inline] def await (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
-  let (source, bytesRef) ← ffiRuntimeDatagramReceivePromiseAwaitRefImpl
-    promise.runtime.handle promise.handle
-  pure (source, ← BytesRef.toByteArray bytesRef)
+@[inline] def await (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) :=
+  ffiRuntimeDatagramReceivePromiseAwaitRefImpl promise.runtime.handle promise.handle
+
+@[inline] def awaitCopy (promise : DatagramReceivePromiseRef) : IO (String × ByteArray) := do
+  let (source, bytesRef) ← promise.await
+  pure (source, ← bytesRef.toByteArray)
 
 @[inline] def awaitRef (promise : DatagramReceivePromiseRef) : IO (String × BytesRef) :=
-  ffiRuntimeDatagramReceivePromiseAwaitRefImpl promise.runtime.handle promise.handle
+  promise.await
 
 @[inline] def cancel (promise : DatagramReceivePromiseRef) : IO Unit :=
   ffiRuntimeDatagramReceivePromiseCancelImpl promise.runtime.handle promise.handle
@@ -3666,10 +3706,14 @@ namespace DatagramReceivePromiseRef
   ffiRuntimeDatagramReceivePromiseReleaseImpl promise.runtime.handle promise.handle
 
 @[inline] def awaitAndRelease (promise : DatagramReceivePromiseRef) :
-    IO (String × ByteArray) := do
+    IO (String × BytesRef) := do
   promise.await
 
-instance : Capnp.Async.Awaitable DatagramReceivePromiseRef (String × ByteArray) where
+@[inline] def awaitAndReleaseCopy (promise : DatagramReceivePromiseRef) :
+    IO (String × ByteArray) := do
+  promise.awaitCopy
+
+instance : Capnp.Async.Awaitable DatagramReceivePromiseRef (String × BytesRef) where
   await := DatagramReceivePromiseRef.await
 
 instance : Capnp.Async.Cancelable DatagramReceivePromiseRef where
@@ -3679,8 +3723,13 @@ instance : Capnp.Async.Releasable DatagramReceivePromiseRef where
   release := DatagramReceivePromiseRef.release
 
 @[inline] def awaitAsTask (promise : DatagramReceivePromiseRef) :
-    IO (Task (Except IO.Error (String × ByteArray))) :=
+    IO (Task (Except IO.Error (String × BytesRef))) :=
   Capnp.Async.awaitAsTask promise
+
+@[inline] def awaitCopyAsTask (promise : DatagramReceivePromiseRef) :
+    IO (Task (Except IO.Error (String × ByteArray))) :=
+  IO.asTask do
+    promise.awaitCopy
 
 @[inline] def awaitRefAsTask (promise : DatagramReceivePromiseRef) :
     IO (Task (Except IO.Error (String × BytesRef))) :=
@@ -3688,15 +3737,19 @@ instance : Capnp.Async.Releasable DatagramReceivePromiseRef where
     promise.awaitRef
 
 @[inline] def toPromise (promise : DatagramReceivePromiseRef) :
-    IO (Capnp.Async.Promise (String × ByteArray)) := do
+    IO (Capnp.Async.Promise (String × BytesRef)) := do
   pure (Capnp.Async.Promise.ofTask (← promise.awaitAsTask))
 
+@[inline] def toPromiseCopy (promise : DatagramReceivePromiseRef) :
+    IO (Capnp.Async.Promise (String × ByteArray)) := do
+  pure (Capnp.Async.Promise.ofTask (← promise.awaitCopyAsTask))
+
 @[inline] def toPromiseRef (promise : DatagramReceivePromiseRef) :
-    IO (Capnp.Async.Promise (String × BytesRef)) := do
-  pure (Capnp.Async.Promise.ofTask (← promise.awaitRefAsTask))
+    IO (Capnp.Async.Promise (String × BytesRef)) :=
+  promise.toPromise
 
 def toIOPromise (promise : DatagramReceivePromiseRef) :
-    IO (IO.Promise (Except String (String × ByteArray))) := do
+    IO (IO.Promise (Except String (String × BytesRef))) := do
   Capnp.Async.toIOPromise promise
 
 end DatagramReceivePromiseRef
@@ -3866,7 +3919,7 @@ namespace HttpResponseBody
 @[inline] def readAsTask (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
     IO (Task (Except IO.Error ByteArray)) := do
   let promise ← responseBody.readStart minBytes maxBytes
-  promise.awaitAsTask
+  promise.awaitCopyAsTask
 
 @[inline] def readAsPromise (responseBody : HttpResponseBody) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
@@ -3901,7 +3954,7 @@ namespace HttpServerRequestBody
 @[inline] def readAsTask (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO (Task (Except IO.Error ByteArray)) := do
   let promise ← requestBody.readStart minBytes maxBytes
-  promise.awaitAsTask
+  promise.awaitCopyAsTask
 
 @[inline] def readAsPromise (requestBody : HttpServerRequestBody) (minBytes maxBytes : UInt32) :
     IO (Capnp.Async.Promise ByteArray) := do
@@ -4338,8 +4391,11 @@ namespace RuntimeM
 @[inline] def releaseConnectionPromise (promise : ConnectionPromiseRef) : RuntimeM Unit := do
   promise.release
 
-@[inline] def awaitBytes (promise : BytesPromiseRef) : RuntimeM ByteArray := do
+@[inline] def awaitBytes (promise : BytesPromiseRef) : RuntimeM BytesRef := do
   promise.await
+
+@[inline] def awaitBytesCopy (promise : BytesPromiseRef) : RuntimeM ByteArray := do
+  promise.awaitCopy
 
 @[inline] def awaitBytesRef (promise : BytesPromiseRef) : RuntimeM BytesRef := do
   promise.awaitRef
@@ -4549,8 +4605,12 @@ namespace RuntimeM
   port.receiveMany count maxBytes
 
 @[inline] def awaitDatagramReceive (promise : DatagramReceivePromiseRef) :
-    RuntimeM (String × ByteArray) := do
+    RuntimeM (String × BytesRef) := do
   promise.await
+
+@[inline] def awaitDatagramReceiveCopy (promise : DatagramReceivePromiseRef) :
+    RuntimeM (String × ByteArray) := do
+  promise.awaitCopy
 
 @[inline] def cancelDatagramReceive (promise : DatagramReceivePromiseRef) : RuntimeM Unit := do
   promise.cancel
@@ -4950,8 +5010,12 @@ namespace RuntimeM
     (← runtime) method address path requestHeaders responseBodyLimit body portHint
 
 @[inline] def httpResponsePromiseAwait (promise : HttpResponsePromiseRef) :
-    RuntimeM HttpResponse := do
+    RuntimeM HttpResponseRef := do
   Runtime.httpResponsePromiseAwait (← runtime) promise
+
+@[inline] def httpResponsePromiseAwaitCopy (promise : HttpResponsePromiseRef) :
+    RuntimeM HttpResponse := do
+  Runtime.httpResponsePromiseAwaitCopy (← runtime) promise
 
 @[inline] def httpResponsePromiseAwaitRef (promise : HttpResponsePromiseRef) :
     RuntimeM HttpResponseRef := do
