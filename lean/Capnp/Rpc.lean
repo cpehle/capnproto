@@ -2021,6 +2021,15 @@ namespace RuntimeVatPeerRef
 @[inline] def clearRestorer (peer : RuntimeVatPeerRef) : IO Unit :=
   Runtime.multiVatClearRestorer peer
 
+@[inline] def withRestorer (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client)
+    (action : RuntimeVatPeerRef -> IO α) : IO α := do
+  peer.setRestorer restorer
+  try
+    action peer
+  finally
+    peer.clearRestorer
+
 @[inline] def publishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : IO Unit :=
   Runtime.multiVatPublishSturdyRef peer objectId target
@@ -2075,6 +2084,16 @@ namespace VatNetwork
 @[inline] def clearRestorer (network : VatNetwork) (peer : RuntimeVatPeerRef) : IO Unit := do
   ensurePeerRuntime network peer "clearRestorer"
   Runtime.multiVatClearRestorer peer
+
+@[inline] def withRestorer (network : VatNetwork) (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client)
+    (action : RuntimeVatPeerRef -> IO α) : IO α := do
+  ensurePeerRuntime network peer "withRestorer"
+  network.setRestorer peer restorer
+  try
+    action peer
+  finally
+    network.clearRestorer peer
 
 @[inline] def publishSturdyRef (network : VatNetwork) (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : IO Unit := do
@@ -2675,6 +2694,16 @@ namespace RuntimeM
 @[inline] def multiVatClearRestorer (peer : RuntimeVatPeerRef) : RuntimeM Unit := do
   ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
   Runtime.multiVatClearRestorer peer
+
+@[inline] def multiVatWithRestorer (peer : RuntimeVatPeerRef)
+    (restorer : VatId -> ByteArray -> IO Client)
+    (action : RuntimeVatPeerRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime peer.runtime "RuntimeVatPeerRef"
+  Runtime.multiVatSetRestorer peer restorer
+  try
+    action peer
+  finally
+    Runtime.multiVatClearRestorer peer
 
 @[inline] def multiVatPublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : RuntimeM Unit := do

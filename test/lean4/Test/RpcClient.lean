@@ -6142,6 +6142,43 @@ def testRuntimeMultiVatSturdyRefRestoreCallback : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeMultiVatWithRestorerClearsOnException : IO Unit := do
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let bootstrap ← runtime.registerEchoTarget
+    let alice ← runtime.newMultiVatClient "alice-restorer-scoped"
+    let bob ← runtime.newMultiVatServer "bob-restorer-scoped" bootstrap
+
+    let scopedThrew ←
+      try
+        let (_ : Unit) ← bob.withRestorer
+          (fun _ _ => pure bootstrap)
+          (fun _ => throw (IO.userError "expected scoped restorer failure"))
+        pure false
+      catch _ =>
+        pure true
+    assertEqual scopedThrew true
+
+    let postScopeErr ←
+      try
+        let restored ← alice.restoreSturdyRef {
+          vat := { host := "bob-restorer-scoped", unique := false }
+          objectId := ByteArray.mk #[7, 7, 7]
+        }
+        runtime.releaseTarget restored
+        pure ""
+      catch err =>
+        pure (toString err)
+    if !(postScopeErr.containsSubstr "no sturdy refs published for host:") then
+      throw (IO.userError s!"missing cleared-scoped-restorer error text: {postScopeErr}")
+
+    alice.release
+    bob.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeMultiVatSturdyRefRestorerFailure : IO Unit := do
   let runtime ← Capnp.Rpc.Runtime.init
   try
