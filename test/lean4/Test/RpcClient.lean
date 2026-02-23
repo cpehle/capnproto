@@ -388,6 +388,130 @@ def testGeneratedPromiseHelpers : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimePayloadRefLifecycleRoundtrip : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let requestRef ← runtime.payloadRefFromPayload payload
+    let responseRef ← runtime.callWithPayloadRef target Echo.fooMethod requestRef
+    let response ← responseRef.decode
+    assertEqual response.capTable.caps.size 0
+    requestRef.release
+    responseRef.release
+
+    let requestReleaseFailed ←
+      try
+        requestRef.release
+        pure false
+      catch _ =>
+        pure true
+    assertEqual requestReleaseFailed true
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeStartCallAwaitHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+
+    let response ← runtime.startCallAwait target Echo.fooMethod payload
+    assertEqual response.capTable.caps.size 0
+
+    let outcome ← runtime.startCallAwaitOutcome target Echo.fooMethod payload
+    match outcome with
+    | .ok _ _ => pure ()
+    | .error ex =>
+        throw (IO.userError s!"unexpected startCallAwaitOutcome error: {ex.description}")
+
+    let result ← runtime.startCallAwaitResult target Echo.fooMethod payload
+    match result with
+    | .ok okPayload =>
+        assertEqual okPayload.capTable.caps.size 0
+    | .error ex =>
+        throw (IO.userError s!"unexpected startCallAwaitResult error: {ex.description}")
+
+    let threw ←
+      try
+        let (_ : Unit) ← runtime.withStartedCall target Echo.fooMethod
+          (fun _ =>
+            (throw (IO.userError "intentional withStartedCall failure") : IO Unit)) payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual threw true
+    runtime.pump
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMStartCallAwaitHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallAwait target Echo.fooMethod payload
+    assertEqual response.capTable.caps.size 0
+
+    let outcome ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallAwaitOutcome target Echo.fooMethod payload
+    match outcome with
+    | .ok _ _ => pure ()
+    | .error ex =>
+        throw (IO.userError s!"unexpected RuntimeM.startCallAwaitOutcome error: {ex.description}")
+
+    let result ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.startCallAwaitResult target Echo.fooMethod payload
+    match result with
+    | .ok okPayload =>
+        assertEqual okPayload.capTable.caps.size 0
+    | .error ex =>
+        throw (IO.userError s!"unexpected RuntimeM.startCallAwaitResult error: {ex.description}")
+
+    let threw ←
+      try
+        let (_ : Unit) ← Capnp.Rpc.RuntimeM.run runtime do
+          Capnp.Rpc.RuntimeM.withStartedCall target Echo.fooMethod
+            (fun _ =>
+              (throw (IO.userError "intentional RuntimeM.withStartedCall failure") :
+                Capnp.Rpc.RuntimeM Unit))
+            payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual threw true
+    runtime.pump
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
+def testRuntimeMPayloadRefRoundtrip : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+    let response ← Capnp.Rpc.RuntimeM.run runtime do
+      let requestRef ← Capnp.Rpc.RuntimeM.payloadRefFromPayload payload
+      let responseRef ← Capnp.Rpc.RuntimeM.callWithPayloadRef target Echo.fooMethod requestRef
+      let response ← responseRef.decode
+      requestRef.release
+      responseRef.release
+      pure response
+    assertEqual response.capTable.caps.size 0
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimePromiseCapabilityPipelining : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let (address, socketPath) ← mkUnixTestAddress

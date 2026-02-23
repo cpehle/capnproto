@@ -484,9 +484,39 @@ opaque ffiRuntimeStartStreamingCallWithCapsImpl
     (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
     (request : @& ByteArray) (requestCaps : @& ByteArray) : IO UInt32
 
+@[extern "capnp_lean_rpc_runtime_payload_ref_from_bytes"]
+opaque ffiRuntimePayloadRefFromBytesImpl
+    (runtime : UInt64) (request : @& ByteArray) (requestCaps : @& ByteArray) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_payload_ref_to_bytes"]
+opaque ffiRuntimePayloadRefToBytesImpl
+    (runtime : UInt64) (payloadRef : UInt32) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_runtime_payload_ref_release"]
+opaque ffiRuntimePayloadRefReleaseImpl (runtime : UInt64) (payloadRef : UInt32) : IO Unit
+
+@[extern "capnp_lean_rpc_runtime_call_with_payload_ref"]
+opaque ffiRuntimeCallWithPayloadRefImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (payloadRef : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_start_call_with_payload_ref"]
+opaque ffiRuntimeStartCallWithPayloadRefImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (payloadRef : UInt32) : IO UInt32
+
+@[extern "capnp_lean_rpc_runtime_start_streaming_call_with_payload_ref"]
+opaque ffiRuntimeStartStreamingCallWithPayloadRefImpl
+    (runtime : UInt64) (target : UInt32) (interfaceId : UInt64) (methodId : UInt16)
+    (payloadRef : UInt32) : IO UInt32
+
 @[extern "capnp_lean_rpc_runtime_pending_call_await"]
 opaque ffiRuntimePendingCallAwaitImpl
     (runtime : UInt64) (pendingCall : UInt32) : IO (ByteArray × ByteArray)
+
+@[extern "capnp_lean_rpc_runtime_pending_call_await_payload_ref"]
+opaque ffiRuntimePendingCallAwaitPayloadRefImpl
+    (runtime : UInt64) (pendingCall : UInt32) : IO UInt32
 
 @[extern "capnp_lean_rpc_runtime_pending_call_await_outcome"]
 opaque ffiRuntimePendingCallAwaitOutcomeImpl
@@ -910,6 +940,11 @@ structure RuntimePendingCallRef where
   handle : RuntimePendingCall
   deriving Inhabited, BEq, Repr
 
+structure RuntimePayloadRef where
+  runtime : Runtime
+  handle : UInt32
+  deriving Inhabited, BEq, Repr
+
 structure Promise (α : Type) where
   pendingCall : RuntimePendingCallRef
   deriving Inhabited, BEq, Repr
@@ -1002,6 +1037,13 @@ namespace CapTable
 
 end CapTable
 
+namespace Payload
+
+@[inline] def capTableBytes (payload : Payload) : ByteArray :=
+  CapTable.toBytes payload.capTable
+
+end Payload
+
 @[inline] private def expectChecked (what : String) (value : Except String α) : IO α :=
   match value with
   | Except.ok v => pure v
@@ -1018,7 +1060,7 @@ end CapTable
   fun target interfaceId methodId requestBytes requestCaps => do
     let request ← decodePayloadChecked requestBytes requestCaps
     let response ← handler target { interfaceId := interfaceId, methodId := methodId } request
-    return (response.toBytes, CapTable.toBytes response.capTable)
+    return (response.toBytes, response.capTableBytes)
 
 @[inline] private def toRawTailCallHandlerCall
     (handler : Client -> Method -> Payload -> IO Client) : RawTailCallHandlerCall :=
@@ -1030,14 +1072,14 @@ end CapTable
     (result : AdvancedHandlerResult) : RawAdvancedHandlerResult :=
   match result with
   | .respond response =>
-      .returnPayload response.toBytes (CapTable.toBytes response.capTable)
+      .returnPayload response.toBytes response.capTableBytes
   | .asyncCall nextTarget nextMethod nextPayload =>
       .asyncCall nextTarget nextMethod.interfaceId nextMethod.methodId
-        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
+        nextPayload.toBytes nextPayload.capTableBytes
   | .forwardCall nextTarget nextMethod nextPayload options =>
       let base : RawAdvancedHandlerResult := .asyncCall
         nextTarget nextMethod.interfaceId nextMethod.methodId
-        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
+        nextPayload.toBytes nextPayload.capTableBytes
       let withHints : RawAdvancedHandlerResult :=
         .callHints options.callHints.noPromisePipelining options.callHints.onlyPromisePipeline base
       let withSend : RawAdvancedHandlerResult :=
@@ -1047,7 +1089,7 @@ end CapTable
       withSend
   | .tailCall nextTarget nextMethod nextPayload =>
       .tailCall nextTarget nextMethod.interfaceId nextMethod.methodId
-        nextPayload.toBytes (CapTable.toBytes nextPayload.capTable)
+        nextPayload.toBytes nextPayload.capTableBytes
   | .throwRemote message detail =>
       .throwRemote message detail
   | .throwRemoteWithType type message detail =>
@@ -1074,7 +1116,7 @@ end CapTable
       .control opts.releaseParams opts.allowCancellation opts.isStreaming
         (toRawAdvancedHandlerReply next)
   | .pipeline pipeline next =>
-      .setPipeline pipeline.toBytes (CapTable.toBytes pipeline.capTable)
+      .setPipeline pipeline.toBytes pipeline.capTableBytes
         (toRawAdvancedHandlerReply next)
 
 @[inline] private def toRawAdvancedHandlerCallAsync
@@ -1480,15 +1522,53 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def backend (runtime : Runtime) : Backend where
   call := fun target method payload => do
     let requestBytes := payload.toBytes
-    let requestCaps := CapTable.toBytes payload.capTable
+    let requestCaps := payload.capTableBytes
     let (responseBytes, responseCaps) ← ffiRawCallWithCapsOnRuntimeImpl
       runtime.handle target method.interfaceId method.methodId requestBytes requestCaps
     decodePayloadChecked responseBytes responseCaps
 
+@[inline] def payloadRefFromBytes (runtime : Runtime)
+    (request : ByteArray) (requestCaps : ByteArray := ByteArray.empty) : IO RuntimePayloadRef := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimePayloadRefFromBytesImpl runtime.handle request requestCaps)
+  }
+
+@[inline] def payloadRefFromPayload (runtime : Runtime)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePayloadRef := do
+  runtime.payloadRefFromBytes payload.toBytes payload.capTableBytes
+
+@[inline] def payloadRefToBytes (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
+  ffiRuntimePayloadRefToBytesImpl payloadRef.runtime.handle payloadRef.handle
+
+@[inline] def payloadRefDecode (payloadRef : RuntimePayloadRef) : IO Payload := do
+  let (responseBytes, responseCaps) ← payloadRefToBytes payloadRef
+  decodePayloadChecked responseBytes responseCaps
+
+@[inline] def payloadRefRelease (payloadRef : RuntimePayloadRef) : IO Unit :=
+  ffiRuntimePayloadRefReleaseImpl payloadRef.runtime.handle payloadRef.handle
+
+@[inline] def withPayloadRef (runtime : Runtime) (payloadRef : RuntimePayloadRef)
+    (action : RuntimePayloadRef -> IO α) : IO α := do
+  ensureSameRuntime runtime payloadRef.runtime "RuntimePayloadRef"
+  try
+    action payloadRef
+  finally
+    Runtime.payloadRefRelease payloadRef
+
+@[inline] def callWithPayloadRef (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO RuntimePayloadRef := do
+  ensureSameRuntime runtime payloadRef.runtime "RuntimePayloadRef"
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeCallWithPayloadRefImpl runtime.handle target
+      method.interfaceId method.methodId payloadRef.handle)
+  }
+
 @[inline] def callOutcome (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome := do
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   ffiRawCallWithCapsOnRuntimeOutcomeImpl runtime.handle target method.interfaceId method.methodId
     requestBytes requestCaps
 
@@ -1503,7 +1583,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def startCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   return {
     runtime := runtime
     handle := {
@@ -1512,15 +1592,38 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     }
   }
 
+@[inline] def startCallWithPayloadRef (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO RuntimePendingCallRef := do
+  ensureSameRuntime runtime payloadRef.runtime "RuntimePayloadRef"
+  return {
+    runtime := runtime
+    handle := {
+      raw := (← ffiRuntimeStartCallWithPayloadRefImpl runtime.handle target
+        method.interfaceId method.methodId payloadRef.handle)
+    }
+  }
+
 @[inline] def startStreamingCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   return {
     runtime := runtime
     handle := {
       raw := (← ffiRuntimeStartStreamingCallWithCapsImpl runtime.handle target method.interfaceId
         method.methodId requestBytes requestCaps)
+    }
+  }
+
+@[inline] def startStreamingCallWithPayloadRef
+    (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO RuntimePendingCallRef := do
+  ensureSameRuntime runtime payloadRef.runtime "RuntimePayloadRef"
+  return {
+    runtime := runtime
+    handle := {
+      raw := (← ffiRuntimeStartStreamingCallWithPayloadRefImpl runtime.handle target
+        method.interfaceId method.methodId payloadRef.handle)
     }
   }
 
@@ -1536,10 +1639,55 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Capnp.Async.Promise Payload) := do
   pure (Capnp.Async.Promise.ofTask (← runtime.startCallAsTask target method payload))
 
+@[inline] def withStartedCall (runtime : Runtime) (target : Client) (method : Method)
+    (action : RuntimePendingCallRef -> IO α)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO α := do
+  let pending ← runtime.startCall target method payload
+  try
+    action pending
+  finally
+    ffiRuntimePendingCallReleaseImpl runtime.handle pending.handle.raw
+
+@[inline] def startCallAwait (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO Payload := do
+  let pending ← runtime.startCall target method payload
+  let (responseBytes, responseCaps) ←
+    ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.raw
+  decodePayloadChecked responseBytes responseCaps
+
+@[inline] def startCallAwaitPayloadRef (runtime : Runtime) (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : IO RuntimePayloadRef := do
+  let pending ← runtime.startCallWithPayloadRef target method payloadRef
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.raw)
+  }
+
+@[inline] def startCallAwaitOutcome (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome := do
+  let pending ← runtime.startCall target method payload
+  ffiRuntimePendingCallAwaitOutcomeImpl runtime.handle pending.handle.raw
+
+@[inline] def startCallAwaitResult (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Except RemoteException Payload) := do
+  match (← runtime.startCallAwaitOutcome target method payload) with
+  | .ok responseBytes responseCaps =>
+      return .ok (← decodePayloadChecked responseBytes responseCaps)
+  | .error ex =>
+      return .error ex
+
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : IO Payload := do
   let (responseBytes, responseCaps) ←
     ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.raw
   decodePayloadChecked responseBytes responseCaps
+
+@[inline] def pendingCallAwaitPayloadRef (pendingCall : RuntimePendingCallRef) :
+    IO RuntimePayloadRef := do
+  return {
+    runtime := pendingCall.runtime
+    handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl
+      pendingCall.runtime.handle pendingCall.handle.raw)
+  }
 
 @[inline] def pendingCallAwaitOutcome (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome :=
   ffiRuntimePendingCallAwaitOutcomeImpl pendingCall.runtime.handle pendingCall.handle.raw
@@ -1584,7 +1732,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def streamingCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO Unit := do
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   ffiRuntimeStreamingCallWithCapsImpl runtime.handle target method.interfaceId method.methodId
     requestBytes requestCaps
 
@@ -1970,10 +2118,41 @@ namespace VatNetwork
 
 end VatNetwork
 
+namespace RuntimePayloadRef
+
+@[inline] def toBytes (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
+  Runtime.payloadRefToBytes payloadRef
+
+@[inline] def decode (payloadRef : RuntimePayloadRef) : IO Payload :=
+  Runtime.payloadRefDecode payloadRef
+
+@[inline] def release (payloadRef : RuntimePayloadRef) : IO Unit :=
+  Runtime.payloadRefRelease payloadRef
+
+@[inline] def withRelease (payloadRef : RuntimePayloadRef)
+    (action : RuntimePayloadRef -> IO α) : IO α := do
+  try
+    action payloadRef
+  finally
+    payloadRef.release
+
+@[inline] def decodeAndRelease (payloadRef : RuntimePayloadRef) : IO Payload := do
+  let payload ← payloadRef.decode
+  payloadRef.release
+  pure payload
+
+instance : Capnp.Async.Releasable RuntimePayloadRef where
+  release := RuntimePayloadRef.release
+
+end RuntimePayloadRef
+
 namespace RuntimePendingCallRef
 
 @[inline] def await (pendingCall : RuntimePendingCallRef) : IO Payload :=
   Runtime.pendingCallAwait pendingCall
+
+@[inline] def awaitPayloadRef (pendingCall : RuntimePendingCallRef) : IO RuntimePayloadRef :=
+  Runtime.pendingCallAwaitPayloadRef pendingCall
 
 @[inline] def awaitOutcome (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome :=
   Runtime.pendingCallAwaitOutcome pendingCall
@@ -2629,9 +2808,50 @@ namespace RuntimeM
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM (Except RemoteException Payload) := do
   Runtime.callResult (← runtime) target method payload
 
+@[inline] def payloadRefFromBytes
+    (request : ByteArray) (requestCaps : ByteArray := ByteArray.empty) :
+    RuntimeM RuntimePayloadRef := do
+  Runtime.payloadRefFromBytes (← runtime) request requestCaps
+
+@[inline] def payloadRefFromPayload
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePayloadRef := do
+  Runtime.payloadRefFromPayload (← runtime) payload
+
+@[inline] def payloadRefToBytes (payloadRef : RuntimePayloadRef) : RuntimeM (ByteArray × ByteArray) := do
+  ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
+  Runtime.payloadRefToBytes payloadRef
+
+@[inline] def payloadRefDecode (payloadRef : RuntimePayloadRef) : RuntimeM Payload := do
+  ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
+  Runtime.payloadRefDecode payloadRef
+
+@[inline] def payloadRefRelease (payloadRef : RuntimePayloadRef) : RuntimeM Unit := do
+  ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
+  Runtime.payloadRefRelease payloadRef
+
+@[inline] def withPayloadRef (payloadRef : RuntimePayloadRef)
+    (action : RuntimePayloadRef -> RuntimeM α) : RuntimeM α := do
+  ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
+  try
+    action payloadRef
+  finally
+    Runtime.payloadRefRelease payloadRef
+
+@[inline] def callWithPayloadRef (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePayloadRef := do
+  Runtime.callWithPayloadRef (← runtime) target method payloadRef
+
 @[inline] def startCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
   Runtime.startCall (← runtime) target method payload
+
+@[inline] def startCallWithPayloadRef (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePendingCallRef := do
+  Runtime.startCallWithPayloadRef (← runtime) target method payloadRef
+
+@[inline] def startStreamingCallWithPayloadRef (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePendingCallRef := do
+  Runtime.startStreamingCallWithPayloadRef (← runtime) target method payloadRef
 
 @[inline] def startCallAsTask (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) :
@@ -2645,9 +2865,44 @@ namespace RuntimeM
   let pending ← startCall target method payload
   pending.toPromise
 
+@[inline] def withStartedCall (target : Client) (method : Method)
+    (action : RuntimePendingCallRef -> RuntimeM α)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM α := do
+  let pending ← startCall target method payload
+  try
+    action pending
+  finally
+    Runtime.pendingCallRelease pending
+
+@[inline] def startCallAwait (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
+  let pending ← startCall target method payload
+  Runtime.pendingCallAwait pending
+
+@[inline] def startCallAwaitPayloadRef (target : Client) (method : Method)
+    (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePayloadRef := do
+  let pending ← startCallWithPayloadRef target method payloadRef
+  Runtime.pendingCallAwaitPayloadRef pending
+
+@[inline] def startCallAwaitOutcome (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RawCallOutcome := do
+  let pending ← startCall target method payload
+  Runtime.pendingCallAwaitOutcome pending
+
+@[inline] def startCallAwaitResult (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) :
+    RuntimeM (Except RemoteException Payload) := do
+  let pending ← startCall target method payload
+  Runtime.pendingCallAwaitResult pending
+
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
   Runtime.pendingCallAwait pendingCall
+
+@[inline] def pendingCallAwaitPayloadRef (pendingCall : RuntimePendingCallRef) :
+    RuntimeM RuntimePayloadRef := do
+  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
+  Runtime.pendingCallAwaitPayloadRef pendingCall
 
 @[inline] def pendingCallAwaitOutcome (pendingCall : RuntimePendingCallRef) :
     RuntimeM RawCallOutcome := do
@@ -2880,7 +3135,7 @@ namespace Interop
 @[inline] def cppCall (address : String) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   let (responseBytes, responseCaps) ←
     ffiCppCallOneShotImpl address portHint method.interfaceId method.methodId requestBytes requestCaps
   decodePayloadChecked responseBytes responseCaps
@@ -2891,7 +3146,7 @@ namespace Interop
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
   ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := payload.toBytes
-  let requestCaps := CapTable.toBytes payload.capTable
+  let requestCaps := payload.capTableBytes
   let (responseBytes, responseCaps) ←
     ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle.raw listener.raw
       address portHint method.interfaceId method.methodId requestBytes requestCaps
@@ -2905,9 +3160,9 @@ namespace Interop
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
   ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := request.toBytes
-  let requestCaps := CapTable.toBytes request.capTable
+  let requestCaps := request.capTableBytes
   let pipelinedRequestBytes := pipelinedRequest.toBytes
-  let pipelinedRequestCaps := CapTable.toBytes pipelinedRequest.capTable
+  let pipelinedRequestCaps := pipelinedRequest.capTableBytes
   let (responseBytes, responseCaps) ← ffiRuntimeCppCallPipelinedWithAcceptImpl
     runtime.handle server.handle.raw listener.raw address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
@@ -2937,9 +3192,9 @@ namespace Interop
     (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope)
     (portHint : UInt32 := 0) : IO Payload := do
   let requestBytes := request.toBytes
-  let requestCaps := CapTable.toBytes request.capTable
+  let requestCaps := request.capTableBytes
   let pipelinedRequestBytes := pipelinedRequest.toBytes
-  let pipelinedRequestCaps := CapTable.toBytes pipelinedRequest.capTable
+  let pipelinedRequestCaps := pipelinedRequest.capTableBytes
   let (responseBytes, responseCaps) ← ffiCppCallPipelinedCapOneShotImpl
     address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps

@@ -1,7 +1,10 @@
 #include "rpc_bridge_runtime.h"
 
+#include <atomic>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
+#include <unordered_map>
 
 #if !defined(_WIN32)
 #include <sys/socket.h>
@@ -35,6 +38,137 @@ using rpc::shutdown;
 using rpc::unregisterRuntime;
 
 namespace {
+
+struct RuntimePayloadRefEntry {
+  uint64_t runtimeId;
+  lean_object* messageBytes;
+  lean_object* capBytes;
+};
+
+struct RetainedRuntimePayloadRef {
+  uint64_t runtimeId = 0;
+  lean_object* messageBytes = nullptr;
+  lean_object* capBytes = nullptr;
+
+  RetainedRuntimePayloadRef() = default;
+
+  RetainedRuntimePayloadRef(uint64_t runtimeId, lean_object* messageBytes, lean_object* capBytes)
+      : runtimeId(runtimeId), messageBytes(messageBytes), capBytes(capBytes) {}
+
+  RetainedRuntimePayloadRef(const RetainedRuntimePayloadRef&) = delete;
+  RetainedRuntimePayloadRef& operator=(const RetainedRuntimePayloadRef&) = delete;
+
+  RetainedRuntimePayloadRef(RetainedRuntimePayloadRef&& other) noexcept
+      : runtimeId(other.runtimeId),
+        messageBytes(other.messageBytes),
+        capBytes(other.capBytes) {
+    other.messageBytes = nullptr;
+    other.capBytes = nullptr;
+  }
+
+  RetainedRuntimePayloadRef& operator=(RetainedRuntimePayloadRef&& other) noexcept {
+    if (this != &other) {
+      reset();
+      runtimeId = other.runtimeId;
+      messageBytes = other.messageBytes;
+      capBytes = other.capBytes;
+      other.messageBytes = nullptr;
+      other.capBytes = nullptr;
+    }
+    return *this;
+  }
+
+  ~RetainedRuntimePayloadRef() { reset(); }
+
+  void reset() {
+    if (messageBytes != nullptr) {
+      lean_dec(messageBytes);
+      messageBytes = nullptr;
+    }
+    if (capBytes != nullptr) {
+      lean_dec(capBytes);
+      capBytes = nullptr;
+    }
+  }
+
+  lean_object* takeMessageBytes() {
+    auto* out = messageBytes;
+    messageBytes = nullptr;
+    return out;
+  }
+
+  lean_object* takeCapBytes() {
+    auto* out = capBytes;
+    capBytes = nullptr;
+    return out;
+  }
+};
+
+std::mutex gRuntimePayloadRefsMutex;
+std::unordered_map<uint32_t, RuntimePayloadRefEntry> gRuntimePayloadRefs;
+std::atomic<uint32_t> gNextRuntimePayloadRefId{1};
+
+uint32_t allocateRuntimePayloadRefIdLocked() {
+  auto id = gNextRuntimePayloadRefId.fetch_add(1, std::memory_order_relaxed);
+  while (id == 0 || gRuntimePayloadRefs.find(id) != gRuntimePayloadRefs.end()) {
+    id = gNextRuntimePayloadRefId.fetch_add(1, std::memory_order_relaxed);
+  }
+  return id;
+}
+
+uint32_t registerRuntimePayloadRef(uint64_t runtimeId, lean_object* messageBytes,
+                                   lean_object* capBytes, bool retainInputs) {
+  if (messageBytes == nullptr || capBytes == nullptr) {
+    throw std::runtime_error("runtime payload ref requires message and cap byte arrays");
+  }
+  lean_mark_mt(messageBytes);
+  lean_mark_mt(capBytes);
+  if (retainInputs) {
+    lean_inc(messageBytes);
+    lean_inc(capBytes);
+  }
+
+  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
+  uint32_t id = allocateRuntimePayloadRefIdLocked();
+  gRuntimePayloadRefs.emplace(id, RuntimePayloadRefEntry{runtimeId, messageBytes, capBytes});
+  return id;
+}
+
+uint32_t registerRuntimePayloadRefFromRawCallResult(uint64_t runtimeId,
+                                                    const rpc::RawCallResult& result) {
+  auto messageBytes = mkByteArrayCopy(result.responseData(), result.responseSize());
+  auto capBytes = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
+  return registerRuntimePayloadRef(runtimeId, messageBytes, capBytes, false);
+}
+
+kj::Maybe<RetainedRuntimePayloadRef> retainRuntimePayloadRef(uint32_t payloadRefId) {
+  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
+  auto it = gRuntimePayloadRefs.find(payloadRefId);
+  if (it == gRuntimePayloadRefs.end()) {
+    return kj::none;
+  }
+  lean_inc(it->second.messageBytes);
+  lean_inc(it->second.capBytes);
+  return RetainedRuntimePayloadRef{it->second.runtimeId, it->second.messageBytes,
+                                   it->second.capBytes};
+}
+
+bool releaseRuntimePayloadRef(uint64_t runtimeId, uint32_t payloadRefId, std::string& errorOut) {
+  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
+  auto it = gRuntimePayloadRefs.find(payloadRefId);
+  if (it == gRuntimePayloadRefs.end()) {
+    errorOut = "unknown runtime payload ref id";
+    return false;
+  }
+  if (it->second.runtimeId != runtimeId) {
+    errorOut = "runtime payload ref belongs to a different Capnp.Rpc runtime";
+    return false;
+  }
+  lean_dec(it->second.messageBytes);
+  lean_dec(it->second.capBytes);
+  gRuntimePayloadRefs.erase(it);
+  return true;
+}
 
 lean_obj_res mkIoOkRawCallResult(const rpc::RawCallResult& result) {
   auto responseObj = mkByteArrayCopy(result.responseData(), result.responseSize());
@@ -285,6 +419,190 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_streaming_call_
   }
 }
 
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_payload_ref_from_bytes(
+    uint64_t runtimeId, b_lean_obj_arg request, b_lean_obj_arg requestCaps) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    uint32_t payloadRefId =
+        registerRuntimePayloadRef(runtimeId, const_cast<lean_object*>(request),
+                                  const_cast<lean_object*>(requestCaps), true);
+    return lean_io_result_mk_ok(lean_box_uint32(payloadRefId));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_payload_ref_from_bytes");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_payload_ref_to_bytes(
+    uint64_t runtimeId, uint32_t payloadRefId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto retained = retainRuntimePayloadRef(payloadRefId);
+    KJ_IF_SOME(payloadRef, retained) {
+      if (payloadRef.runtimeId != runtimeId) {
+        return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
+      }
+
+      lean_object* out = lean_alloc_ctor(0, 2, 0);
+      lean_ctor_set(out, 0, payloadRef.takeMessageBytes());
+      lean_ctor_set(out, 1, payloadRef.takeCapBytes());
+      return lean_io_result_mk_ok(out);
+    } else {
+      return mkIoUserError("unknown runtime payload ref id");
+    }
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_payload_ref_to_bytes");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_payload_ref_release(
+    uint64_t runtimeId, uint32_t payloadRefId) {
+  try {
+    std::string error;
+    if (!releaseRuntimePayloadRef(runtimeId, payloadRefId, error)) {
+      return mkIoUserError(error);
+    }
+    return mkIoOkUnit();
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_payload_ref_release");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_call_with_payload_ref(
+    uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    uint32_t payloadRefId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto retained = retainRuntimePayloadRef(payloadRefId);
+    KJ_IF_SOME(payloadRef, retained) {
+      if (payloadRef.runtimeId != runtimeId) {
+        return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
+      }
+
+      auto requestCaps = decodeCapTable(payloadRef.capBytes);
+      auto completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
+                                            retainByteArrayForQueue(payloadRef.messageBytes),
+                                            std::move(requestCaps));
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        uint32_t responseRefId =
+            registerRuntimePayloadRefFromRawCallResult(runtimeId, completion->result);
+        return lean_io_result_mk_ok(lean_box_uint32(responseRefId));
+      }
+    } else {
+      return mkIoUserError("unknown runtime payload ref id");
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_call_with_payload_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_payload_ref(
+    uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    uint32_t payloadRefId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto retained = retainRuntimePayloadRef(payloadRefId);
+    KJ_IF_SOME(payloadRef, retained) {
+      if (payloadRef.runtimeId != runtimeId) {
+        return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
+      }
+
+      auto requestCaps = decodeCapTable(payloadRef.capBytes);
+      auto completion =
+          rpc::enqueueStartPendingCall(*runtime, target, interfaceId, methodId,
+                                       retainByteArrayForQueue(payloadRef.messageBytes),
+                                       std::move(requestCaps));
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+      }
+    } else {
+      return mkIoUserError("unknown runtime payload ref id");
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_start_call_with_payload_ref");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_streaming_call_with_payload_ref(
+    uint64_t runtimeId, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    uint32_t payloadRefId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto retained = retainRuntimePayloadRef(payloadRefId);
+    KJ_IF_SOME(payloadRef, retained) {
+      if (payloadRef.runtimeId != runtimeId) {
+        return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
+      }
+
+      auto requestCaps = decodeCapTable(payloadRef.capBytes);
+      auto completion =
+          rpc::enqueueStartStreamingPendingCall(*runtime, target, interfaceId, methodId,
+                                                retainByteArrayForQueue(payloadRef.messageBytes),
+                                                std::move(requestCaps));
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->targetId));
+      }
+    } else {
+      return mkIoUserError("unknown runtime payload ref id");
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_start_streaming_call_with_payload_ref");
+  }
+}
+
 extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await(
     uint64_t runtimeId, uint32_t pendingCallId) {
   auto runtime = getRuntime(runtimeId);
@@ -308,6 +626,35 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await(
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_runtime_pending_call_await");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await_payload_ref(
+    uint64_t runtimeId, uint32_t pendingCallId) {
+  auto runtime = getRuntime(runtimeId);
+  if (!runtime) {
+    return mkIoUserError("Capnp.Rpc runtime handle is invalid or already released");
+  }
+
+  try {
+    auto completion = rpc::enqueueAwaitPendingCall(*runtime, pendingCallId);
+    {
+      std::unique_lock<std::mutex> lock(completion->mutex);
+      completion->cv.wait(lock, [&completion]() { return completion->done; });
+      if (!completion->ok) {
+        return mkIoUserError(completion->error);
+      }
+      uint32_t payloadRefId =
+          registerRuntimePayloadRefFromRawCallResult(runtimeId, completion->result);
+      return lean_io_result_mk_ok(lean_box_uint32(payloadRefId));
+    }
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_rpc_runtime_pending_call_await_payload_ref");
   }
 }
 
