@@ -10,6 +10,19 @@ private def countTraceTag (trace : Array Capnp.Rpc.ProtocolMessageTraceTag)
     (tag : Capnp.Rpc.ProtocolMessageTraceTag) : Nat :=
   trace.foldl (fun acc entry => if entry == tag then acc + 1 else acc) 0
 
+private def hasDisembargoBeforeResolve (trace : Array Capnp.Rpc.ProtocolMessageTraceTag) : Bool :=
+  let (_, seenOutOfOrder) :=
+    trace.foldl
+      (fun (state : Bool × Bool) entry =>
+        let seenResolve := state.fst
+        let outOfOrder := state.snd
+        match entry with
+        | .resolve => (true, outOfOrder)
+        | .disembargo => (seenResolve, outOfOrder || !seenResolve)
+        | .unknown _ => (seenResolve, outOfOrder))
+      (false, false)
+  seenOutOfOrder
+
 private def registerEchoFooCallOrderTarget (runtime : Capnp.Rpc.Runtime) :
     IO (Capnp.Rpc.Client × IO UInt64) := do
   let nextExpected ← IO.mkRef (UInt64.ofNat 0)
@@ -191,6 +204,8 @@ def testRuntimeProtocolResolveDisembargoMessageCounters : IO Unit := do
 
       let traceAliceToBob ← alice.resolveDisembargoTraceTo bob
       let traceBobToAlice ← bob.resolveDisembargoTraceTo alice
+      assertEqual (hasDisembargoBeforeResolve traceAliceToBob) false
+      assertEqual (hasDisembargoBeforeResolve traceBobToAlice) false
       let traceResolveCount :=
         UInt64.ofNat
           ((countTraceTag traceAliceToBob .resolve) + (countTraceTag traceBobToAlice .resolve))
