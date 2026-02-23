@@ -2069,10 +2069,8 @@ namespace RuntimeRegisterPromiseRef
     promise.release
 
 @[inline] def awaitAndRelease (promise : RuntimeRegisterPromiseRef) : IO UInt32 := do
-  try
-    promise.await
-  finally
-    promise.release
+  -- Awaiting a register promise consumes it in the runtime; no explicit release is needed.
+  promise.await
 
 @[inline] def awaitTarget (promise : RuntimeRegisterPromiseRef) : IO Client :=
   promise.await
@@ -2152,10 +2150,8 @@ namespace RuntimeUnitPromiseRef
     promise.release
 
 @[inline] def awaitAndRelease (promise : RuntimeUnitPromiseRef) : IO Unit := do
-  try
-    promise.await
-  finally
-    promise.release
+  -- Awaiting a unit promise consumes it in the runtime; no explicit release is needed.
+  promise.await
 
 instance : Capnp.Async.Awaitable RuntimeUnitPromiseRef Unit where
   await := RuntimeUnitPromiseRef.await
@@ -2742,9 +2738,10 @@ namespace RuntimeM
     Runtime.registerPromiseRelease promise
 
 @[inline] def registerPromiseAwaitAndRelease (promise : RuntimeRegisterPromiseRef) :
-    RuntimeM UInt32 :=
-  withRegisterPromise promise fun p =>
-    Runtime.registerPromiseAwait p
+    RuntimeM UInt32 := do
+  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
+  -- Awaiting a register promise consumes it in the runtime; no explicit release is needed.
+  Runtime.registerPromiseAwait promise
 
 @[inline] def unitPromiseAwait (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
   ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
@@ -2766,9 +2763,10 @@ namespace RuntimeM
   finally
     Runtime.unitPromiseRelease promise
 
-@[inline] def unitPromiseAwaitAndRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit :=
-  withUnitPromise promise fun p =>
-    Runtime.unitPromiseAwait p
+@[inline] def unitPromiseAwaitAndRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
+  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
+  -- Awaiting a unit promise consumes it in the runtime; no explicit release is needed.
+  Runtime.unitPromiseAwait promise
 
 @[inline] def streamingCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Unit := do

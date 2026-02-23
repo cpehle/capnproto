@@ -1003,9 +1003,9 @@ def testRuntimeAsyncConnectAndWhenResolvedStart : IO Unit := do
     let listener ← server.listen address
     let connectPromise ← runtime.connectStart address
     server.accept listener
-    let target ← connectPromise.awaitTarget
+    let target ← connectPromise.awaitTargetAndRelease
     let whenResolvedPromise ← runtime.targetWhenResolvedStart target
-    whenResolvedPromise.await
+    whenResolvedPromise.awaitAndRelease
 
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM target payload
@@ -1038,8 +1038,8 @@ def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
     let listener ← server.listen address
     let clientPromise ← runtime.newClientStart address
     let acceptPromise ← server.acceptStart listener
-    let client ← clientPromise.awaitClient
-    acceptPromise.await
+    let client ← clientPromise.awaitClientAndRelease
+    acceptPromise.awaitAndRelease
 
     let target ← client.bootstrap
     let response ← Capnp.Rpc.RuntimeM.run runtime do
@@ -1049,9 +1049,9 @@ def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
     runtime.releaseTarget target
     let disconnectPromise ← client.onDisconnectStart
     client.release
-    disconnectPromise.await
+    disconnectPromise.awaitAndRelease
     let drainPromise ← server.drainStart
-    drainPromise.await
+    drainPromise.awaitAndRelease
 
     server.release
     runtime.releaseListener listener
