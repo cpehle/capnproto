@@ -4651,6 +4651,9 @@ private:
     auto proto = schema.getProto();
     std::string out;
     switch (proto.which()) {
+      case schema::Node::FILE:
+      case schema::Node::STRUCT:
+        break;
       case schema::Node::ENUM:
         out += genEnum(schema, currentModule);
         break;
@@ -4771,8 +4774,8 @@ private:
         out += genAnnotation(schema, currentModule);
         break;
       default:
-        out += "-- TODO: unsupported node ";
-        out += sanitizeIdentifier(proto.getDisplayName()).cStr();
+        KJ_REQUIRE(false, "capnpc-lean4: unsupported schema node kind",
+                   static_cast<int>(proto.which()), proto.getDisplayName());
         break;
     }
 
