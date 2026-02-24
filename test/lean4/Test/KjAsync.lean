@@ -352,6 +352,25 @@ def testCapnpAsyncPromiseAll : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testCapnpAsyncGenericLifecycleHelpers : IO Unit := do
+  let runtime ← Capnp.KjAsync.Runtime.init
+  try
+    let pAwait ← runtime.sleepMillisStart (UInt32.ofNat 1)
+    let () ← Capnp.Async.awaitAndRelease pAwait
+
+    let pCancel ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+    Capnp.Async.cancelAndRelease pCancel
+
+    let (left, right) ← runtime.newTwoWayPipe
+    Capnp.Async.withRelease left fun leftConn => do
+      Capnp.Async.withRelease right fun rightConn => do
+        leftConn.write mkPayload
+        let received ← rightConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        assertEqual received mkPayload
+  finally
+    runtime.shutdown
+
+@[test]
 def testCapnpAsyncPromiseRace : IO Unit := do
   let fast : Capnp.Async.Promise UInt32 :=
     Capnp.Async.Promise.ofTask (Task.pure (.ok (UInt32.ofNat 1)))
@@ -641,6 +660,19 @@ def testKjAsyncWrapSocketFdAndStreamAbstractions : IO Unit := do
           let receivedBRef ←
             Capnp.KjAsync.Stream.readRef wrappedLeft (UInt32.ofNat 1) (UInt32.ofNat 1024)
           assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedBRef) payloadB
+
+          let payloadC := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 86))
+          let payloadCRef ← Capnp.KjAsync.BytesRef.ofByteArray payloadC
+          (← Capnp.KjAsync.Stream.writeAsPromiseRef wrappedLeft payloadCRef).await
+          let receivedCRef ←
+            (← Capnp.KjAsync.Stream.readAsPromiseRef wrappedRight (UInt32.ofNat 1) (UInt32.ofNat 1024)).await
+          assertEqual (← Capnp.KjAsync.BytesRef.toByteArray receivedCRef) payloadC
+
+          let payloadD := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 87))
+          (← Capnp.KjAsync.Stream.writeAsPromise wrappedRight payloadD).await
+          let receivedD ←
+            (← Capnp.KjAsync.Stream.readAsPromise wrappedLeft (UInt32.ofNat 1) (UInt32.ofNat 1024)).await
+          assertEqual receivedD payloadD
         finally
           wrappedLeft.release
           wrappedRight.release
@@ -2796,12 +2828,7 @@ def testKjAsyncHttpServerRoundtripWithHeaders : IO Unit := do
 @[test]
 def testKjAsyncHttpServerMethodCoverage : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
-  let methods : Array Capnp.KjAsync.HttpMethod := #[
-    .get, .head, .post, .put, .delete, .patch, .purge, .options, .trace,
-    .copy, .lock, .mkcol, .move, .propfind, .proppatch, .search, .unlock, .acl,
-    .report, .mkactivity, .checkout, .merge, .msearch, .notify, .subscribe,
-    .unsubscribe, .query, .ban
-  ]
+  let methods := Capnp.KjAsync.HttpMethod.all
   try
     let server ← runtime.httpServerListen "127.0.0.1" 0
     for i in [:methods.size] do
@@ -2824,6 +2851,31 @@ def testKjAsyncHttpServerMethodCoverage : IO Unit := do
     server.release
   finally
     runtime.shutdown
+
+@[test]
+def testKjAsyncHttpMethodHelpers : IO Unit := do
+  let methods := Capnp.KjAsync.HttpMethod.all
+  for method in methods do
+    let tag := Capnp.KjAsync.HttpMethod.toTag method
+    match Capnp.KjAsync.HttpMethod.ofTag? tag with
+    | some decoded =>
+      assertTrue (decoded == method)
+        s!"HTTP method tag roundtrip mismatch for {Capnp.KjAsync.HttpMethod.toString method}"
+    | none =>
+      throw (IO.userError s!"failed to decode HTTP method tag {tag}")
+
+    let methodText := Capnp.KjAsync.HttpMethod.toString method
+    match Capnp.KjAsync.HttpMethod.ofString? methodText with
+    | some parsed =>
+      assertTrue (parsed == method)
+        s!"HTTP method string roundtrip mismatch for {methodText}"
+    | none =>
+      throw (IO.userError s!"failed to parse HTTP method name {methodText}")
+
+  assertTrue (Capnp.KjAsync.HttpMethod.ofTag? (UInt32.ofNat 255)).isNone
+    "expected unknown HTTP method tag to return none"
+  assertTrue (Capnp.KjAsync.HttpMethod.ofString? "CONNECT").isNone
+    "CONNECT is not part of kj::HttpMethod and should not decode as HttpMethod"
 
 @[test]
 def testKjAsyncHttpServerRoundtripHeaderDecodeStress : IO Unit := do

@@ -22,6 +22,25 @@ class Releasable (promise : Type u) where
 @[inline] def release {ρ : Type u} [inst : Releasable ρ] (ref : ρ) : IO Unit :=
   inst.release ref
 
+@[inline] def withRelease {ρ : Type u} [Releasable ρ] (ref : ρ) (action : ρ → IO α) : IO α := do
+  try
+    action ref
+  finally
+    release ref
+
+@[inline] def awaitAndRelease {ρ : Type u} {α : Type} [Awaitable ρ α] [Releasable ρ]
+    (ref : ρ) : IO α := do
+  try
+    await ref
+  finally
+    release ref
+
+@[inline] def cancelAndRelease {ρ : Type u} [Cancelable ρ] [Releasable ρ] (ref : ρ) : IO Unit := do
+  try
+    cancel ref
+  finally
+    release ref
+
 @[inline] def awaitAsTask {ρ : Type u} {α : Type} [Awaitable ρ α] (ref : ρ) :
     IO (Task (Except IO.Error α)) :=
   IO.asTask (await ref)

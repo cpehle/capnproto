@@ -1037,7 +1037,16 @@ inductive HttpMethod where
   | ban
   deriving Inhabited, BEq, Repr
 
-@[inline] private def httpMethodToTag (method : HttpMethod) : UInt32 :=
+namespace HttpMethod
+
+@[inline] def all : Array HttpMethod := #[
+  .get, .head, .post, .put, .delete, .patch, .purge, .options, .trace,
+  .copy, .lock, .mkcol, .move, .propfind, .proppatch, .search, .unlock, .acl,
+  .report, .mkactivity, .checkout, .merge, .msearch, .notify, .subscribe,
+  .unsubscribe, .query, .ban
+]
+
+@[inline] def toTag (method : HttpMethod) : UInt32 :=
   match method with
   | .get => 0
   | .head => 1
@@ -1068,65 +1077,108 @@ inductive HttpMethod where
   | .query => 26
   | .ban => 27
 
-@[inline] private def httpMethodFromTag (tag : UInt32) : IO HttpMethod := do
+@[inline] def ofTag? (tag : UInt32) : Option HttpMethod := Id.run do
   if tag == 0 then
-    return .get
+    return some .get
   else if tag == 1 then
-    return .head
+    return some .head
   else if tag == 2 then
-    return .post
+    return some .post
   else if tag == 3 then
-    return .put
+    return some .put
   else if tag == 4 then
-    return .delete
+    return some .delete
   else if tag == 5 then
-    return .patch
+    return some .patch
   else if tag == 6 then
-    return .purge
+    return some .purge
   else if tag == 7 then
-    return .options
+    return some .options
   else if tag == 8 then
-    return .trace
+    return some .trace
   else if tag == 9 then
-    return .copy
+    return some .copy
   else if tag == 10 then
-    return .lock
+    return some .lock
   else if tag == 11 then
-    return .mkcol
+    return some .mkcol
   else if tag == 12 then
-    return .move
+    return some .move
   else if tag == 13 then
-    return .propfind
+    return some .propfind
   else if tag == 14 then
-    return .proppatch
+    return some .proppatch
   else if tag == 15 then
-    return .search
+    return some .search
   else if tag == 16 then
-    return .unlock
+    return some .unlock
   else if tag == 17 then
-    return .acl
+    return some .acl
   else if tag == 18 then
-    return .report
+    return some .report
   else if tag == 19 then
-    return .mkactivity
+    return some .mkactivity
   else if tag == 20 then
-    return .checkout
+    return some .checkout
   else if tag == 21 then
-    return .merge
+    return some .merge
   else if tag == 22 then
-    return .msearch
+    return some .msearch
   else if tag == 23 then
-    return .notify
+    return some .notify
   else if tag == 24 then
-    return .subscribe
+    return some .subscribe
   else if tag == 25 then
-    return .unsubscribe
+    return some .unsubscribe
   else if tag == 26 then
-    return .query
+    return some .query
   else if tag == 27 then
-    return .ban
+    return some .ban
   else
+    return none
+
+@[inline] def ofTag (tag : UInt32) : IO HttpMethod := do
+  match ofTag? tag with
+  | some method =>
+    pure method
+  | none =>
     throw (IO.userError s!"unknown HTTP method tag: {tag}")
+
+@[inline] def toString (method : HttpMethod) : String :=
+  match method with
+  | .get => "GET"
+  | .head => "HEAD"
+  | .post => "POST"
+  | .put => "PUT"
+  | .delete => "DELETE"
+  | .patch => "PATCH"
+  | .purge => "PURGE"
+  | .options => "OPTIONS"
+  | .trace => "TRACE"
+  | .copy => "COPY"
+  | .lock => "LOCK"
+  | .mkcol => "MKCOL"
+  | .move => "MOVE"
+  | .propfind => "PROPFIND"
+  | .proppatch => "PROPPATCH"
+  | .search => "SEARCH"
+  | .unlock => "UNLOCK"
+  | .acl => "ACL"
+  | .report => "REPORT"
+  | .mkactivity => "MKACTIVITY"
+  | .checkout => "CHECKOUT"
+  | .merge => "MERGE"
+  | .msearch => "MSEARCH"
+  | .notify => "NOTIFY"
+  | .subscribe => "SUBSCRIBE"
+  | .unsubscribe => "UNSUBSCRIBE"
+  | .query => "QUERY"
+  | .ban => "BAN"
+
+@[inline] def ofString? (value : String) : Option HttpMethod :=
+  all.find? (fun method => toString method == value)
+
+end HttpMethod
 
 @[inline] private def decodeWebSocketMessage
     (tag : UInt32) (closeCode : UInt32) (text : String) (bytes : ByteArray) :
@@ -1233,7 +1285,7 @@ structure HttpEndpoint where
         throw (IO.userError "invalid HTTP server request payload: trailing bytes")
   return {
     requestId := requestId
-    method := (← httpMethodFromTag methodTag)
+    method := (← HttpMethod.ofTag methodTag)
     webSocketRequested := (webSocketTag != 0)
     path := path
     headers := headers
@@ -1986,20 +2038,20 @@ After this call succeeds, the caller must not use `fd` directly.
     (path : String) (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) :
     IO HttpResponse := do
   let (status, responseBody) ←
-    ffiRuntimeHttpRequestImpl runtime.handle (httpMethodToTag method) address portHint path body
+    ffiRuntimeHttpRequestImpl runtime.handle (HttpMethod.toTag method) address portHint path body
   return { status := status, body := responseBody }
 
 @[inline] def httpRequestRef (runtime : Runtime) (method : HttpMethod) (address : String)
     (path : String) (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseRef := do
   let (status, responseBody) ←
-    ffiRuntimeHttpRequestRefImpl runtime.handle (httpMethodToTag method) address portHint path body
+    ffiRuntimeHttpRequestRefImpl runtime.handle (HttpMethod.toTag method) address portHint path body
   return { status := status, body := responseBody }
 
 @[inline] def httpRequestWithResponseLimit (runtime : Runtime) (method : HttpMethod)
     (address : String) (path : String) (responseBodyLimit : UInt64)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponse := do
   let (status, responseBody) ←
-    ffiRuntimeHttpRequestWithResponseLimitImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithResponseLimitImpl runtime.handle (HttpMethod.toTag method) address
       portHint path body responseBodyLimit
   return { status := status, body := responseBody }
 
@@ -2007,7 +2059,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (address : String) (path : String) (responseBodyLimit : UInt64)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseRef := do
   let (status, responseBody) ←
-    ffiRuntimeHttpRequestWithResponseLimitRefImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithResponseLimitRefImpl runtime.handle (HttpMethod.toTag method) address
       portHint path body responseBodyLimit
   return { status := status, body := responseBody }
 
@@ -2015,7 +2067,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpRequestWithHeadersImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithHeadersImpl runtime.handle (HttpMethod.toTag method) address
       portHint path requestHeaders body
   return {
     status := status
@@ -2028,7 +2080,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpRequestWithHeadersRefImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithHeadersRefImpl runtime.handle (HttpMethod.toTag method) address
       portHint path requestHeaders body
   return {
     status := status
@@ -2065,7 +2117,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpRequestWithHeadersSecureImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithHeadersSecureImpl runtime.handle (HttpMethod.toTag method) address
       portHint path requestHeaders body
   return {
     status := status
@@ -2078,7 +2130,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpRequestWithHeadersSecureRefImpl runtime.handle (httpMethodToTag method) address
+    ffiRuntimeHttpRequestWithHeadersSecureRefImpl runtime.handle (HttpMethod.toTag method) address
       portHint path requestHeaders body
   return {
     status := status
@@ -2118,7 +2170,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (requestHeaders : ByteArray) (responseBodyLimit : UInt64)
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
-    ffiRuntimeHttpRequestWithHeadersWithResponseLimitImpl runtime.handle (httpMethodToTag method)
+    ffiRuntimeHttpRequestWithHeadersWithResponseLimitImpl runtime.handle (HttpMethod.toTag method)
       address portHint path requestHeaders body responseBodyLimit
   return {
     status := status
@@ -2133,7 +2185,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersWithResponseLimitRefImpl runtime.handle
-      (httpMethodToTag method) address portHint path requestHeaders body responseBodyLimit
+      (HttpMethod.toTag method) address portHint path requestHeaders body responseBodyLimit
   return {
     status := status
     statusText := statusText
@@ -2177,7 +2229,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (body : ByteArray := ByteArray.empty) (portHint : UInt32 := 0) : IO HttpResponseEncoded := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureImpl runtime.handle
-      (httpMethodToTag method) address portHint path requestHeaders body
+      (HttpMethod.toTag method) address portHint path requestHeaders body
       responseBodyLimit
   return {
     status := status
@@ -2192,7 +2244,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (body : BytesRef) (portHint : UInt32 := 0) : IO HttpResponseEncodedRef := do
   let (status, statusText, responseHeaderBytes, responseBody) ←
     ffiRuntimeHttpRequestWithHeadersWithResponseLimitSecureRefImpl runtime.handle
-      (httpMethodToTag method) address portHint path requestHeaders body responseBodyLimit
+      (HttpMethod.toTag method) address portHint path requestHeaders body responseBodyLimit
   return {
     status := status
     statusText := statusText
@@ -2236,7 +2288,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartImpl
-      runtime.handle (httpMethodToTag method) address portHint path body)
+      runtime.handle (HttpMethod.toTag method) address portHint path body)
   }
 
 @[inline] def httpRequestStartRef (runtime : Runtime) (method : HttpMethod) (address : String)
@@ -2245,7 +2297,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path body)
+      runtime.handle (HttpMethod.toTag method) address portHint path body)
   }
 
 @[inline] def httpRequestStartWithResponseLimit (runtime : Runtime) (method : HttpMethod)
@@ -2255,7 +2307,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithResponseLimitImpl
-      runtime.handle (httpMethodToTag method) address portHint path body responseBodyLimit)
+      runtime.handle (HttpMethod.toTag method) address portHint path body responseBodyLimit)
   }
 
 @[inline] def httpRequestStartWithResponseLimitRef (runtime : Runtime) (method : HttpMethod)
@@ -2265,7 +2317,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithResponseLimitRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path body responseBodyLimit)
+      runtime.handle (HttpMethod.toTag method) address portHint path body responseBodyLimit)
   }
 
 @[inline] def httpRequestStartWithEncodedHeaders (runtime : Runtime) (method : HttpMethod)
@@ -2274,7 +2326,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body)
   }
 
 @[inline] def httpRequestStartWithEncodedHeadersRef (runtime : Runtime) (method : HttpMethod)
@@ -2283,7 +2335,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body)
   }
 
 @[inline] def httpRequestStartWithHeaders (runtime : Runtime) (method : HttpMethod)
@@ -2306,7 +2358,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersSecureImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body)
   }
 
 @[inline] def httpRequestStartWithEncodedHeadersSecureRef (runtime : Runtime) (method : HttpMethod)
@@ -2315,7 +2367,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersSecureRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body)
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body)
   }
 
 @[inline] def httpRequestStartWithHeadersSecure (runtime : Runtime) (method : HttpMethod)
@@ -2336,7 +2388,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (portHint : UInt32 := 0) : IO (Option HttpRequestBody × HttpResponsePromiseRef) := do
   let (requestBodyHandle, promiseHandle) ←
-    ffiRuntimeHttpRequestStartStreamingWithHeadersImpl runtime.handle (httpMethodToTag method)
+    ffiRuntimeHttpRequestStartStreamingWithHeadersImpl runtime.handle (HttpMethod.toTag method)
       address portHint path requestHeaders
   let requestBody? :=
     if requestBodyHandle == 0 then
@@ -2356,7 +2408,7 @@ After this call succeeds, the caller must not use `fd` directly.
     (method : HttpMethod) (address : String) (path : String) (requestHeaders : ByteArray)
     (portHint : UInt32 := 0) : IO (Option HttpRequestBody × HttpResponsePromiseRef) := do
   let (requestBodyHandle, promiseHandle) ←
-    ffiRuntimeHttpRequestStartStreamingWithHeadersSecureImpl runtime.handle (httpMethodToTag method)
+    ffiRuntimeHttpRequestStartStreamingWithHeadersSecureImpl runtime.handle (HttpMethod.toTag method)
       address portHint path requestHeaders
   let requestBody? :=
     if requestBodyHandle == 0 then
@@ -2380,7 +2432,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body
       responseBodyLimit)
   }
 
@@ -2391,7 +2443,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body
       responseBodyLimit)
   }
 
@@ -2418,7 +2470,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitSecureImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body
       responseBodyLimit)
   }
 
@@ -2429,7 +2481,7 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeHttpRequestStartWithHeadersWithResponseLimitSecureRefImpl
-      runtime.handle (httpMethodToTag method) address portHint path requestHeaders body
+      runtime.handle (HttpMethod.toTag method) address portHint path requestHeaders body
       responseBodyLimit)
   }
 
@@ -3473,6 +3525,9 @@ namespace Listener
 @[inline] def release (listener : Listener) : IO Unit :=
   ffiRuntimeReleaseListenerImpl listener.runtime.handle listener.handle
 
+instance : Capnp.Async.Releasable Listener where
+  release := Listener.release
+
 /-- Wrap `fd` as a `Listener` in the given runtime by duplicating it first. -/
 @[inline] def ofFd (runtime : Runtime) (fd : UInt32) : IO Listener :=
   runtime.wrapListenSocketFd fd
@@ -3535,6 +3590,9 @@ namespace NetworkAddress
 @[inline] def release (address : NetworkAddress) : IO Unit :=
   ffiRuntimeReleaseNetworkAddressImpl address.runtime.handle address.handle
 
+instance : Capnp.Async.Releasable NetworkAddress where
+  release := NetworkAddress.release
+
 @[inline] def toString? (address : NetworkAddress) : IO (Option String) := do
   let (hasValue, value) ←
     ffiRuntimeNetworkAddressToStringImpl address.runtime.handle address.handle
@@ -3590,6 +3648,9 @@ namespace Connection
 
 @[inline] def release (connection : Connection) : IO Unit :=
   ffiRuntimeReleaseConnectionImpl connection.runtime.handle connection.handle
+
+instance : Capnp.Async.Releasable Connection where
+  release := Connection.release
 
 @[inline] def write (connection : Connection) (bytes : ByteArray) : IO Unit :=
   do
@@ -3929,6 +3990,9 @@ namespace TaskSetRef
 @[inline] def release (taskSet : TaskSetRef) : IO Unit :=
   ffiRuntimeTaskSetReleaseImpl taskSet.runtime.handle taskSet.handle
 
+instance : Capnp.Async.Releasable TaskSetRef where
+  release := TaskSetRef.release
+
 @[inline] def addPromise (taskSet : TaskSetRef) (promise : PromiseRef) : IO Unit :=
   if taskSet.runtime.handle != promise.runtime.handle then
     throw (IO.userError "PromiseRef belongs to a different Capnp.KjAsync runtime")
@@ -3970,6 +4034,9 @@ namespace DatagramPort
 
 @[inline] def release (port : DatagramPort) : IO Unit :=
   ffiRuntimeDatagramReleasePortImpl port.runtime.handle port.handle
+
+instance : Capnp.Async.Releasable DatagramPort where
+  release := DatagramPort.release
 
 /-- Wrap `fd` as a `DatagramPort` in the given runtime by duplicating it first. -/
 @[inline] def ofFd (runtime : Runtime) (fd : UInt32) : IO DatagramPort :=
@@ -4166,6 +4233,9 @@ namespace DatagramPeer
 @[inline] def release (peer : DatagramPeer) : IO Unit :=
   peer.port.release
 
+instance : Capnp.Async.Releasable DatagramPeer where
+  release := DatagramPeer.release
+
 end DatagramPeer
 
 namespace DatagramReceivePromiseRef
@@ -4227,6 +4297,9 @@ namespace HttpServer
 
 @[inline] def release (server : HttpServer) : IO Unit :=
   ffiRuntimeHttpServerReleaseImpl server.runtime.handle server.handle
+
+instance : Capnp.Async.Releasable HttpServer where
+  release := HttpServer.release
 
 @[inline] def drainStart (server : HttpServer) : IO PromiseRef := do
   return {
@@ -4373,6 +4446,9 @@ namespace HttpRequestBody
 @[inline] def release (requestBody : HttpRequestBody) : IO Unit :=
   ffiRuntimeHttpRequestBodyReleaseImpl requestBody.runtime.handle requestBody.handle
 
+instance : Capnp.Async.Releasable HttpRequestBody where
+  release := HttpRequestBody.release
+
 end HttpRequestBody
 
 namespace HttpResponseBody
@@ -4417,6 +4493,9 @@ namespace HttpResponseBody
 @[inline] def release (responseBody : HttpResponseBody) : IO Unit :=
   ffiRuntimeHttpResponseBodyReleaseImpl responseBody.runtime.handle responseBody.handle
 
+instance : Capnp.Async.Releasable HttpResponseBody where
+  release := HttpResponseBody.release
+
 end HttpResponseBody
 
 namespace HttpServerRequestBody
@@ -4460,6 +4539,9 @@ namespace HttpServerRequestBody
 
 @[inline] def release (requestBody : HttpServerRequestBody) : IO Unit :=
   ffiRuntimeHttpServerRequestBodyReleaseImpl requestBody.runtime.handle requestBody.handle
+
+instance : Capnp.Async.Releasable HttpServerRequestBody where
+  release := HttpServerRequestBody.release
 
 end HttpServerRequestBody
 
@@ -4532,6 +4614,9 @@ namespace HttpServerResponseBody
 @[inline] def release (responseBody : HttpServerResponseBody) : IO Unit :=
   ffiRuntimeHttpServerResponseBodyReleaseImpl responseBody.runtime.handle responseBody.handle
 
+instance : Capnp.Async.Releasable HttpServerResponseBody where
+  release := HttpServerResponseBody.release
+
 end HttpServerResponseBody
 
 namespace Stream
@@ -4566,6 +4651,14 @@ class WritableRef (σ : Type) where
   let promise ← readStart stream minBytes maxBytes
   promise.awaitCopyAsTask
 
+@[inline] def readAsPromiseRef [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise BytesRef) := do
+  pure (Capnp.Async.Promise.ofTask (← readAsTaskRef stream minBytes maxBytes))
+
+@[inline] def readAsPromise [ReadableRef σ] (stream : σ) (minBytes maxBytes : UInt32) :
+    IO (Capnp.Async.Promise ByteArray) := do
+  pure (Capnp.Async.Promise.ofTask (← readAsTask stream minBytes maxBytes))
+
 @[inline] def writeRef [WritableRef σ] (stream : σ) (bytes : BytesRef) : IO Unit :=
   WritableRef.writeRef stream bytes
 
@@ -4587,6 +4680,14 @@ class WritableRef (σ : Type) where
     IO (Task (Except IO.Error Unit)) := do
   let promise ← writeStart stream bytes
   promise.awaitAsTask
+
+@[inline] def writeAsPromiseRef [WritableRef σ] (stream : σ) (bytes : BytesRef) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← writeAsTaskRef stream bytes))
+
+@[inline] def writeAsPromise [WritableRef σ] (stream : σ) (bytes : ByteArray) :
+    IO (Capnp.Async.Promise Unit) := do
+  pure (Capnp.Async.Promise.ofTask (← writeAsTask stream bytes))
 
 instance : ReadableRef Connection where
   readRef := Connection.readRef
@@ -4618,6 +4719,9 @@ namespace WebSocket
 
 @[inline] def release (webSocket : WebSocket) : IO Unit :=
   ffiRuntimeWebSocketReleaseImpl webSocket.runtime.handle webSocket.handle
+
+instance : Capnp.Async.Releasable WebSocket where
+  release := WebSocket.release
 
 @[inline] def sendTextStart (webSocket : WebSocket) (text : String) : IO PromiseRef := do
   return {
