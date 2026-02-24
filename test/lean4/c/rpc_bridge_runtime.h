@@ -86,12 +86,24 @@ std::pair<bool, std::string> kjAsyncTaskSetTakeLastErrorInline(RuntimeLoop& runt
 std::shared_ptr<RawCallCompletion> enqueueRawCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
+std::shared_ptr<RawCallCompletion> enqueueRawCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps);
 std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
+std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps);
 std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps);
+std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps);
 std::shared_ptr<RawCallCompletion> enqueueAwaitPendingCall(RuntimeLoop& runtime,
                                                            uint32_t pendingCallId);
 std::shared_ptr<UnitCompletion> enqueueReleasePendingCall(RuntimeLoop& runtime,

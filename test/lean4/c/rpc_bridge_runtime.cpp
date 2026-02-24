@@ -486,6 +486,25 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RawCallCompletion> enqueueRawCallData(
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, const uint8_t* requestData,
+      size_t requestSize, std::shared_ptr<const void> requestOwner,
+      std::vector<uint32_t> requestCaps) {
+    auto completion = std::make_shared<RawCallCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(
+          QueuedRawCallData{target, interfaceId, methodId, requestData, requestSize,
+                            std::move(requestOwner), std::move(requestCaps), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
       uint32_t target, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
@@ -503,6 +522,25 @@ class RuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCallData(
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, const uint8_t* requestData,
+      size_t requestSize, std::shared_ptr<const void> requestOwner,
+      std::vector<uint32_t> requestCaps) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedStartPendingCallData{
+          target, interfaceId, methodId, requestData, requestSize, std::move(requestOwner),
+          std::move(requestCaps), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
   std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCall(
       uint32_t target, uint64_t interfaceId, uint16_t methodId, LeanByteArrayRef request,
       std::vector<uint32_t> requestCaps) {
@@ -515,6 +553,25 @@ class RuntimeLoop {
       }
       queue_.emplace_back(QueuedStartStreamingPendingCall{
           target, interfaceId, methodId, std::move(request), std::move(requestCaps), completion});
+    }
+    notifyWorker();
+    return completion;
+  }
+
+  std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCallData(
+      uint32_t target, uint64_t interfaceId, uint16_t methodId, const uint8_t* requestData,
+      size_t requestSize, std::shared_ptr<const void> requestOwner,
+      std::vector<uint32_t> requestCaps) {
+    auto completion = std::make_shared<RegisterTargetCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeRegisterFailure(completion, "Capnp.Rpc runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedStartStreamingPendingCallData{
+          target, interfaceId, methodId, requestData, requestSize, std::move(requestOwner),
+          std::move(requestCaps), completion});
     }
     notifyWorker();
     return completion;
@@ -2455,6 +2512,17 @@ class RuntimeLoop {
     std::shared_ptr<RawCallCompletion> completion;
   };
 
+  struct QueuedRawCallData {
+    uint32_t target;
+    uint64_t interfaceId;
+    uint16_t methodId;
+    const uint8_t* requestData = nullptr;
+    size_t requestSize = 0;
+    std::shared_ptr<const void> requestOwner;
+    std::vector<uint32_t> requestCaps;
+    std::shared_ptr<RawCallCompletion> completion;
+  };
+
   struct QueuedStartPendingCall {
     uint32_t target;
     uint64_t interfaceId;
@@ -2464,11 +2532,33 @@ class RuntimeLoop {
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
 
+  struct QueuedStartPendingCallData {
+    uint32_t target;
+    uint64_t interfaceId;
+    uint16_t methodId;
+    const uint8_t* requestData = nullptr;
+    size_t requestSize = 0;
+    std::shared_ptr<const void> requestOwner;
+    std::vector<uint32_t> requestCaps;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
   struct QueuedStartStreamingPendingCall {
     uint32_t target;
     uint64_t interfaceId;
     uint16_t methodId;
     LeanByteArrayRef request;
+    std::vector<uint32_t> requestCaps;
+    std::shared_ptr<RegisterTargetCompletion> completion;
+  };
+
+  struct QueuedStartStreamingPendingCallData {
+    uint32_t target;
+    uint64_t interfaceId;
+    uint16_t methodId;
+    const uint8_t* requestData = nullptr;
+    size_t requestSize = 0;
+    std::shared_ptr<const void> requestOwner;
     std::vector<uint32_t> requestCaps;
     std::shared_ptr<RegisterTargetCompletion> completion;
   };
@@ -3134,8 +3224,9 @@ class RuntimeLoop {
   };
 
   using QueuedOperation =
-      std::variant<QueuedRawCall, QueuedStartPendingCall, QueuedStartStreamingPendingCall,
-                   QueuedAwaitPendingCall,
+      std::variant<QueuedRawCall, QueuedRawCallData, QueuedStartPendingCall,
+                   QueuedStartPendingCallData, QueuedStartStreamingPendingCall,
+                   QueuedStartStreamingPendingCallData, QueuedAwaitPendingCall,
                    QueuedReleasePendingCall, QueuedGetPipelinedCap, QueuedStreamingCall,
                    QueuedTargetGetFd, QueuedTargetWhenResolved, QueuedTargetWhenResolvedStart,
                    QueuedTargetWhenResolvedPoll,
@@ -4182,6 +4273,7 @@ class RuntimeLoop {
     while (kjAsyncPromises_.find(promiseId) != kjAsyncPromises_.end()) {
       promiseId = nextKjAsyncPromiseId_++;
     }
+    retiredKjAsyncPromises_.erase(promiseId);
     kjAsyncPromises_.emplace(promiseId, std::move(promise));
     return promiseId;
   }
@@ -4196,22 +4288,40 @@ class RuntimeLoop {
   PendingUnitPromise takeKjAsyncPromise(uint32_t promiseId) {
     auto it = kjAsyncPromises_.find(promiseId);
     if (it == kjAsyncPromises_.end()) {
+      if (retiredKjAsyncPromises_.find(promiseId) != retiredKjAsyncPromises_.end()) {
+        throw std::runtime_error("KJ async promise id already consumed or released: " +
+                                 std::to_string(promiseId));
+      }
       throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
     }
     auto pending = kj::mv(it->second);
     kjAsyncPromises_.erase(it);
+    retiredKjAsyncPromises_.insert(promiseId);
     pending.canceler->release();
     return pending;
   }
 
   void awaitKjAsyncPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
-    auto pending = takeKjAsyncPromise(promiseId);
+    auto it = kjAsyncPromises_.find(promiseId);
+    if (it == kjAsyncPromises_.end()) {
+      if (retiredKjAsyncPromises_.find(promiseId) != retiredKjAsyncPromises_.end()) {
+        return;
+      }
+      throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
+    }
+    auto pending = kj::mv(it->second);
+    kjAsyncPromises_.erase(it);
+    retiredKjAsyncPromises_.insert(promiseId);
+    pending.canceler->release();
     kj::mv(pending.promise).wait(waitScope);
   }
 
   void cancelKjAsyncPromise(uint32_t promiseId) {
     auto it = kjAsyncPromises_.find(promiseId);
     if (it == kjAsyncPromises_.end()) {
+      if (retiredKjAsyncPromises_.find(promiseId) != retiredKjAsyncPromises_.end()) {
+        return;
+      }
       throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
     }
     it->second.canceler->cancel("Capnp.KjAsync promise canceled from Lean");
@@ -4220,9 +4330,13 @@ class RuntimeLoop {
   void releaseKjAsyncPromise(uint32_t promiseId) {
     auto it = kjAsyncPromises_.find(promiseId);
     if (it == kjAsyncPromises_.end()) {
+      if (retiredKjAsyncPromises_.find(promiseId) != retiredKjAsyncPromises_.end()) {
+        return;
+      }
       throw std::runtime_error("unknown KJ async promise id: " + std::to_string(promiseId));
     }
     kjAsyncPromises_.erase(it);
+    retiredKjAsyncPromises_.insert(promiseId);
   }
 
   uint32_t kjAsyncPromiseThenStart(uint32_t firstPromiseId, uint32_t secondPromiseId) {
@@ -6137,6 +6251,19 @@ class RuntimeLoop {
           } catch (...) {
             completeFailure(call.completion, "unknown exception in capnp_lean_rpc_raw_call");
           }
+        } else if (std::holds_alternative<QueuedRawCallData>(op)) {
+          auto call = std::get<QueuedRawCallData>(std::move(op));
+          try {
+            auto promise = processRawCall(call.target, call.interfaceId, call.methodId,
+                                          call.requestData, call.requestSize, call.requestCaps);
+            scheduleRawCallCompletion(kj::mv(promise), call.completion);
+          } catch (const kj::Exception& e) {
+            completeFailureKj(call.completion, e);
+          } catch (const std::exception& e) {
+            completeFailure(call.completion, e.what());
+          } catch (...) {
+            completeFailure(call.completion, "unknown exception in capnp_lean_rpc_raw_call");
+          }
         } else if (std::holds_alternative<QueuedStartPendingCall>(op)) {
           auto call = std::get<QueuedStartPendingCall>(std::move(op));
           try {
@@ -6144,6 +6271,22 @@ class RuntimeLoop {
                 startPendingCall(call.target, call.interfaceId, call.methodId, call.request.data(),
                                  call.request.size(),
                                  call.requestCaps);
+            completeRegisterSuccess(call.completion, pendingCallId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(call.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(call.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                call.completion,
+                "unknown exception in capnp_lean_rpc_runtime_start_call_with_caps");
+          }
+        } else if (std::holds_alternative<QueuedStartPendingCallData>(op)) {
+          auto call = std::get<QueuedStartPendingCallData>(std::move(op));
+          try {
+            auto pendingCallId =
+                startPendingCall(call.target, call.interfaceId, call.methodId, call.requestData,
+                                 call.requestSize, call.requestCaps);
             completeRegisterSuccess(call.completion, pendingCallId);
           } catch (const kj::Exception& e) {
             completeRegisterFailure(call.completion, describeKjException(e));
@@ -6162,6 +6305,22 @@ class RuntimeLoop {
                                           call.request.data(),
                                           call.request.size(),
                                           call.requestCaps);
+            completeRegisterSuccess(call.completion, pendingCallId);
+          } catch (const kj::Exception& e) {
+            completeRegisterFailure(call.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeRegisterFailure(call.completion, e.what());
+          } catch (...) {
+            completeRegisterFailure(
+                call.completion,
+                "unknown exception in capnp_lean_rpc_runtime_start_streaming_call_with_caps");
+          }
+        } else if (std::holds_alternative<QueuedStartStreamingPendingCallData>(op)) {
+          auto call = std::get<QueuedStartStreamingPendingCallData>(std::move(op));
+          try {
+            auto pendingCallId = startStreamingPendingCall(call.target, call.interfaceId,
+                                                           call.methodId, call.requestData,
+                                                           call.requestSize, call.requestCaps);
             completeRegisterSuccess(call.completion, pendingCallId);
           } catch (const kj::Exception& e) {
             completeRegisterFailure(call.completion, describeKjException(e));
@@ -7909,6 +8068,7 @@ class RuntimeLoop {
       registerPromises_.clear();
       unitPromises_.clear();
       kjAsyncPromises_.clear();
+      retiredKjAsyncPromises_.clear();
       kjAsyncTaskSets_.clear();
       promiseCapabilityFulfillers_.clear();
       heldPromiseCapabilityResolves_.clear();
@@ -7969,8 +8129,18 @@ class RuntimeLoop {
     for (auto& op : pending) {
       if (std::holds_alternative<QueuedRawCall>(op)) {
         completeFailure(std::get<QueuedRawCall>(op).completion, message);
+      } else if (std::holds_alternative<QueuedRawCallData>(op)) {
+        completeFailure(std::get<QueuedRawCallData>(op).completion, message);
       } else if (std::holds_alternative<QueuedStartPendingCall>(op)) {
         completeRegisterFailure(std::get<QueuedStartPendingCall>(op).completion, message);
+      } else if (std::holds_alternative<QueuedStartPendingCallData>(op)) {
+        completeRegisterFailure(std::get<QueuedStartPendingCallData>(op).completion, message);
+      } else if (std::holds_alternative<QueuedStartStreamingPendingCall>(op)) {
+        completeRegisterFailure(std::get<QueuedStartStreamingPendingCall>(op).completion,
+                                message);
+      } else if (std::holds_alternative<QueuedStartStreamingPendingCallData>(op)) {
+        completeRegisterFailure(std::get<QueuedStartStreamingPendingCallData>(op).completion,
+                                message);
       } else if (std::holds_alternative<QueuedAwaitPendingCall>(op)) {
         completeFailure(std::get<QueuedAwaitPendingCall>(op).completion, message);
       } else if (std::holds_alternative<QueuedReleasePendingCall>(op)) {
@@ -8274,6 +8444,7 @@ class RuntimeLoop {
   std::unordered_map<uint32_t, PendingRegisterPromise> registerPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> unitPromises_;
   std::unordered_map<uint32_t, PendingUnitPromise> kjAsyncPromises_;
+  std::unordered_set<uint32_t> retiredKjAsyncPromises_;
   std::unordered_map<uint32_t, kj::Own<RuntimeKjAsyncTaskSet>> kjAsyncTaskSets_;
   std::unordered_map<uint32_t, PendingPromiseCapability> promiseCapabilityFulfillers_;
   std::deque<HeldPromiseCapabilityResolve> heldPromiseCapabilityResolves_;
@@ -8463,6 +8634,14 @@ std::shared_ptr<RawCallCompletion> enqueueRawCall(
                                 std::move(requestCaps));
 }
 
+std::shared_ptr<RawCallCompletion> enqueueRawCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps) {
+  return runtime.enqueueRawCallData(target, interfaceId, methodId, requestData, requestSize,
+                                    std::move(requestOwner), std::move(requestCaps));
+}
+
 std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps) {
@@ -8470,11 +8649,29 @@ std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCall(
                                          std::move(requestCaps));
 }
 
+std::shared_ptr<RegisterTargetCompletion> enqueueStartPendingCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps) {
+  return runtime.enqueueStartPendingCallData(target, interfaceId, methodId, requestData,
+                                             requestSize, std::move(requestOwner),
+                                             std::move(requestCaps));
+}
+
 std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCall(
     RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
     LeanByteArrayRef request, std::vector<uint32_t> requestCaps) {
   return runtime.enqueueStartStreamingPendingCall(target, interfaceId, methodId, std::move(request),
                                                   std::move(requestCaps));
+}
+
+std::shared_ptr<RegisterTargetCompletion> enqueueStartStreamingPendingCallData(
+    RuntimeLoop& runtime, uint32_t target, uint64_t interfaceId, uint16_t methodId,
+    const uint8_t* requestData, size_t requestSize, std::shared_ptr<const void> requestOwner,
+    std::vector<uint32_t> requestCaps) {
+  return runtime.enqueueStartStreamingPendingCallData(
+      target, interfaceId, methodId, requestData, requestSize, std::move(requestOwner),
+      std::move(requestCaps));
 }
 
 std::shared_ptr<RawCallCompletion> enqueueAwaitPendingCall(RuntimeLoop& runtime,

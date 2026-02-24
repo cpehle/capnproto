@@ -328,8 +328,13 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_payload_ref_to_bytes(
       }
 
       lean_object* out = lean_alloc_ctor(0, 2, 0);
-      lean_ctor_set(out, 0, payloadRef.takeMessageBytes());
-      lean_ctor_set(out, 1, payloadRef.takeCapBytes());
+      if (payloadRef.hasLeanBytes()) {
+        lean_ctor_set(out, 0, payloadRef.takeMessageBytes());
+        lean_ctor_set(out, 1, payloadRef.takeCapBytes());
+      } else {
+        lean_ctor_set(out, 0, mkByteArrayCopy(payloadRef.messageData(), payloadRef.messageSize()));
+        lean_ctor_set(out, 1, mkByteArrayCopy(payloadRef.capData(), payloadRef.capSize()));
+      }
       return lean_io_result_mk_ok(out);
     } else {
       return mkIoUserError("unknown runtime payload ref id");
@@ -371,10 +376,19 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_call_with_payload_ref
         return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
       }
 
-      auto requestCaps = decodeCapTable(payloadRef.capBytes);
-      auto completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
-                                            retainByteArrayForQueue(payloadRef.messageBytes),
-                                            std::move(requestCaps));
+      auto requestCaps = decodeCapTable(payloadRef.capData(), payloadRef.capSize());
+      std::shared_ptr<rpc::RawCallCompletion> completion;
+      if (payloadRef.hasLeanBytes()) {
+        completion = rpc::enqueueRawCall(*runtime, target, interfaceId, methodId,
+                                         retainByteArrayForQueue(payloadRef.messageBytes),
+                                         std::move(requestCaps));
+      } else if (payloadRef.hasRawBytes()) {
+        completion = rpc::enqueueRawCallData(*runtime, target, interfaceId, methodId,
+                                             payloadRef.messageData(), payloadRef.messageSize(),
+                                             payloadRef.rawOwner(), std::move(requestCaps));
+      } else {
+        return mkIoUserError("runtime payload ref has no payload bytes");
+      }
       {
         std::unique_lock<std::mutex> lock(completion->mutex);
         completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -382,7 +396,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_call_with_payload_ref
           return mkIoUserError(completion->error);
         }
         uint32_t responseRefId =
-            registerRuntimePayloadRefFromRawCallResult(runtimeId, completion->result);
+            registerRuntimePayloadRefFromRawCallResult(runtimeId, std::move(completion->result));
         return lean_io_result_mk_ok(lean_box_uint32(responseRefId));
       }
     } else {
@@ -412,11 +426,19 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_call_with_paylo
         return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
       }
 
-      auto requestCaps = decodeCapTable(payloadRef.capBytes);
-      auto completion =
-          rpc::enqueueStartPendingCall(*runtime, target, interfaceId, methodId,
-                                       retainByteArrayForQueue(payloadRef.messageBytes),
-                                       std::move(requestCaps));
+      auto requestCaps = decodeCapTable(payloadRef.capData(), payloadRef.capSize());
+      std::shared_ptr<rpc::RegisterTargetCompletion> completion;
+      if (payloadRef.hasLeanBytes()) {
+        completion = rpc::enqueueStartPendingCall(
+            *runtime, target, interfaceId, methodId,
+            retainByteArrayForQueue(payloadRef.messageBytes), std::move(requestCaps));
+      } else if (payloadRef.hasRawBytes()) {
+        completion = rpc::enqueueStartPendingCallData(
+            *runtime, target, interfaceId, methodId, payloadRef.messageData(),
+            payloadRef.messageSize(), payloadRef.rawOwner(), std::move(requestCaps));
+      } else {
+        return mkIoUserError("runtime payload ref has no payload bytes");
+      }
       {
         std::unique_lock<std::mutex> lock(completion->mutex);
         completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -452,11 +474,19 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_start_streaming_call_
         return mkIoUserError("runtime payload ref belongs to a different Capnp.Rpc runtime");
       }
 
-      auto requestCaps = decodeCapTable(payloadRef.capBytes);
-      auto completion =
-          rpc::enqueueStartStreamingPendingCall(*runtime, target, interfaceId, methodId,
-                                                retainByteArrayForQueue(payloadRef.messageBytes),
-                                                std::move(requestCaps));
+      auto requestCaps = decodeCapTable(payloadRef.capData(), payloadRef.capSize());
+      std::shared_ptr<rpc::RegisterTargetCompletion> completion;
+      if (payloadRef.hasLeanBytes()) {
+        completion = rpc::enqueueStartStreamingPendingCall(
+            *runtime, target, interfaceId, methodId,
+            retainByteArrayForQueue(payloadRef.messageBytes), std::move(requestCaps));
+      } else if (payloadRef.hasRawBytes()) {
+        completion = rpc::enqueueStartStreamingPendingCallData(
+            *runtime, target, interfaceId, methodId, payloadRef.messageData(),
+            payloadRef.messageSize(), payloadRef.rawOwner(), std::move(requestCaps));
+      } else {
+        return mkIoUserError("runtime payload ref has no payload bytes");
+      }
       {
         std::unique_lock<std::mutex> lock(completion->mutex);
         completion->cv.wait(lock, [&completion]() { return completion->done; });
@@ -520,7 +550,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_pending_call_await_pa
         return mkIoUserError(completion->error);
       }
       uint32_t payloadRefId =
-          registerRuntimePayloadRefFromRawCallResult(runtimeId, completion->result);
+          registerRuntimePayloadRefFromRawCallResult(runtimeId, std::move(completion->result));
       return lean_io_result_mk_ok(lean_box_uint32(payloadRefId));
     }
   } catch (const kj::Exception& e) {
