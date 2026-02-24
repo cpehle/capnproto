@@ -1,12 +1,13 @@
 #include "rpc_bridge_runtime.h"
+#include "rpc_bridge_payload_ref.h"
 
-#include <atomic>
 #include <limits>
-#include <mutex>
 #include <stdexcept>
-#include <unordered_map>
 
 #if !defined(_WIN32)
+#include <arpa/inet.h>
+#include <cstring>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -36,139 +37,13 @@ using rpc::promiseCapabilityReleaseInline;
 using rpc::retainByteArrayForQueue;
 using rpc::shutdown;
 using rpc::unregisterRuntime;
+using capnp_lean_rpc_payload_ref::registerRuntimePayloadRef;
+using capnp_lean_rpc_payload_ref::registerRuntimePayloadRefFromRawCallResult;
+using capnp_lean_rpc_payload_ref::releaseRuntimePayloadRef;
+using capnp_lean_rpc_payload_ref::releaseRuntimePayloadRefsForRuntime;
+using capnp_lean_rpc_payload_ref::retainRuntimePayloadRef;
 
 namespace {
-
-struct RuntimePayloadRefEntry {
-  uint64_t runtimeId;
-  lean_object* messageBytes;
-  lean_object* capBytes;
-};
-
-struct RetainedRuntimePayloadRef {
-  uint64_t runtimeId = 0;
-  lean_object* messageBytes = nullptr;
-  lean_object* capBytes = nullptr;
-
-  RetainedRuntimePayloadRef() = default;
-
-  RetainedRuntimePayloadRef(uint64_t runtimeId, lean_object* messageBytes, lean_object* capBytes)
-      : runtimeId(runtimeId), messageBytes(messageBytes), capBytes(capBytes) {}
-
-  RetainedRuntimePayloadRef(const RetainedRuntimePayloadRef&) = delete;
-  RetainedRuntimePayloadRef& operator=(const RetainedRuntimePayloadRef&) = delete;
-
-  RetainedRuntimePayloadRef(RetainedRuntimePayloadRef&& other) noexcept
-      : runtimeId(other.runtimeId),
-        messageBytes(other.messageBytes),
-        capBytes(other.capBytes) {
-    other.messageBytes = nullptr;
-    other.capBytes = nullptr;
-  }
-
-  RetainedRuntimePayloadRef& operator=(RetainedRuntimePayloadRef&& other) noexcept {
-    if (this != &other) {
-      reset();
-      runtimeId = other.runtimeId;
-      messageBytes = other.messageBytes;
-      capBytes = other.capBytes;
-      other.messageBytes = nullptr;
-      other.capBytes = nullptr;
-    }
-    return *this;
-  }
-
-  ~RetainedRuntimePayloadRef() { reset(); }
-
-  void reset() {
-    if (messageBytes != nullptr) {
-      lean_dec(messageBytes);
-      messageBytes = nullptr;
-    }
-    if (capBytes != nullptr) {
-      lean_dec(capBytes);
-      capBytes = nullptr;
-    }
-  }
-
-  lean_object* takeMessageBytes() {
-    auto* out = messageBytes;
-    messageBytes = nullptr;
-    return out;
-  }
-
-  lean_object* takeCapBytes() {
-    auto* out = capBytes;
-    capBytes = nullptr;
-    return out;
-  }
-};
-
-std::mutex gRuntimePayloadRefsMutex;
-std::unordered_map<uint32_t, RuntimePayloadRefEntry> gRuntimePayloadRefs;
-std::atomic<uint32_t> gNextRuntimePayloadRefId{1};
-
-uint32_t allocateRuntimePayloadRefIdLocked() {
-  auto id = gNextRuntimePayloadRefId.fetch_add(1, std::memory_order_relaxed);
-  while (id == 0 || gRuntimePayloadRefs.find(id) != gRuntimePayloadRefs.end()) {
-    id = gNextRuntimePayloadRefId.fetch_add(1, std::memory_order_relaxed);
-  }
-  return id;
-}
-
-uint32_t registerRuntimePayloadRef(uint64_t runtimeId, lean_object* messageBytes,
-                                   lean_object* capBytes, bool retainInputs) {
-  if (messageBytes == nullptr || capBytes == nullptr) {
-    throw std::runtime_error("runtime payload ref requires message and cap byte arrays");
-  }
-  lean_mark_mt(messageBytes);
-  lean_mark_mt(capBytes);
-  if (retainInputs) {
-    lean_inc(messageBytes);
-    lean_inc(capBytes);
-  }
-
-  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
-  uint32_t id = allocateRuntimePayloadRefIdLocked();
-  gRuntimePayloadRefs.emplace(id, RuntimePayloadRefEntry{runtimeId, messageBytes, capBytes});
-  return id;
-}
-
-uint32_t registerRuntimePayloadRefFromRawCallResult(uint64_t runtimeId,
-                                                    const rpc::RawCallResult& result) {
-  auto messageBytes = mkByteArrayCopy(result.responseData(), result.responseSize());
-  auto capBytes = mkByteArrayCopy(result.responseCaps.data(), result.responseCaps.size());
-  return registerRuntimePayloadRef(runtimeId, messageBytes, capBytes, false);
-}
-
-kj::Maybe<RetainedRuntimePayloadRef> retainRuntimePayloadRef(uint32_t payloadRefId) {
-  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
-  auto it = gRuntimePayloadRefs.find(payloadRefId);
-  if (it == gRuntimePayloadRefs.end()) {
-    return kj::none;
-  }
-  lean_inc(it->second.messageBytes);
-  lean_inc(it->second.capBytes);
-  return RetainedRuntimePayloadRef{it->second.runtimeId, it->second.messageBytes,
-                                   it->second.capBytes};
-}
-
-bool releaseRuntimePayloadRef(uint64_t runtimeId, uint32_t payloadRefId, std::string& errorOut) {
-  std::lock_guard<std::mutex> lock(gRuntimePayloadRefsMutex);
-  auto it = gRuntimePayloadRefs.find(payloadRefId);
-  if (it == gRuntimePayloadRefs.end()) {
-    errorOut = "unknown runtime payload ref id";
-    return false;
-  }
-  if (it->second.runtimeId != runtimeId) {
-    errorOut = "runtime payload ref belongs to a different Capnp.Rpc runtime";
-    return false;
-  }
-  lean_dec(it->second.messageBytes);
-  lean_dec(it->second.capBytes);
-  gRuntimePayloadRefs.erase(it);
-  return true;
-}
 
 lean_obj_res mkIoOkRawCallResult(const rpc::RawCallResult& result) {
   auto responseObj = mkByteArrayCopy(result.responseData(), result.responseSize());
@@ -2446,6 +2321,7 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_runtime_release(uint64_t runt
     if (unregisteredRuntime) {
       rpc::shutdown(*unregisteredRuntime);
     }
+    releaseRuntimePayloadRefsForRuntime(runtimeId);
 
     lean_obj_res ok;
     mkIoOkUnit(ok);
@@ -3398,6 +3274,102 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_new_socketpair() {
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_rpc_test_new_socketpair");
+  }
+#endif
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_new_listen_socket_fd() {
+#if defined(_WIN32)
+  return mkIoUserError("capnp_lean_rpc_test_new_listen_socket_fd is not supported on Windows");
+#else
+  int fd = -1;
+  try {
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+      throw std::runtime_error("socket() failed in capnp_lean_rpc_test_new_listen_socket_fd");
+    }
+
+    int reuse = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(0);
+    if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+      throw std::runtime_error("bind() failed in capnp_lean_rpc_test_new_listen_socket_fd");
+    }
+    if (listen(fd, SOMAXCONN) != 0) {
+      throw std::runtime_error("listen() failed in capnp_lean_rpc_test_new_listen_socket_fd");
+    }
+
+    sockaddr_in bound;
+    std::memset(&bound, 0, sizeof(bound));
+    socklen_t boundLen = sizeof(bound);
+    if (getsockname(fd, reinterpret_cast<sockaddr*>(&bound), &boundLen) != 0) {
+      throw std::runtime_error("getsockname() failed in capnp_lean_rpc_test_new_listen_socket_fd");
+    }
+
+    auto pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, lean_box_uint32(static_cast<uint32_t>(fd)));
+    lean_ctor_set(pair, 1, lean_box_uint32(static_cast<uint32_t>(ntohs(bound.sin_port))));
+    return lean_io_result_mk_ok(pair);
+  } catch (const std::exception& e) {
+    if (fd >= 0) {
+      close(fd);
+    }
+    return mkIoUserError(e.what());
+  } catch (...) {
+    if (fd >= 0) {
+      close(fd);
+    }
+    return mkIoUserError("unknown exception in capnp_lean_rpc_test_new_listen_socket_fd");
+  }
+#endif
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_rpc_test_new_datagram_socket_fd() {
+#if defined(_WIN32)
+  return mkIoUserError("capnp_lean_rpc_test_new_datagram_socket_fd is not supported on Windows");
+#else
+  int fd = -1;
+  try {
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+      throw std::runtime_error("socket() failed in capnp_lean_rpc_test_new_datagram_socket_fd");
+    }
+
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(0);
+    if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+      throw std::runtime_error("bind() failed in capnp_lean_rpc_test_new_datagram_socket_fd");
+    }
+
+    sockaddr_in bound;
+    std::memset(&bound, 0, sizeof(bound));
+    socklen_t boundLen = sizeof(bound);
+    if (getsockname(fd, reinterpret_cast<sockaddr*>(&bound), &boundLen) != 0) {
+      throw std::runtime_error("getsockname() failed in capnp_lean_rpc_test_new_datagram_socket_fd");
+    }
+
+    auto pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, lean_box_uint32(static_cast<uint32_t>(fd)));
+    lean_ctor_set(pair, 1, lean_box_uint32(static_cast<uint32_t>(ntohs(bound.sin_port))));
+    return lean_io_result_mk_ok(pair);
+  } catch (const std::exception& e) {
+    if (fd >= 0) {
+      close(fd);
+    }
+    return mkIoUserError(e.what());
+  } catch (...) {
+    if (fd >= 0) {
+      close(fd);
+    }
+    return mkIoUserError("unknown exception in capnp_lean_rpc_test_new_datagram_socket_fd");
   }
 #endif
 }
