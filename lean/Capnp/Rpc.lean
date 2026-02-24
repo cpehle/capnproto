@@ -1662,12 +1662,19 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     handle := (← ffiRuntimePayloadRefFromBytesImpl runtime.handle request requestCaps)
   }
 
+@[inline] def payloadRefFromBytesCopy (runtime : Runtime)
+    (request : ByteArray) (requestCaps : ByteArray := ByteArray.empty) : IO RuntimePayloadRef :=
+  runtime.payloadRefFromBytes request requestCaps
+
 @[inline] def payloadRefFromPayload (runtime : Runtime)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePayloadRef := do
   runtime.payloadRefFromBytes payload.toBytes payload.capTableBytes
 
 @[inline] def payloadRefToBytes (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
   ffiRuntimePayloadRefToBytesImpl payloadRef.runtime.handle payloadRef.handle
+
+@[inline] def payloadRefToBytesCopy (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
+  payloadRefToBytes payloadRef
 
 @[inline] def payloadRefDecode (payloadRef : RuntimePayloadRef) : IO Payload := do
   let (responseBytes, responseCaps) ← payloadRefToBytes payloadRef
@@ -1700,6 +1707,10 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ffiRawCallWithCapsOnRuntimeOutcomeImpl runtime.handle target method.interfaceId method.methodId
     requestBytes requestCaps
 
+@[inline] def callOutcomeCopy (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome :=
+  runtime.callOutcome target method payload
+
 @[inline] def callResult (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Except RemoteException Payload) := do
   match (← runtime.callOutcome target method payload) with
@@ -1707,6 +1718,11 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
       return .ok (← decodePayloadChecked responseBytes responseCaps)
   | .error ex =>
       return .error ex
+
+@[inline] def callResultCopy (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) :
+    IO (Except RemoteException Payload) :=
+  runtime.callResult target method payload
 
 @[inline] def startCall (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef := do
@@ -1719,6 +1735,10 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
         method.methodId requestBytes requestCaps)
     }
   }
+
+@[inline] def startCallCopy (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef :=
+  runtime.startCall target method payload
 
 @[inline] def startCallWithPayloadRef (runtime : Runtime) (target : Client) (method : Method)
     (payloadRef : RuntimePayloadRef) : IO RuntimePendingCallRef := do
@@ -1742,6 +1762,10 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
         method.methodId requestBytes requestCaps)
     }
   }
+
+@[inline] def startStreamingCallCopy (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePendingCallRef :=
+  runtime.startStreamingCall target method payload
 
 @[inline] def startStreamingCallWithPayloadRef
     (runtime : Runtime) (target : Client) (method : Method)
@@ -2476,6 +2500,9 @@ namespace RuntimePayloadRef
 
 @[inline] def toBytes (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
   Runtime.payloadRefToBytes payloadRef
+
+@[inline] def toBytesCopy (payloadRef : RuntimePayloadRef) : IO (ByteArray × ByteArray) :=
+  Runtime.payloadRefToBytesCopy payloadRef
 
 @[inline] def decode (payloadRef : RuntimePayloadRef) : IO Payload :=
   Runtime.payloadRefDecode payloadRef
@@ -3288,14 +3315,27 @@ namespace RuntimeM
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RawCallOutcome := do
   Runtime.callOutcome (← runtime) target method payload
 
+@[inline] def callOutcomeCopy (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RawCallOutcome := do
+  Runtime.callOutcomeCopy (← runtime) target method payload
+
 @[inline] def callResult (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM (Except RemoteException Payload) := do
   Runtime.callResult (← runtime) target method payload
+
+@[inline] def callResultCopy (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM (Except RemoteException Payload) := do
+  Runtime.callResultCopy (← runtime) target method payload
 
 @[inline] def payloadRefFromBytes
     (request : ByteArray) (requestCaps : ByteArray := ByteArray.empty) :
     RuntimeM RuntimePayloadRef := do
   Runtime.payloadRefFromBytes (← runtime) request requestCaps
+
+@[inline] def payloadRefFromBytesCopy
+    (request : ByteArray) (requestCaps : ByteArray := ByteArray.empty) :
+    RuntimeM RuntimePayloadRef := do
+  Runtime.payloadRefFromBytesCopy (← runtime) request requestCaps
 
 @[inline] def payloadRefFromPayload
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePayloadRef := do
@@ -3304,6 +3344,11 @@ namespace RuntimeM
 @[inline] def payloadRefToBytes (payloadRef : RuntimePayloadRef) : RuntimeM (ByteArray × ByteArray) := do
   ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
   Runtime.payloadRefToBytes payloadRef
+
+@[inline] def payloadRefToBytesCopy
+    (payloadRef : RuntimePayloadRef) : RuntimeM (ByteArray × ByteArray) := do
+  ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
+  Runtime.payloadRefToBytesCopy payloadRef
 
 @[inline] def payloadRefDecode (payloadRef : RuntimePayloadRef) : RuntimeM Payload := do
   ensureCurrentRuntime payloadRef.runtime "RuntimePayloadRef"
@@ -3328,6 +3373,10 @@ namespace RuntimeM
 @[inline] def startCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
   Runtime.startCall (← runtime) target method payload
+
+@[inline] def startCallCopy (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
+  Runtime.startCallCopy (← runtime) target method payload
 
 @[inline] def startCallWithPayloadRef (target : Client) (method : Method)
     (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePendingCallRef := do
