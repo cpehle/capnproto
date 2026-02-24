@@ -3781,9 +3781,10 @@ namespace Interop
     ffiCppCallOneShotImpl address portHint method.interfaceId method.methodId requestBytes requestCaps
   decodePayloadChecked responseBytes responseCaps
 
-@[inline] def cppCallWithAccept (runtime : Runtime) (server : RuntimeServerRef) (listener : Listener)
-    (address : String) (method : Method)
-    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
+@[inline] def cppCallWithAcceptPayloadRef (runtime : Runtime) (server : RuntimeServerRef)
+    (listener : Listener) (address : String) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
+    IO RuntimePayloadRef := do
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
   ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := payload.toBytes
@@ -3791,13 +3792,19 @@ namespace Interop
   let (responseBytes, responseCaps) ←
     ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle.raw listener.raw
       address portHint method.interfaceId method.methodId requestBytes requestCaps
-  decodePayloadChecked responseBytes responseCaps
+  runtime.payloadRefFromBytes responseBytes responseCaps
 
-@[inline] def cppCallPipelinedWithAccept (runtime : Runtime) (server : RuntimeServerRef)
+@[inline] def cppCallWithAccept (runtime : Runtime) (server : RuntimeServerRef) (listener : Listener)
+    (address : String) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
+  let responseRef ← cppCallWithAcceptPayloadRef runtime server listener address method payload portHint
+  responseRef.decodeAndRelease
+
+@[inline] def cppCallPipelinedWithAcceptPayloadRef (runtime : Runtime) (server : RuntimeServerRef)
     (listener : Listener) (address : String) (method : Method)
     (request : Payload := Capnp.emptyRpcEnvelope)
     (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
-    IO Payload := do
+    IO RuntimePayloadRef := do
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
   ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
   let requestBytes := request.toBytes
@@ -3807,7 +3814,16 @@ namespace Interop
   let (responseBytes, responseCaps) ← ffiRuntimeCppCallPipelinedWithAcceptImpl
     runtime.handle server.handle.raw listener.raw address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
-  decodePayloadChecked responseBytes responseCaps
+  runtime.payloadRefFromBytes responseBytes responseCaps
+
+@[inline] def cppCallPipelinedWithAccept (runtime : Runtime) (server : RuntimeServerRef)
+    (listener : Listener) (address : String) (method : Method)
+    (request : Payload := Capnp.emptyRpcEnvelope)
+    (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
+    IO Payload := do
+  let responseRef ← cppCallPipelinedWithAcceptPayloadRef
+    runtime server listener address method request pipelinedRequest portHint
+  responseRef.decodeAndRelease
 
 @[inline] def cppServeEchoOnce (address : String) (method : Method)
     (portHint : UInt32 := 0) : IO Payload := do

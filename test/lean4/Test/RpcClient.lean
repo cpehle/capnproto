@@ -2926,8 +2926,12 @@ def testInteropCppClientCallsLeanServer : IO Unit := do
     let listener ← server.listen address
     let response ← Capnp.Rpc.Interop.cppCallWithAccept runtime server listener address Echo.fooMethod
       payload
+    let responseRef ← Capnp.Rpc.Interop.cppCallWithAcceptPayloadRef
+      runtime server listener address Echo.fooMethod payload
+    let decodedRefResponse ← responseRef.decodeAndRelease
 
     assertEqual response.capTable.caps.size 0
+    assertEqual decodedRefResponse.capTable.caps.size 0
     let method := (← seenMethod.get)
     assertEqual method.interfaceId Echo.interfaceId
     assertEqual method.methodId Echo.fooMethodId
