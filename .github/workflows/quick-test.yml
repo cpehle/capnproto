@@ -57,17 +57,6 @@ jobs:
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
-      - name: Validate Lean4 RPC parity matrix
-        if: matrix.driver == 'super-test' && matrix.clang == 20
-        run: |
-            python3 test/lean4/scripts/validate_parity_matrix.py
-      - name: Lean4 RPC/KjAsync parity-critical tests
-        if: matrix.driver == 'super-test' && matrix.clang == 20
-        run: |
-            curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
-            . "$HOME/.elan/env"
-            cd test/lean4
-            lake test -- --parity-critical
   Linux-clang-sanitizers:
     runs-on: ubuntu-24.04
     strategy:
@@ -96,13 +85,32 @@ jobs:
       - name: super-test
         run: |
             ./super-test.sh quick
-      - name: Validate Lean4 RPC parity matrix
+  Lean4-Rpc-Parity:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - name: install Linux dependencies
+        if: runner.os == 'Linux'
+        run: eval "$INSTALL_DEPS" && install_deps 20
+      - name: install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+            brew install autoconf automake libtool pkg-config
+      - name: validate Lean4 RPC parity matrix
         run: |
             python3 test/lean4/scripts/validate_parity_matrix.py
-      - name: Lean4 RPC/KjAsync parity-critical tests
+      - name: run Lean4 RPC/KjAsync parity-critical tests
         run: |
             curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
             . "$HOME/.elan/env"
+            if [ "$RUNNER_OS" = "Linux" ]; then
+              export CC=clang-20
+              export CXX=clang++-20
+            fi
             cd test/lean4
             lake test -- --parity-critical
   MSVC:
