@@ -550,6 +550,7 @@ def testRuntimeBootstrapTargetHelpers : IO Unit := do
     let server ← runtime.newServer bootstrap
     let listener ← server.listen address
     let baselineTargets := (← runtime.targetCount)
+    let baselineClients := (← runtime.clientCount)
 
     let acceptTaskA ← IO.asTask (server.accept listener)
     let responseA ← runtime.withBootstrapTarget address (fun target => do
@@ -559,30 +560,45 @@ def testRuntimeBootstrapTargetHelpers : IO Unit := do
     | .error err => throw err
     assertEqual responseA.capTable.caps.size 0
     assertEqual (← runtime.targetCount) baselineTargets
+    assertEqual (← runtime.clientCount) baselineClients
 
     let acceptTaskB ← IO.asTask (server.accept listener)
-    let responseB ← Capnp.Rpc.RuntimeM.run runtime do
-      Capnp.Rpc.RuntimeM.withBootstrapTarget address (fun target => do
-        Echo.callFooM target payload)
+    let responseB ← runtime.withBootstrapClientTarget address (fun client target => do
+      let _ ← client.queueSize
+      Echo.callFoo runtime.backend target payload)
     match (← IO.wait acceptTaskB) with
     | .ok _ => pure ()
     | .error err => throw err
     assertEqual responseB.capTable.caps.size 0
     assertEqual (← runtime.targetCount) baselineTargets
+    assertEqual (← runtime.clientCount) baselineClients
 
     let acceptTaskC ← IO.asTask (server.accept listener)
-    let (clientC, target) ← runtime.newBootstrapTarget address
-    let responseC ←
-      try
-        runtime.withTarget target (fun scopedTarget => do
-          Echo.callFoo runtime.backend scopedTarget payload)
-      finally
-        clientC.release
+    let responseC ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.withBootstrapClientTarget address (fun client target => do
+        let _ ← Capnp.Rpc.RuntimeM.clientQueueSize client
+        Echo.callFooM target payload)
     match (← IO.wait acceptTaskC) with
     | .ok _ => pure ()
     | .error err => throw err
     assertEqual responseC.capTable.caps.size 0
     assertEqual (← runtime.targetCount) baselineTargets
+    assertEqual (← runtime.clientCount) baselineClients
+
+    let acceptTaskD ← IO.asTask (server.accept listener)
+    let (clientD, target) ← runtime.newBootstrapTarget address
+    let responseD ←
+      try
+        runtime.withTarget target (fun scopedTarget => do
+          Echo.callFoo runtime.backend scopedTarget payload)
+      finally
+        clientD.release
+    match (← IO.wait acceptTaskD) with
+    | .ok _ => pure ()
+    | .error err => throw err
+    assertEqual responseD.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) baselineTargets
+    assertEqual (← runtime.clientCount) baselineClients
 
     runtime.releaseListener listener
     server.release

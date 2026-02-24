@@ -1632,12 +1632,16 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
   pure (client, target)
 
-@[inline] def withBootstrapTarget (runtime : Runtime) (address : String)
-    (action : Client -> IO α) (portHint : UInt32 := 0) : IO α := do
+@[inline] def withBootstrapClientTarget (runtime : Runtime) (address : String)
+    (action : RuntimeClientRef -> Client -> IO α) (portHint : UInt32 := 0) : IO α := do
   runtime.withClient address (fun client => do
     let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
-    runtime.withTarget target action
+    runtime.withTarget target (fun scopedTarget => action client scopedTarget)
   ) portHint
+
+@[inline] def withBootstrapTarget (runtime : Runtime) (address : String)
+    (action : Client -> IO α) (portHint : UInt32 := 0) : IO α := do
+  runtime.withBootstrapClientTarget address (fun _ target => action target) portHint
 
 @[inline] def withServer (runtime : Runtime) (bootstrap : Client)
     (action : RuntimeServerRef -> IO α) : IO α := do
@@ -3329,12 +3333,17 @@ namespace RuntimeM
     RuntimeM (RuntimeClientRef × Client) := do
   Runtime.newBootstrapTarget (← runtime) address portHint
 
-@[inline] def withBootstrapTarget (address : String)
-    (action : Client -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
+@[inline] def withBootstrapClientTarget (address : String)
+    (action : RuntimeClientRef -> Client -> RuntimeM α)
+    (portHint : UInt32 := 0) : RuntimeM α := do
   withClient address (fun client => do
     let target ← clientBootstrap client
-    withTarget target action
+    withTarget target (fun scopedTarget => action client scopedTarget)
   ) portHint
+
+@[inline] def withBootstrapTarget (address : String)
+    (action : Client -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
+  withBootstrapClientTarget address (fun _ target => action target) portHint
 
 @[inline] def withServer (bootstrap : Client)
     (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
