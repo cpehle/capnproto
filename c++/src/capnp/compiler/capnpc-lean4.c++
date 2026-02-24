@@ -4108,6 +4108,14 @@ private:
     auto restoreSturdyRefAsTaskMName = uniqueName("restoreSturdyRefAsTaskM", usedNames);
     auto restoreSturdyRefAsPromiseName = uniqueName("restoreSturdyRefAsPromise", usedNames);
     auto restoreSturdyRefAsPromiseMName = uniqueName("restoreSturdyRefAsPromiseM", usedNames);
+    auto newPromiseCapabilityName = uniqueName("newPromiseCapability", usedNames);
+    auto newPromiseCapabilityMName = uniqueName("newPromiseCapabilityM", usedNames);
+    auto promiseCapabilityFulfillName = uniqueName("promiseCapabilityFulfill", usedNames);
+    auto promiseCapabilityFulfillMName = uniqueName("promiseCapabilityFulfillM", usedNames);
+    auto promiseCapabilityRejectName = uniqueName("promiseCapabilityReject", usedNames);
+    auto promiseCapabilityRejectMName = uniqueName("promiseCapabilityRejectM", usedNames);
+    auto promiseCapabilityReleaseName = uniqueName("promiseCapabilityRelease", usedNames);
+    auto promiseCapabilityReleaseMName = uniqueName("promiseCapabilityReleaseM", usedNames);
 
     out += "\n";
     out += "def ";
@@ -4175,6 +4183,61 @@ private:
     out += name.cStr();
     out += ") := do\n";
     out += "  Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsPromise peer sturdyRef\n";
+
+    out += "\n";
+    out += "def ";
+    out += newPromiseCapabilityName;
+    out += " (runtime : Capnp.Rpc.Runtime) : IO (";
+    out += name.cStr();
+    out += " × Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) := do\n";
+    out += "  runtime.newPromiseCapability\n";
+
+    out += "def ";
+    out += newPromiseCapabilityMName;
+    out += " : Capnp.Rpc.RuntimeM (";
+    out += name.cStr();
+    out += " × Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) := do\n";
+    out += "  Capnp.Rpc.RuntimeM.newPromiseCapability\n";
+
+    out += "def ";
+    out += promiseCapabilityFulfillName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) (target : ";
+    out += name.cStr();
+    out += ") : IO Unit := do\n";
+    out += "  fulfiller.fulfill target\n";
+
+    out += "def ";
+    out += promiseCapabilityFulfillMName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) (target : ";
+    out += name.cStr();
+    out += ") : Capnp.Rpc.RuntimeM Unit := do\n";
+    out += "  Capnp.Rpc.RuntimeM.promiseCapabilityFulfill fulfiller target\n";
+
+    out += "def ";
+    out += promiseCapabilityRejectName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef)\n";
+    out += "    (type : Capnp.Rpc.RemoteExceptionType)\n";
+    out += "    (message : String := \"\")\n";
+    out += "    (detail : ByteArray := ByteArray.empty) : IO Unit := do\n";
+    out += "  fulfiller.reject type message detail\n";
+
+    out += "def ";
+    out += promiseCapabilityRejectMName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef)\n";
+    out += "    (type : Capnp.Rpc.RemoteExceptionType)\n";
+    out += "    (message : String := \"\")\n";
+    out += "    (detail : ByteArray := ByteArray.empty) : Capnp.Rpc.RuntimeM Unit := do\n";
+    out += "  Capnp.Rpc.RuntimeM.promiseCapabilityReject fulfiller type message detail\n";
+
+    out += "def ";
+    out += promiseCapabilityReleaseName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) : IO Unit := do\n";
+    out += "  fulfiller.release\n";
+
+    out += "def ";
+    out += promiseCapabilityReleaseMName;
+    out += " (fulfiller : Capnp.Rpc.RuntimePromiseCapabilityFulfillerRef) : Capnp.Rpc.RuntimeM Unit := do\n";
+    out += "  Capnp.Rpc.RuntimeM.promiseCapabilityRelease fulfiller\n";
 
     auto handlerTypeName = uniqueName("Handler", usedNames);
     auto serverTypeName = uniqueName("Server", usedNames);
