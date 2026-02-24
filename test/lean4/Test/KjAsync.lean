@@ -26,6 +26,35 @@ private def mkPayload : ByteArray :=
     |>.push (UInt8.ofNat 107)
     |>.push (UInt8.ofNat 106)
 
+private def defaultNetworkTimeoutMillis : UInt32 :=
+  UInt32.ofNat 2000
+
+private def awaitConnectionWithin (label : String)
+    (pending : Capnp.KjAsync.ConnectionPromiseRef)
+    (timeoutMillis : UInt32 := defaultNetworkTimeoutMillis) :
+    IO Capnp.KjAsync.Connection := do
+  match (← pending.awaitWithTimeoutMillis? timeoutMillis) with
+  | some connection =>
+    pure connection
+  | none =>
+    throw (IO.userError s!"{label}: timeout waiting for connection")
+
+private def awaitTaskWithin {α : Type} (runtime : Capnp.KjAsync.Runtime) (label : String)
+    (task : Task (Except IO.Error α))
+    (timeoutMillis : UInt32 := defaultNetworkTimeoutMillis) : IO α := do
+  let timeoutTask : Task (Except IO.Error (Option α)) ← IO.asTask do
+    runtime.sleepMillis timeoutMillis
+    pure (none : Option α)
+  let wrappedTask : Task (Except IO.Error (Option α)) :=
+    Task.map (fun result => result.map some) task
+  match (← IO.waitAny [wrappedTask, timeoutTask]) with
+  | .ok (some value) =>
+    pure value
+  | .ok none =>
+    throw (IO.userError s!"{label}: timeout")
+  | .error err =>
+    throw (IO.userError s!"{label}: {err}")
+
 private def safeReleasePromise (promise : Capnp.KjAsync.PromiseRef) : IO Unit := do
   try
     promise.release
@@ -815,25 +844,20 @@ def testKjAsyncNetworkRoundtrip : IO Unit := do
         pure ()
 
       let listener ← serverRuntime.listen address
-      let serverTask ← IO.asTask do
-        let serverConn ← listener.accept
-        let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
-        serverConn.write req
-        serverConn.shutdownWrite
-        serverConn.release
-
-      let clientConn ← clientRuntime.connect address
+      let serverConnTask ← IO.asTask listener.accept
+      let clientConnTask ← IO.asTask (clientRuntime.connect address)
+      let serverConn ← awaitTaskWithin serverRuntime "listener.accept" serverConnTask
+      let clientConn ← awaitTaskWithin clientRuntime "Runtime.connect" clientConnTask
       let payload := mkPayload
       clientConn.write payload
       clientConn.shutdownWrite
+      let req ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+      serverConn.write req
+      serverConn.shutdownWrite
       let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
       assertEqual echoed payload
       clientConn.release
-
-      let serverResult ← IO.wait serverTask
-      match serverResult with
-      | Except.ok _ => pure ()
-      | Except.error err => throw (IO.userError s!"server task failed: {err}")
+      serverConn.release
 
       listener.release
     finally
@@ -866,9 +890,10 @@ def testKjAsyncNetworkAddressRoundtripAndDatagramBind : IO Unit := do
 
       let listener ← serverAddressClone.listen
       let clientAddress ← clientRuntime.parseAddress unixAddress
-      let connectPromise ← clientAddress.connectStart
-      let serverConn ← listener.accept
-      let clientConn ← connectPromise.await
+      let serverConnTask ← IO.asTask listener.accept
+      let clientConnTask ← IO.asTask clientAddress.connect
+      let serverConn ← awaitTaskWithin serverRuntime "NetworkAddress.accept" serverConnTask
+      let clientConn ← awaitTaskWithin clientRuntime "NetworkAddress.connect" clientConnTask
 
       let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 86))
       clientConn.write payload
@@ -929,9 +954,8 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncStart : IO Unit := do
       let listener ← runtime.listen address
       let acceptPromise ← listener.acceptStart
       let connectPromise ← runtime.connectStart address
-
-      let serverConn ← acceptPromise.await
-      let clientConn ← connectPromise.await
+      let serverConn ← awaitConnectionWithin "Listener.acceptStart" acceptPromise
+      let clientConn ← awaitConnectionWithin "Runtime.connectStart" connectPromise
 
       let payload := mkPayload
       clientConn.write payload
@@ -971,9 +995,10 @@ def testKjAsyncNetworkRoundtripSingleRuntimeAsyncPromise : IO Unit := do
       let listener ← runtime.listen address
       let acceptPromise ← listener.acceptAsPromise
       let connectPromise ← runtime.connectAsPromise address
-
-      let serverConn ← acceptPromise.await
-      let clientConn ← connectPromise.await
+      let serverConnTask ← IO.asTask acceptPromise.await
+      let clientConnTask ← IO.asTask connectPromise.await
+      let serverConn ← awaitTaskWithin runtime "listener.acceptAsPromise" serverConnTask
+      let clientConn ← awaitTaskWithin runtime "runtime.connectAsPromise" clientConnTask
 
       let payload := mkPayload
       clientConn.write payload
@@ -1014,12 +1039,9 @@ def testKjAsyncNetworkRoundtripSingleRuntimeConnectAsTaskEndpoint : IO Unit := d
       let listener ← runtime.listenEndpoint endpoint
       let acceptPromise ← listener.acceptAsPromise
       let connectTask ← runtime.connectAsTaskEndpoint endpoint
-      let clientConn ←
-        match (← IO.wait connectTask) with
-        | .ok connection => pure connection
-        | .error err =>
-          throw (IO.userError s!"Runtime.connectAsTaskEndpoint failed: {err}")
-      let serverConn ← acceptPromise.await
+      let clientConn ← awaitTaskWithin runtime "Runtime.connectAsTaskEndpoint" connectTask
+      let serverConnTask ← IO.asTask acceptPromise.await
+      let serverConn ← awaitTaskWithin runtime "listener.acceptAsPromise" serverConnTask
 
       let payload := mkPayload
       clientConn.write payload
@@ -1395,12 +1417,10 @@ def testKjAsyncRuntimeWithConnectionHelper : IO Unit := do
         let serverConn ← listener.accept
         let req ← serverConn.read (1 : UInt32) (1024 : UInt32)
         serverConn.write req
-        serverConn.shutdownWrite
         serverConn.release
       clientRuntime.withConnection address (fun clientConn => do
         let payload := mkPayload
         clientConn.write payload
-        clientConn.shutdownWrite
         let echoed ← clientConn.read (UInt32.ofNat payload.size) (UInt32.ofNat payload.size)
         assertEqual echoed payload
       )
