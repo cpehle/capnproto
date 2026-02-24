@@ -3055,7 +3055,8 @@ def testInteropLeanClientCallsCppServer : IO Unit := do
     catch _ =>
       pure ()
 
-    let serveTask ← IO.asTask (Capnp.Rpc.Interop.cppServeEchoOnce address Echo.fooMethod)
+    let serveTask ← IO.asTask
+      (Capnp.Rpc.Interop.cppServeEchoOncePayloadRef runtime address Echo.fooMethod)
     IO.sleep (UInt32.ofNat 20)
 
     let mut target? : Option Capnp.Rpc.Client := none
@@ -3098,7 +3099,8 @@ def testInteropLeanClientCallsCppServer : IO Unit := do
     runtime.releaseTarget target
 
     match serveTask.get with
-    | .ok observed =>
+    | .ok observedRef =>
+        let observed ← observedRef.decodeAndRelease
         assertEqual observed.capTable.caps.size 0
     | .error err =>
         throw err

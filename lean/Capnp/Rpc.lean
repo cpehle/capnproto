@@ -3773,6 +3773,15 @@ end RuntimeM
 
 namespace Interop
 
+@[inline] def cppCallPayloadRef (runtime : Runtime) (address : String) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
+    IO RuntimePayloadRef := do
+  let requestBytes := payload.toBytes
+  let requestCaps := payload.capTableBytes
+  let (responseBytes, responseCaps) ←
+    ffiCppCallOneShotImpl address portHint method.interfaceId method.methodId requestBytes requestCaps
+  runtime.payloadRefFromBytes responseBytes responseCaps
+
 @[inline] def cppCall (address : String) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) : IO Payload := do
   let requestBytes := payload.toBytes
@@ -3825,11 +3834,24 @@ namespace Interop
     runtime server listener address method request pipelinedRequest portHint
   responseRef.decodeAndRelease
 
+@[inline] def cppServeEchoOncePayloadRef (runtime : Runtime) (address : String) (method : Method)
+    (portHint : UInt32 := 0) : IO RuntimePayloadRef := do
+  let (requestBytes, requestCaps) ←
+    ffiCppServeEchoOnceImpl address portHint method.interfaceId method.methodId
+  runtime.payloadRefFromBytes requestBytes requestCaps
+
 @[inline] def cppServeEchoOnce (address : String) (method : Method)
     (portHint : UInt32 := 0) : IO Payload := do
   let (requestBytes, requestCaps) ←
     ffiCppServeEchoOnceImpl address portHint method.interfaceId method.methodId
   decodePayloadChecked requestBytes requestCaps
+
+@[inline] def cppServeThrowOncePayloadRef (runtime : Runtime) (address : String) (method : Method)
+    (withDetail : Bool := false) (portHint : UInt32 := 0) : IO RuntimePayloadRef := do
+  let detailFlag : UInt8 := if withDetail then 1 else 0
+  let (requestBytes, requestCaps) ←
+    ffiCppServeThrowOnceImpl address portHint method.interfaceId method.methodId detailFlag
+  runtime.payloadRefFromBytes requestBytes requestCaps
 
 @[inline] def cppServeThrowOnce (address : String) (method : Method)
     (withDetail : Bool := false) (portHint : UInt32 := 0) : IO Payload := do
@@ -3838,11 +3860,30 @@ namespace Interop
     ffiCppServeThrowOnceImpl address portHint method.interfaceId method.methodId detailFlag
   decodePayloadChecked requestBytes requestCaps
 
+@[inline] def cppServeDelayedEchoOncePayloadRef (runtime : Runtime) (address : String) (method : Method)
+    (delayMillis : UInt32) (portHint : UInt32 := 0) : IO RuntimePayloadRef := do
+  let (requestBytes, requestCaps) ← ffiCppServeDelayedEchoOnceImpl
+    address portHint method.interfaceId method.methodId delayMillis
+  runtime.payloadRefFromBytes requestBytes requestCaps
+
 @[inline] def cppServeDelayedEchoOnce (address : String) (method : Method)
     (delayMillis : UInt32) (portHint : UInt32 := 0) : IO Payload := do
   let (requestBytes, requestCaps) ← ffiCppServeDelayedEchoOnceImpl
     address portHint method.interfaceId method.methodId delayMillis
   decodePayloadChecked requestBytes requestCaps
+
+@[inline] def cppCallPipelinedCapOneShotPayloadRef (runtime : Runtime) (address : String)
+    (method : Method) (request : Payload := Capnp.emptyRpcEnvelope)
+    (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope)
+    (portHint : UInt32 := 0) : IO RuntimePayloadRef := do
+  let requestBytes := request.toBytes
+  let requestCaps := request.capTableBytes
+  let pipelinedRequestBytes := pipelinedRequest.toBytes
+  let pipelinedRequestCaps := pipelinedRequest.capTableBytes
+  let (responseBytes, responseCaps) ← ffiCppCallPipelinedCapOneShotImpl
+    address portHint method.interfaceId method.methodId
+    requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
+  runtime.payloadRefFromBytes responseBytes responseCaps
 
 @[inline] def cppCallPipelinedCapOneShot (address : String) (method : Method)
     (request : Payload := Capnp.emptyRpcEnvelope)
