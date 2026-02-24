@@ -551,10 +551,7 @@ def testKjAsyncPromiseCombinatorCancellationAndLifetimeMatrix : IO Unit := do
           pure "ok"
         catch e =>
           pure (toString e)
-      assertTrue
-        (allOutcomeAfterEarlyRelease == "ok" ||
-          allOutcomeAfterEarlyRelease.contains "unknown KJ promise id")
-        "expected allPromise.await to either succeed or report released-input semantics"
+      assertEqual allOutcomeAfterEarlyRelease "ok"
       safeReleasePromise allPromise
     catch e =>
       throw (IO.userError s!"all stage failed: {e}")

@@ -23,6 +23,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -3541,6 +3542,7 @@ class KjAsyncRuntimeLoop {
     while (promises_.find(promiseId) != promises_.end()) {
       promiseId = nextPromiseId_++;
     }
+    retiredPromiseIds_.erase(promiseId);
     promises_.emplace(promiseId, std::move(promise));
     return promiseId;
   }
@@ -3795,10 +3797,15 @@ class KjAsyncRuntimeLoop {
     for (auto promiseId : promiseIds) {
       auto it = promises_.find(promiseId);
       if (it == promises_.end()) {
+        if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+          throw std::runtime_error("KJ promise id already consumed or released: " +
+                                   std::to_string(promiseId));
+        }
         throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
       }
       auto pending = kj::mv(it->second);
       promises_.erase(it);
+      retiredPromiseIds_.insert(promiseId);
       pending.canceler->release();
       promises.add(kj::mv(pending.promise));
     }
@@ -3814,10 +3821,15 @@ class KjAsyncRuntimeLoop {
 
     auto firstIt = promises_.find(promiseIds[0]);
     if (firstIt == promises_.end()) {
+      if (retiredPromiseIds_.find(promiseIds[0]) != retiredPromiseIds_.end()) {
+        throw std::runtime_error("KJ promise id already consumed or released: " +
+                                 std::to_string(promiseIds[0]));
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseIds[0]));
     }
     auto firstPending = kj::mv(firstIt->second);
     promises_.erase(firstIt);
+    retiredPromiseIds_.insert(promiseIds[0]);
     firstPending.canceler->release();
     auto raced = kj::mv(firstPending.promise);
 
@@ -3825,10 +3837,15 @@ class KjAsyncRuntimeLoop {
       auto promiseId = promiseIds[i];
       auto it = promises_.find(promiseId);
       if (it == promises_.end()) {
+        if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+          throw std::runtime_error("KJ promise id already consumed or released: " +
+                                   std::to_string(promiseId));
+        }
         throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
       }
       auto pending = kj::mv(it->second);
       promises_.erase(it);
+      retiredPromiseIds_.insert(promiseId);
       pending.canceler->release();
       raced = kj::mv(raced).exclusiveJoin(kj::mv(pending.promise));
     }
@@ -3841,18 +3858,28 @@ class KjAsyncRuntimeLoop {
   uint32_t promiseThenStart(uint32_t firstPromiseId, uint32_t secondPromiseId) {
     auto firstIt = promises_.find(firstPromiseId);
     if (firstIt == promises_.end()) {
+      if (retiredPromiseIds_.find(firstPromiseId) != retiredPromiseIds_.end()) {
+        throw std::runtime_error("KJ promise id already consumed or released: " +
+                                 std::to_string(firstPromiseId));
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(firstPromiseId));
     }
     auto firstPending = kj::mv(firstIt->second);
     promises_.erase(firstIt);
+    retiredPromiseIds_.insert(firstPromiseId);
     firstPending.canceler->release();
 
     auto secondIt = promises_.find(secondPromiseId);
     if (secondIt == promises_.end()) {
+      if (retiredPromiseIds_.find(secondPromiseId) != retiredPromiseIds_.end()) {
+        throw std::runtime_error("KJ promise id already consumed or released: " +
+                                 std::to_string(secondPromiseId));
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(secondPromiseId));
     }
     auto secondPending = kj::mv(secondIt->second);
     promises_.erase(secondIt);
+    retiredPromiseIds_.insert(secondPromiseId);
     secondPending.canceler->release();
 
     auto canceler = kj::heap<kj::Canceler>();
@@ -3865,18 +3892,28 @@ class KjAsyncRuntimeLoop {
   uint32_t promiseCatchStart(uint32_t promiseId, uint32_t fallbackPromiseId) {
     auto firstIt = promises_.find(promiseId);
     if (firstIt == promises_.end()) {
+      if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+        throw std::runtime_error("KJ promise id already consumed or released: " +
+                                 std::to_string(promiseId));
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
     }
     auto firstPending = kj::mv(firstIt->second);
     promises_.erase(firstIt);
+    retiredPromiseIds_.insert(promiseId);
     firstPending.canceler->release();
 
     auto fallbackIt = promises_.find(fallbackPromiseId);
     if (fallbackIt == promises_.end()) {
+      if (retiredPromiseIds_.find(fallbackPromiseId) != retiredPromiseIds_.end()) {
+        throw std::runtime_error("KJ promise id already consumed or released: " +
+                                 std::to_string(fallbackPromiseId));
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(fallbackPromiseId));
     }
     auto fallbackPending = kj::mv(fallbackIt->second);
     promises_.erase(fallbackIt);
+    retiredPromiseIds_.insert(fallbackPromiseId);
     fallbackPending.canceler->release();
 
     auto canceler = kj::heap<kj::Canceler>();
@@ -3910,6 +3947,7 @@ class KjAsyncRuntimeLoop {
     }
     auto pending = kj::mv(promiseIt->second);
     promises_.erase(promiseIt);
+    retiredPromiseIds_.insert(promiseId);
     pending.canceler->release();
     taskSetIt->second->tasks.add(kj::mv(pending.promise));
   }
@@ -3966,17 +4004,24 @@ class KjAsyncRuntimeLoop {
   void awaitPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
     auto it = promises_.find(promiseId);
     if (it == promises_.end()) {
+      if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+        return;
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
     }
 
     auto pending = kj::mv(it->second);
     promises_.erase(it);
+    retiredPromiseIds_.insert(promiseId);
     kj::mv(pending.promise).wait(waitScope);
   }
 
   void cancelPromise(uint32_t promiseId) {
     auto it = promises_.find(promiseId);
     if (it == promises_.end()) {
+      if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+        return;
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
     }
     it->second.canceler->cancel("Capnp.KjAsync promise canceled from Lean");
@@ -3985,9 +4030,13 @@ class KjAsyncRuntimeLoop {
   void releasePromise(uint32_t promiseId) {
     auto it = promises_.find(promiseId);
     if (it == promises_.end()) {
+      if (retiredPromiseIds_.find(promiseId) != retiredPromiseIds_.end()) {
+        return;
+      }
       throw std::runtime_error("unknown KJ promise id: " + std::to_string(promiseId));
     }
     promises_.erase(it);
+    retiredPromiseIds_.insert(promiseId);
   }
 
   uint32_t awaitConnectionPromise(kj::WaitScope& waitScope, uint32_t promiseId) {
@@ -5378,6 +5427,7 @@ class KjAsyncRuntimeLoop {
       if (promiseIt != promises_.end()) {
         promiseIt->second.canceler->cancel("Capnp.KjAsync HTTP server released");
         promises_.erase(promiseIt);
+        retiredPromiseIds_.insert(state.listenPromiseId);
       }
       state.listenPromiseId = 0;
     }
@@ -7782,6 +7832,7 @@ class KjAsyncRuntimeLoop {
       }
 
       promises_.clear();
+      retiredPromiseIds_.clear();
       connectionPromises_.clear();
       bytesPromises_.clear();
       uint32Promises_.clear();
@@ -7856,6 +7907,7 @@ class KjAsyncRuntimeLoop {
   std::atomic<bool> alive_{false};
   uint32_t nextPromiseId_ = 1;
   std::unordered_map<uint32_t, PendingPromise> promises_;
+  std::unordered_set<uint32_t> retiredPromiseIds_;
   uint32_t nextConnectionPromiseId_ = 1;
   std::unordered_map<uint32_t, PendingConnectionPromise> connectionPromises_;
   uint32_t nextBytesPromiseId_ = 1;
