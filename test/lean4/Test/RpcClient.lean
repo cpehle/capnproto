@@ -536,6 +536,110 @@ def testRuntimePayloadRefLifecycleRoundtrip : IO Unit := do
     runtime.shutdown
 
 @[test]
+def testRuntimeBootstrapTargetHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let (address, socketPath) ← mkUnixTestAddress
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+    let bootstrap ← runtime.registerEchoTarget
+    let server ← runtime.newServer bootstrap
+    let listener ← server.listen address
+    let baselineTargets := (← runtime.targetCount)
+
+    let acceptTaskA ← IO.asTask (server.accept listener)
+    let responseA ← runtime.withBootstrapTarget address (fun target => do
+      Echo.callFoo runtime.backend target payload)
+    match (← IO.wait acceptTaskA) with
+    | .ok _ => pure ()
+    | .error err => throw err
+    assertEqual responseA.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) baselineTargets
+
+    let acceptTaskB ← IO.asTask (server.accept listener)
+    let responseB ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.withBootstrapTarget address (fun target => do
+        Echo.callFooM target payload)
+    match (← IO.wait acceptTaskB) with
+    | .ok _ => pure ()
+    | .error err => throw err
+    assertEqual responseB.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) baselineTargets
+
+    let acceptTaskC ← IO.asTask (server.accept listener)
+    let (clientC, target) ← runtime.newBootstrapTarget address
+    let responseC ←
+      try
+        runtime.withTarget target (fun scopedTarget => do
+          Echo.callFoo runtime.backend scopedTarget payload)
+      finally
+        clientC.release
+    match (← IO.wait acceptTaskC) with
+    | .ok _ => pure ()
+    | .error err => throw err
+    assertEqual responseC.capTable.caps.size 0
+    assertEqual (← runtime.targetCount) baselineTargets
+
+    runtime.releaseListener listener
+    server.release
+    runtime.releaseTarget bootstrap
+  finally
+    runtime.shutdown
+    try
+      IO.FS.removeFile socketPath
+    catch _ =>
+      pure ()
+
+@[test]
+def testRuntimeCallPayloadRefHelpers : IO Unit := do
+  let payload : Capnp.Rpc.Payload := mkNullPayload
+  let runtime ← Capnp.Rpc.Runtime.init
+  try
+    let target ← runtime.registerEchoTarget
+
+    let responseA ← runtime.callPayloadRef target Echo.fooMethod payload
+    let decodedA ← responseA.decodeAndRelease
+    assertEqual decodedA.capTable.caps.size 0
+
+    let decodedB ← runtime.withCallPayloadRef target Echo.fooMethod
+      (fun responseRef => responseRef.decode) payload
+    assertEqual decodedB.capTable.caps.size 0
+
+    let decodedC ← runtime.callPayloadRefDecode target Echo.fooMethod payload
+    assertEqual decodedC.capTable.caps.size 0
+
+    let decodedD ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.callPayloadRefDecode target Echo.fooMethod payload
+    assertEqual decodedD.capTable.caps.size 0
+
+    let decodedE ← Capnp.Rpc.RuntimeM.run runtime do
+      Capnp.Rpc.RuntimeM.withCallPayloadRef target Echo.fooMethod
+        (fun responseRef => do
+          responseRef.decode)
+        payload
+    assertEqual decodedE.capTable.caps.size 0
+
+    let threw ←
+      try
+        let (_ : Unit) ← runtime.withCallPayloadRef target Echo.fooMethod
+          (fun _ => throw (IO.userError "intentional withCallPayloadRef failure"))
+          payload
+        pure false
+      catch _ =>
+        pure true
+    assertEqual threw true
+    runtime.pump
+    assertEqual (← runtime.pendingCallCount) (UInt64.ofNat 0)
+
+    runtime.releaseTarget target
+  finally
+    runtime.shutdown
+
+@[test]
 def testRuntimeStartCallAwaitHelpers : IO Unit := do
   let payload : Capnp.Rpc.Payload := mkNullPayload
   let runtime ← Capnp.Rpc.Runtime.init

@@ -1626,6 +1626,19 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   finally
     ffiRuntimeReleaseClientImpl runtime.handle client.handle.raw
 
+@[inline] def newBootstrapTarget (runtime : Runtime) (address : String)
+    (portHint : UInt32 := 0) : IO (RuntimeClientRef × Client) := do
+  let client ← runtime.newClient address portHint
+  let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
+  pure (client, target)
+
+@[inline] def withBootstrapTarget (runtime : Runtime) (address : String)
+    (action : Client -> IO α) (portHint : UInt32 := 0) : IO α := do
+  runtime.withClient address (fun client => do
+    let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
+    runtime.withTarget target action
+  ) portHint
+
 @[inline] def withServer (runtime : Runtime) (bootstrap : Client)
     (action : RuntimeServerRef -> IO α) : IO α := do
   let server ← runtime.newServer bootstrap
@@ -1699,6 +1712,27 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     handle := (← ffiRuntimeCallWithPayloadRefImpl runtime.handle target
       method.interfaceId method.methodId payloadRef.handle)
   }
+
+@[inline] def callPayloadRef (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO RuntimePayloadRef := do
+  let requestRef ← runtime.payloadRefFromPayload payload
+  try
+    runtime.callWithPayloadRef target method requestRef
+  finally
+    Runtime.payloadRefRelease requestRef
+
+@[inline] def withCallPayloadRef (runtime : Runtime) (target : Client) (method : Method)
+    (action : RuntimePayloadRef -> IO α)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO α := do
+  let responseRef ← runtime.callPayloadRef target method payload
+  try
+    action responseRef
+  finally
+    Runtime.payloadRefRelease responseRef
+
+@[inline] def callPayloadRefDecode (runtime : Runtime) (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : IO Payload := do
+  runtime.withCallPayloadRef target method Runtime.payloadRefDecode payload
 
 @[inline] def callOutcome (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome := do
@@ -2034,6 +2068,9 @@ namespace RuntimeClientRef
 @[inline] def outgoingWaitNanos (client : RuntimeClientRef) : IO UInt64 :=
   ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle.raw
 
+instance : Capnp.Async.Releasable RuntimeClientRef where
+  release := RuntimeClientRef.release
+
 end RuntimeClientRef
 
 namespace RuntimeServerRef
@@ -2112,6 +2149,9 @@ namespace RuntimeServerRef
     action listener
   finally
     server.runtime.releaseListener listener
+
+instance : Capnp.Async.Releasable RuntimeServerRef where
+  release := RuntimeServerRef.release
 
 end RuntimeServerRef
 
@@ -2267,6 +2307,9 @@ namespace RuntimeVatPeerRef
     (host : String) (objectId : ByteArray) (unique : Bool := false) :
     IO (Capnp.Async.Promise Client) :=
   peer.restoreSturdyRefAsPromise (SturdyRef.ofHost host objectId unique)
+
+instance : Capnp.Async.Releasable RuntimeVatPeerRef where
+  release := RuntimeVatPeerRef.release
 
 end RuntimeVatPeerRef
 
@@ -3282,6 +3325,17 @@ namespace RuntimeM
   finally
     client.release
 
+@[inline] def newBootstrapTarget (address : String) (portHint : UInt32 := 0) :
+    RuntimeM (RuntimeClientRef × Client) := do
+  Runtime.newBootstrapTarget (← runtime) address portHint
+
+@[inline] def withBootstrapTarget (address : String)
+    (action : Client -> RuntimeM α) (portHint : UInt32 := 0) : RuntimeM α := do
+  withClient address (fun client => do
+    let target ← clientBootstrap client
+    withTarget target action
+  ) portHint
+
 @[inline] def withServer (bootstrap : Client)
     (action : RuntimeServerRef -> RuntimeM α) : RuntimeM α := do
   let server ← newServer bootstrap
@@ -3369,6 +3423,23 @@ namespace RuntimeM
 @[inline] def callWithPayloadRef (target : Client) (method : Method)
     (payloadRef : RuntimePayloadRef) : RuntimeM RuntimePayloadRef := do
   Runtime.callWithPayloadRef (← runtime) target method payloadRef
+
+@[inline] def callPayloadRef (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePayloadRef := do
+  Runtime.callPayloadRef (← runtime) target method payload
+
+@[inline] def withCallPayloadRef (target : Client) (method : Method)
+    (action : RuntimePayloadRef -> RuntimeM α)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM α := do
+  let responseRef ← callPayloadRef target method payload
+  try
+    action responseRef
+  finally
+    Runtime.payloadRefRelease responseRef
+
+@[inline] def callPayloadRefDecode (target : Client) (method : Method)
+    (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Payload := do
+  Runtime.callPayloadRefDecode (← runtime) target method payload
 
 @[inline] def startCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM RuntimePendingCallRef := do
