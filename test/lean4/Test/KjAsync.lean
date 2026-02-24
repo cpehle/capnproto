@@ -5,6 +5,12 @@ import Capnp.RpcKjAsync
 
 open LeanTest
 
+@[extern "capnp_lean_rpc_test_new_listen_socket_fd"]
+private opaque ffiNewListenSocketFdImpl : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_rpc_test_new_datagram_socket_fd"]
+private opaque ffiNewDatagramSocketFdImpl : IO (UInt32 × UInt32)
+
 private def mkUnixTestAddress : IO (String × String) := do
   let n ← IO.rand 0 1000000000
   let path := s!"/tmp/capnp-lean4-kjasync-{n}.sock"
@@ -19,6 +25,12 @@ private def mkPayload : ByteArray :=
     |>.push (UInt8.ofNat 45)
     |>.push (UInt8.ofNat 107)
     |>.push (UInt8.ofNat 106)
+
+private def safeReleasePromise (promise : Capnp.KjAsync.PromiseRef) : IO Unit := do
+  try
+    promise.release
+  catch _ =>
+    pure ()
 
 private def tlsSelfSignedCertPem : String :=
   String.intercalate "\n" [
@@ -495,6 +507,72 @@ def testKjAsyncPromiseOpsOnRpcRuntimeHandle : IO Unit := do
     rpcRuntime.shutdown
 
 @[test]
+def testKjAsyncPromiseCombinatorCancellationAndLifetimeMatrix : IO Unit := do
+  Capnp.KjAsync.Runtime.withRuntime fun runtime => do
+    try
+      let first ← runtime.sleepMillisStart (UInt32.ofNat 40)
+      let second ← runtime.sleepMillisStart (UInt32.ofNat 40)
+      let thenPromise ← runtime.promiseThenStart first second
+      thenPromise.cancel
+      let thenCanceled ←
+        try
+          thenPromise.await
+          pure false
+        catch _ =>
+          pure true
+      assertEqual thenCanceled true
+      safeReleasePromise first
+      safeReleasePromise second
+      safeReleasePromise thenPromise
+    catch e =>
+      throw (IO.userError s!"then/cancel stage failed: {e}")
+
+    try
+      let fail ← runtime.sleepMillisStart (UInt32.ofNat 5000)
+      fail.cancel
+      let fallback ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      let catchPromise ← runtime.promiseCatchStart fail fallback
+      catchPromise.await
+      safeReleasePromise fail
+      safeReleasePromise fallback
+      safeReleasePromise catchPromise
+    catch e =>
+      throw (IO.userError s!"catch stage failed: {e}")
+
+    try
+      let allA ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      let allB ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      let allPromise ← runtime.promiseAllStart #[allA, allB]
+      safeReleasePromise allA
+      safeReleasePromise allB
+      let allOutcomeAfterEarlyRelease ←
+        try
+          allPromise.await
+          pure "ok"
+        catch e =>
+          pure (toString e)
+      assertTrue
+        (allOutcomeAfterEarlyRelease == "ok" ||
+          allOutcomeAfterEarlyRelease.contains "unknown KJ promise id")
+        "expected allPromise.await to either succeed or report released-input semantics"
+      safeReleasePromise allPromise
+    catch e =>
+      throw (IO.userError s!"all stage failed: {e}")
+
+    try
+      let allC ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      let allD ← runtime.sleepMillisStart (UInt32.ofNat 1)
+      let allPromiseOk ← runtime.promiseAllStart #[allC, allD]
+      allPromiseOk.await
+
+      let raceSlow ← runtime.sleepMillisStart (UInt32.ofNat 250)
+      let raceFast ← runtime.sleepMillisStart (UInt32.ofNat 5)
+      let racePromise ← runtime.promiseRaceStart #[raceSlow, raceFast]
+      racePromise.await
+    catch e =>
+      throw (IO.userError s!"all/race success stage failed: {e}")
+
+@[test]
 def testKjAsyncWrapSocketFdAndStreamAbstractions : IO Unit := do
   if System.Platform.isWindows then
     assertTrue true "KJ wrapSocketFd test skipped on Windows"
@@ -543,6 +621,60 @@ def testKjAsyncWrapSocketFdAndStreamAbstractions : IO Unit := do
       finally
         left.release
         right.release
+    finally
+      runtime.shutdown
+
+@[test]
+def testKjAsyncWrapListenAndDatagramSocketFd : IO Unit := do
+  if System.Platform.isWindows then
+    assertTrue true "KJ wrap listen/datagram fd test skipped on Windows"
+  else
+    let runtime ← Capnp.KjAsync.Runtime.init
+    try
+      let (listenFd, listenPort) ← ffiNewListenSocketFdImpl
+      let listenerDup ← runtime.wrapListenSocketFd listenFd
+      listenerDup.release
+
+      let listener ← runtime.wrapListenSocketFdTake listenFd
+      try
+        let acceptTask ← listener.acceptAsTask
+        let clientConn ← runtime.connect "127.0.0.1" listenPort
+        let serverConn ←
+          match (← IO.wait acceptTask) with
+          | .ok conn => pure conn
+          | .error err =>
+            throw (IO.userError s!"Listener.acceptAsTask failed: {err}")
+        try
+          let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 88))
+          clientConn.write payload
+          let received ← serverConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+          assertEqual received payload
+        finally
+          clientConn.release
+          serverConn.release
+      finally
+        listener.release
+
+      let (datagramFd, datagramPortNum) ← ffiNewDatagramSocketFdImpl
+      let datagramDup ← runtime.wrapDatagramSocketFd datagramFd
+      datagramDup.release
+
+      let datagramPort ← runtime.wrapDatagramSocketFdTake datagramFd
+      let senderPort ← runtime.datagramBind "127.0.0.1" 0
+      try
+        let observedPort ← datagramPort.getPort
+        assertEqual observedPort datagramPortNum
+
+        let payload := ByteArray.append mkPayload (ByteArray.empty.push (UInt8.ofNat 89))
+        let receivePromise ← datagramPort.receiveStart (UInt32.ofNat 1024)
+        let sentCount ← senderPort.send "127.0.0.1" payload datagramPortNum
+        assertEqual sentCount (UInt32.ofNat payload.size)
+
+        let (_source, received) ← receivePromise.awaitCopy
+        assertEqual received payload
+      finally
+        senderPort.release
+        datagramPort.release
     finally
       runtime.shutdown
 

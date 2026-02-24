@@ -384,6 +384,18 @@ opaque ffiRuntimeWrapSocketFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 @[extern "capnp_lean_kj_async_runtime_wrap_socket_fd_take"]
 opaque ffiRuntimeWrapSocketFdTakeImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
 
+@[extern "capnp_lean_kj_async_runtime_wrap_listen_socket_fd"]
+opaque ffiRuntimeWrapListenSocketFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_wrap_listen_socket_fd_take"]
+opaque ffiRuntimeWrapListenSocketFdTakeImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_wrap_datagram_socket_fd"]
+opaque ffiRuntimeWrapDatagramSocketFdImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
+@[extern "capnp_lean_kj_async_runtime_wrap_datagram_socket_fd_take"]
+opaque ffiRuntimeWrapDatagramSocketFdTakeImpl (runtime : UInt64) (fd : UInt32) : IO UInt32
+
 @[extern "capnp_lean_kj_async_runtime_new_two_way_pipe"]
 opaque ffiRuntimeNewTwoWayPipeImpl (runtime : UInt64) : IO (UInt32 × UInt32)
 
@@ -1740,6 +1752,46 @@ After this call succeeds, the caller must not use `fd` directly.
   return {
     runtime := runtime
     handle := (← ffiRuntimeWrapSocketFdTakeImpl runtime.handle fd)
+  }
+
+/--
+Wrap a listening socket fd as a `Listener` by first duplicating it.
+The runtime owns and closes the duplicated descriptor when the `Listener` is released.
+-/
+@[inline] def wrapListenSocketFd (runtime : Runtime) (fd : UInt32) : IO Listener := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapListenSocketFdImpl runtime.handle fd)
+  }
+
+/--
+Wrap a listening socket fd as a `Listener`, transferring ownership of `fd` to the runtime.
+After this call succeeds, the caller must not use `fd` directly.
+-/
+@[inline] def wrapListenSocketFdTake (runtime : Runtime) (fd : UInt32) : IO Listener := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapListenSocketFdTakeImpl runtime.handle fd)
+  }
+
+/--
+Wrap a datagram socket fd as a `DatagramPort` by first duplicating it.
+The runtime owns and closes the duplicated descriptor when the `DatagramPort` is released.
+-/
+@[inline] def wrapDatagramSocketFd (runtime : Runtime) (fd : UInt32) : IO DatagramPort := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapDatagramSocketFdImpl runtime.handle fd)
+  }
+
+/--
+Wrap a datagram socket fd as a `DatagramPort`, transferring ownership of `fd` to the runtime.
+After this call succeeds, the caller must not use `fd` directly.
+-/
+@[inline] def wrapDatagramSocketFdTake (runtime : Runtime) (fd : UInt32) : IO DatagramPort := do
+  return {
+    runtime := runtime
+    handle := (← ffiRuntimeWrapDatagramSocketFdTakeImpl runtime.handle fd)
   }
 
 @[inline] def newTwoWayPipe (runtime : Runtime) : IO (Connection × Connection) := do
@@ -3421,6 +3473,14 @@ namespace Listener
 @[inline] def release (listener : Listener) : IO Unit :=
   ffiRuntimeReleaseListenerImpl listener.runtime.handle listener.handle
 
+/-- Wrap `fd` as a `Listener` in the given runtime by duplicating it first. -/
+@[inline] def ofFd (runtime : Runtime) (fd : UInt32) : IO Listener :=
+  runtime.wrapListenSocketFd fd
+
+/-- Wrap `fd` as a `Listener` in the given runtime, transferring fd ownership. -/
+@[inline] def ofFdTake (runtime : Runtime) (fd : UInt32) : IO Listener :=
+  runtime.wrapListenSocketFdTake fd
+
 @[inline] def accept (listener : Listener) : IO Connection := do
   return {
     runtime := listener.runtime
@@ -3910,6 +3970,14 @@ namespace DatagramPort
 
 @[inline] def release (port : DatagramPort) : IO Unit :=
   ffiRuntimeDatagramReleasePortImpl port.runtime.handle port.handle
+
+/-- Wrap `fd` as a `DatagramPort` in the given runtime by duplicating it first. -/
+@[inline] def ofFd (runtime : Runtime) (fd : UInt32) : IO DatagramPort :=
+  runtime.wrapDatagramSocketFd fd
+
+/-- Wrap `fd` as a `DatagramPort` in the given runtime, transferring fd ownership. -/
+@[inline] def ofFdTake (runtime : Runtime) (fd : UInt32) : IO DatagramPort :=
+  runtime.wrapDatagramSocketFdTake fd
 
 @[inline] def getPort (port : DatagramPort) : IO UInt32 :=
   ffiRuntimeDatagramGetPortImpl port.runtime.handle port.handle
@@ -5106,6 +5174,18 @@ namespace RuntimeM
 
 @[inline] def wrapSocketFdTake (fd : UInt32) : RuntimeM Connection := do
   Runtime.wrapSocketFdTake (← runtime) fd
+
+@[inline] def wrapListenSocketFd (fd : UInt32) : RuntimeM Listener := do
+  Runtime.wrapListenSocketFd (← runtime) fd
+
+@[inline] def wrapListenSocketFdTake (fd : UInt32) : RuntimeM Listener := do
+  Runtime.wrapListenSocketFdTake (← runtime) fd
+
+@[inline] def wrapDatagramSocketFd (fd : UInt32) : RuntimeM DatagramPort := do
+  Runtime.wrapDatagramSocketFd (← runtime) fd
+
+@[inline] def wrapDatagramSocketFdTake (fd : UInt32) : RuntimeM DatagramPort := do
+  Runtime.wrapDatagramSocketFdTake (← runtime) fd
 
 @[inline] def newTwoWayPipe : RuntimeM (Connection × Connection) := do
   Runtime.newTwoWayPipe (← runtime)

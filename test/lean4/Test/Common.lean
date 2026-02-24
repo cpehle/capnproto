@@ -6,6 +6,12 @@ opaque ffiNewSocketPairImpl : IO (UInt32 × UInt32)
 @[extern "capnp_lean_rpc_test_close_fd"]
 opaque ffiCloseFdImpl (fd : UInt32) : IO Unit
 
+@[extern "capnp_lean_rpc_test_new_listen_socket_fd"]
+opaque ffiNewListenSocketFdImpl : IO (UInt32 × UInt32)
+
+@[extern "capnp_lean_rpc_test_new_datagram_socket_fd"]
+opaque ffiNewDatagramSocketFdImpl : IO (UInt32 × UInt32)
+
 def mkCapabilityPayload (cap : Capnp.Capability) : Capnp.Rpc.Payload := Id.run do
   let (capTable, builder) :=
     (do

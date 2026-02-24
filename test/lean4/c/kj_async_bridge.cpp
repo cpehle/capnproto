@@ -1398,6 +1398,62 @@ class KjAsyncRuntimeLoop {
     return completion;
   }
 
+  std::shared_ptr<HandleCompletion> enqueueWrapListenSocketFd(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapListenSocketFd{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueWrapListenSocketFdTake(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapListenSocketFdTake{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueWrapDatagramSocketFd(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapDatagramSocketFd{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
+  std::shared_ptr<HandleCompletion> enqueueWrapDatagramSocketFdTake(uint32_t fd) {
+    auto completion = std::make_shared<HandleCompletion>();
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      if (stopping_) {
+        completeHandleFailure(completion, "Capnp.KjAsync runtime is shutting down");
+        return completion;
+      }
+      queue_.emplace_back(QueuedWrapDatagramSocketFdTake{fd, completion});
+    }
+    queueCv_.notify_one();
+    return completion;
+  }
+
   std::shared_ptr<HandlePairCompletion> enqueueNewTwoWayPipe() {
     auto completion = std::make_shared<HandlePairCompletion>();
     {
@@ -2988,6 +3044,26 @@ class KjAsyncRuntimeLoop {
     std::shared_ptr<HandleCompletion> completion;
   };
 
+  struct QueuedWrapListenSocketFd {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedWrapListenSocketFdTake {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedWrapDatagramSocketFd {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
+  struct QueuedWrapDatagramSocketFdTake {
+    uint32_t fd;
+    std::shared_ptr<HandleCompletion> completion;
+  };
+
   struct QueuedNewTwoWayPipe {
     std::shared_ptr<HandlePairCompletion> completion;
   };
@@ -3426,6 +3502,8 @@ class KjAsyncRuntimeLoop {
                    QueuedTaskSetTakeLastError, QueuedConnectionWhenWriteDisconnectedStart,
                    QueuedConnectionAbortRead, QueuedConnectionAbortWrite, QueuedConnectionDupFd,
                    QueuedWrapSocketFd, QueuedWrapSocketFdTake,
+                   QueuedWrapListenSocketFd, QueuedWrapListenSocketFdTake,
+                   QueuedWrapDatagramSocketFd, QueuedWrapDatagramSocketFdTake,
                    QueuedNewTwoWayPipe, QueuedNewCapabilityPipe,
                    QueuedDatagramBind, QueuedDatagramReleasePort, QueuedDatagramGetPort,
                    QueuedDatagramSend, QueuedDatagramSendStart, QueuedUInt32PromiseAwait,
@@ -4413,6 +4491,24 @@ class KjAsyncRuntimeLoop {
 #endif
   }
 
+  int ensurePlatformFdAndDup(uint32_t fd, const char* opName) {
+#if defined(_WIN32)
+    (void)fd;
+    (void)opName;
+    throw std::runtime_error("fd wrapping is not supported on Windows");
+#else
+    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxFd) {
+      throw std::runtime_error(std::string("fd exceeds supported range for ") + opName);
+    }
+    int duplicatedFd = dup(static_cast<int>(fd));
+    if (duplicatedFd < 0) {
+      throw std::runtime_error(std::string("dup() failed while running ") + opName);
+    }
+    return duplicatedFd;
+#endif
+  }
+
   uint32_t wrapSocketFdTake(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
 #if defined(_WIN32)
     (void)lowLevelProvider;
@@ -4435,17 +4531,68 @@ class KjAsyncRuntimeLoop {
     (void)fd;
     throw std::runtime_error("wrapSocketFd is not supported on Windows");
 #else
-    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
-    if (fd > maxFd) {
-      throw std::runtime_error("fd exceeds supported range for wrapSocketFd");
-    }
-    int duplicatedFd = dup(static_cast<int>(fd));
-    if (duplicatedFd < 0) {
-      throw std::runtime_error("dup() failed while wrapping socket fd");
-    }
+    int duplicatedFd = ensurePlatformFdAndDup(fd, "wrapSocketFd");
     auto stream = lowLevelProvider.wrapSocketFd(
         duplicatedFd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
     return addConnection(kj::mv(stream));
+#endif
+  }
+
+  uint32_t wrapListenSocketFdTake(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapListenSocketFdTake is not supported on Windows");
+#else
+    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxFd) {
+      throw std::runtime_error("fd exceeds supported range for wrapListenSocketFdTake");
+    }
+    auto listener = lowLevelProvider.wrapListenSocketFd(
+        static_cast<int>(fd), kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addListener(kj::mv(listener));
+#endif
+  }
+
+  uint32_t wrapListenSocketFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapListenSocketFd is not supported on Windows");
+#else
+    int duplicatedFd = ensurePlatformFdAndDup(fd, "wrapListenSocketFd");
+    auto listener = lowLevelProvider.wrapListenSocketFd(
+        duplicatedFd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addListener(kj::mv(listener));
+#endif
+  }
+
+  uint32_t wrapDatagramSocketFdTake(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapDatagramSocketFdTake is not supported on Windows");
+#else
+    auto maxFd = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    if (fd > maxFd) {
+      throw std::runtime_error("fd exceeds supported range for wrapDatagramSocketFdTake");
+    }
+    auto port = lowLevelProvider.wrapDatagramSocketFd(
+        static_cast<int>(fd), kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addDatagramPort(kj::mv(port));
+#endif
+  }
+
+  uint32_t wrapDatagramSocketFd(kj::LowLevelAsyncIoProvider& lowLevelProvider, uint32_t fd) {
+#if defined(_WIN32)
+    (void)lowLevelProvider;
+    (void)fd;
+    throw std::runtime_error("wrapDatagramSocketFd is not supported on Windows");
+#else
+    int duplicatedFd = ensurePlatformFdAndDup(fd, "wrapDatagramSocketFd");
+    auto port = lowLevelProvider.wrapDatagramSocketFd(
+        duplicatedFd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return addDatagramPort(kj::mv(port));
 #endif
   }
 
@@ -5733,6 +5880,14 @@ class KjAsyncRuntimeLoop {
         completeHandleFailure(std::get<QueuedWrapSocketFd>(op).completion, message);
       } else if (std::holds_alternative<QueuedWrapSocketFdTake>(op)) {
         completeHandleFailure(std::get<QueuedWrapSocketFdTake>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapListenSocketFd>(op)) {
+        completeHandleFailure(std::get<QueuedWrapListenSocketFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapListenSocketFdTake>(op)) {
+        completeHandleFailure(std::get<QueuedWrapListenSocketFdTake>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapDatagramSocketFd>(op)) {
+        completeHandleFailure(std::get<QueuedWrapDatagramSocketFd>(op).completion, message);
+      } else if (std::holds_alternative<QueuedWrapDatagramSocketFdTake>(op)) {
+        completeHandleFailure(std::get<QueuedWrapDatagramSocketFdTake>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
         completeHandlePairFailure(std::get<QueuedNewTwoWayPipe>(op).completion, message);
       } else if (std::holds_alternative<QueuedNewCapabilityPipe>(op)) {
@@ -6581,6 +6736,58 @@ class KjAsyncRuntimeLoop {
           } catch (...) {
             completeHandleFailure(wrap.completion,
                                   "unknown exception in Capnp.KjAsync wrapSocketFdTake");
+          }
+        } else if (std::holds_alternative<QueuedWrapListenSocketFd>(op)) {
+          auto wrap = std::get<QueuedWrapListenSocketFd>(std::move(op));
+          try {
+            auto listenerId = wrapListenSocketFd(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, listenerId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapListenSocketFd");
+          }
+        } else if (std::holds_alternative<QueuedWrapListenSocketFdTake>(op)) {
+          auto wrap = std::get<QueuedWrapListenSocketFdTake>(std::move(op));
+          try {
+            auto listenerId = wrapListenSocketFdTake(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, listenerId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapListenSocketFdTake");
+          }
+        } else if (std::holds_alternative<QueuedWrapDatagramSocketFd>(op)) {
+          auto wrap = std::get<QueuedWrapDatagramSocketFd>(std::move(op));
+          try {
+            auto datagramPortId = wrapDatagramSocketFd(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, datagramPortId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapDatagramSocketFd");
+          }
+        } else if (std::holds_alternative<QueuedWrapDatagramSocketFdTake>(op)) {
+          auto wrap = std::get<QueuedWrapDatagramSocketFdTake>(std::move(op));
+          try {
+            auto datagramPortId = wrapDatagramSocketFdTake(*io.lowLevelProvider, wrap.fd);
+            completeHandleSuccess(wrap.completion, datagramPortId);
+          } catch (const kj::Exception& e) {
+            completeHandleFailure(wrap.completion, describeKjException(e));
+          } catch (const std::exception& e) {
+            completeHandleFailure(wrap.completion, e.what());
+          } catch (...) {
+            completeHandleFailure(wrap.completion,
+                                  "unknown exception in Capnp.KjAsync wrapDatagramSocketFdTake");
           }
         } else if (std::holds_alternative<QueuedNewTwoWayPipe>(op)) {
           auto create = std::get<QueuedNewTwoWayPipe>(std::move(op));
@@ -9680,6 +9887,109 @@ extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_socket_fd_t
     return mkIoUserError(e.what());
   } catch (...) {
     return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_wrap_socket_fd_take");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_listen_socket_fd(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapListenSocketFd(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError("unknown exception in capnp_lean_kj_async_runtime_wrap_listen_socket_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_listen_socket_fd_take(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapListenSocketFdTake(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_wrap_listen_socket_fd_take");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_datagram_socket_fd(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapDatagramSocketFd(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_wrap_datagram_socket_fd");
+  }
+}
+
+extern "C" LEAN_EXPORT lean_obj_res capnp_lean_kj_async_runtime_wrap_datagram_socket_fd_take(
+    uint64_t runtimeId, uint32_t fd) {
+  try {
+    if (auto runtime = getKjAsyncRuntime(runtimeId)) {
+      auto completion = runtime->enqueueWrapDatagramSocketFdTake(fd);
+      {
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        completion->cv.wait(lock, [&completion]() { return completion->done; });
+        if (!completion->ok) {
+          return mkIoUserError(completion->error);
+        }
+        return lean_io_result_mk_ok(lean_box_uint32(completion->handle));
+      }
+    }
+
+    return mkIoUserError("Capnp.KjAsync runtime handle is invalid or already released");
+  } catch (const kj::Exception& e) {
+    return mkIoUserError(describeKjException(e));
+  } catch (const std::exception& e) {
+    return mkIoUserError(e.what());
+  } catch (...) {
+    return mkIoUserError(
+        "unknown exception in capnp_lean_kj_async_runtime_wrap_datagram_socket_fd_take");
   }
 }
 
