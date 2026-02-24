@@ -950,7 +950,7 @@ end BytesRef
     | throw (IO.userError "invalid header list payload")
   let mut cursor := offset0
   let mut headers : Array HttpHeader := #[]
-  let mut remaining := count.toNat
+  let mut remaining := count
   while remaining != 0 do
     let some (nameLen, nextOffset) := decodeUInt32LeAt? bytes cursor
       | throw (IO.userError "invalid header list payload")
