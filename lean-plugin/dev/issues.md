@@ -40,3 +40,9 @@ Status legend:
 - [x] `FFI-06` Refactor `lean/Capnp/KjAsync.lean` to replace repetitive structure definitions with the new shared FFI handle abstraction.
 - [x] `FFI-07` Refactor `lean/Capnp/Rpc.lean` to adopt the shared FFI handle abstraction.
 - [x] `FFI-08` Verify that FFI boundary semantics remain intact after refactoring by running the full parity matrix and test suite.
+
+### Action Plan Refinement
+
+- **Lean API Boilerplate:** Rather than heavy C++ macro usage, the Lean API boilerplate can be reduced by using Lean 4's powerful macro system to automatically derive `...AsTask`, `...AsPromise`, and synchronous wrappers from the base `...Start` function. This keeps the C++ side readable while eliminating Lean repetition.
+
+- **Compiler String Concatenation:** For `capnpc-lean4.c++`, refactoring `std::string out` to use a dedicated `LeanCodeBuilder` class (which manages indentation, blocks, and syntax generation internally) is the safest first step.
