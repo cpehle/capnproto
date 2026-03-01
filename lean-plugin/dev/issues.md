@@ -35,3 +35,21 @@ Status legend:
 
 ## Completed (This Pass)
 
+
+### Medium
+
+- [ ] **Compiler Plugin Code Generation Boilerplate:** The `capnpc-lean4.c++` compiler plugin is monolithic and heavily relies on manual string concatenation (over 2000 lines of `out += ...`).
+  - *Action:* Introduce a lightweight C++ template engine or AST builder class to cleanly separate Lean 4 syntax generation from Cap'n Proto schema traversal.
+
+- [ ] **FFI Export Boilerplate:** The C++ FFI layers (`ffi/kj_async_bridge.cpp` and `ffi/rpc_bridge_runtime.cpp`) define over 300 `extern "C"` functions, many of which are identical wrappers for object creation, deletion, or task polling.
+  - *Action:* Investigate using C++ macros or templates to generate repetitive FFI boundary wrappers (like `release`, `cancel`, `await` functions for different promise types).
+
+### Low
+
+- [ ] **Lean API Repetition (`Capnp.KjAsync`):** There are over 500 explicit definition wrappers (e.g., `connect`, `connectStart`, `connectAsTask`, `connectAsPromise`) manually routing calls to the FFI.
+  - *Action:* Explore Lean 4 metaprogramming or macro attributes to auto-generate the task, promise, and IO variants of asynchronous FFI calls.
+
+### Pending Architectural Re-evaluation
+
+- **FFI Boilerplate (Reverted):** Initial plan to use C++ macros to reduce repetitive `extern "C"` FFI wrappers was reverted, as heavy macro usage obfuscates C++ code and makes it harder to debug. A better long-term approach may involve moving towards a unified IDL or Lean-side FFI generation tool instead of manual bindings.
+
