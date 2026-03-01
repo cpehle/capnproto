@@ -356,7 +356,7 @@ def testCapnpAsyncGenericLifecycleHelpers : IO Unit := do
   let runtime ← Capnp.KjAsync.Runtime.init
   try
     let pAwait ← runtime.sleepMillisStart (UInt32.ofNat 1)
-    let () ← Capnp.Async.awaitAndRelease pAwait
+    let () ← Capnp.Async.await pAwait
 
     let pCancel ← runtime.sleepMillisStart (UInt32.ofNat 5000)
     Capnp.Async.cancelAndRelease pCancel
@@ -366,6 +366,16 @@ def testCapnpAsyncGenericLifecycleHelpers : IO Unit := do
       Capnp.Async.withRelease right fun rightConn => do
         leftConn.write mkPayload
         let received ← rightConn.read (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        assertEqual received mkPayload
+
+    -- Regression: typed promise awaits are consuming on the C++ side.
+    let (left2, right2) ← runtime.newTwoWayPipe
+    Capnp.Async.withRelease left2 fun leftConn => do
+      Capnp.Async.withRelease right2 fun rightConn => do
+        leftConn.write mkPayload
+        let readPromise ← rightConn.readStart (UInt32.ofNat 1) (UInt32.ofNat 1024)
+        let receivedRef : Capnp.KjAsync.BytesRef ← Capnp.Async.await readPromise
+        let received ← Capnp.KjAsync.BytesRef.toByteArray receivedRef
         assertEqual received mkPayload
   finally
     runtime.shutdown

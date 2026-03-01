@@ -3814,11 +3814,6 @@ def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CallResp
   callResponseOfPayload response
 def CallPromise.awaitTyped (promise : CallPromise) : IO CallResponse := do
   awaitCallTyped promise.pendingCall
-def CallPromise.awaitAndRelease (promise : CallPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallPromise.awaitTypedAndRelease (promise : CallPromise) : IO CallResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callResponseOfPayload response
 def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestGenerics.Inner2.DeepNest.DeepNestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -3994,11 +3989,6 @@ def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CallResp
   callResponseOfPayload response
 def CallPromise.awaitTyped (promise : CallPromise) : IO CallResponse := do
   awaitCallTyped promise.pendingCall
-def CallPromise.awaitAndRelease (promise : CallPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallPromise.awaitTypedAndRelease (promise : CallPromise) : IO CallResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callResponseOfPayload response
 def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestGenerics.Interface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4175,11 +4165,6 @@ def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CallResp
   callResponseOfPayload response
 def CallPromise.awaitTyped (promise : CallPromise) : IO CallResponse := do
   awaitCallTyped promise.pendingCall
-def CallPromise.awaitAndRelease (promise : CallPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallPromise.awaitTypedAndRelease (promise : CallPromise) : IO CallResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callResponseOfPayload response
 def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestImplicitMethodParams := do
   pendingCall.getPipelinedCap pointerPath
@@ -4355,11 +4340,6 @@ def awaitCallTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CallResp
   callResponseOfPayload response
 def CallPromise.awaitTyped (promise : CallPromise) : IO CallResponse := do
   awaitCallTyped promise.pendingCall
-def CallPromise.awaitAndRelease (promise : CallPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallPromise.awaitTypedAndRelease (promise : CallPromise) : IO CallResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callResponseOfPayload response
 def getCallPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestImplicitMethodParamsInGeneric := do
   pendingCall.getPipelinedCap pointerPath
@@ -4535,11 +4515,6 @@ def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooRespon
   fooResponseOfPayload response
 def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
-def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  fooResponseOfPayload response
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4613,11 +4588,6 @@ def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO BarRespon
   barResponseOfPayload response
 def BarPromise.awaitTyped (promise : BarPromise) : IO BarResponse := do
   awaitBarTyped promise.pendingCall
-def BarPromise.awaitAndRelease (promise : BarPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def BarPromise.awaitTypedAndRelease (promise : BarPromise) : IO BarResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  barResponseOfPayload response
 def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4691,11 +4661,6 @@ def awaitBazTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO BazRespon
   bazResponseOfPayload response
 def BazPromise.awaitTyped (promise : BazPromise) : IO BazResponse := do
   awaitBazTyped promise.pendingCall
-def BazPromise.awaitAndRelease (promise : BazPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def BazPromise.awaitTypedAndRelease (promise : BazPromise) : IO BazResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  bazResponseOfPayload response
 def getBazPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4769,11 +4734,6 @@ def awaitGetTestPipelineTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : 
   getTestPipelineResponseOfPayload response
 def GetTestPipelinePromise.awaitTyped (promise : GetTestPipelinePromise) : IO GetTestPipelineResponse := do
   awaitGetTestPipelineTyped promise.pendingCall
-def GetTestPipelinePromise.awaitAndRelease (promise : GetTestPipelinePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetTestPipelinePromise.awaitTypedAndRelease (promise : GetTestPipelinePromise) : IO GetTestPipelineResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getTestPipelineResponseOfPayload response
 def getGetTestPipelinePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4847,11 +4807,6 @@ def awaitGetTestTailCalleeTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) 
   getTestTailCalleeResponseOfPayload response
 def GetTestTailCalleePromise.awaitTyped (promise : GetTestTailCalleePromise) : IO GetTestTailCalleeResponse := do
   awaitGetTestTailCalleeTyped promise.pendingCall
-def GetTestTailCalleePromise.awaitAndRelease (promise : GetTestTailCalleePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetTestTailCalleePromise.awaitTypedAndRelease (promise : GetTestTailCalleePromise) : IO GetTestTailCalleeResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getTestTailCalleeResponseOfPayload response
 def getGetTestTailCalleePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -4925,11 +4880,6 @@ def awaitGetTestTailCallerTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) 
   getTestTailCallerResponseOfPayload response
 def GetTestTailCallerPromise.awaitTyped (promise : GetTestTailCallerPromise) : IO GetTestTailCallerResponse := do
   awaitGetTestTailCallerTyped promise.pendingCall
-def GetTestTailCallerPromise.awaitAndRelease (promise : GetTestTailCallerPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetTestTailCallerPromise.awaitTypedAndRelease (promise : GetTestTailCallerPromise) : IO GetTestTailCallerResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getTestTailCallerResponseOfPayload response
 def getGetTestTailCallerPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -5003,11 +4953,6 @@ def awaitGetTestMoreStuffTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) :
   getTestMoreStuffResponseOfPayload response
 def GetTestMoreStuffPromise.awaitTyped (promise : GetTestMoreStuffPromise) : IO GetTestMoreStuffResponse := do
   awaitGetTestMoreStuffTyped promise.pendingCall
-def GetTestMoreStuffPromise.awaitAndRelease (promise : GetTestMoreStuffPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetTestMoreStuffPromise.awaitTypedAndRelease (promise : GetTestMoreStuffPromise) : IO GetTestMoreStuffResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getTestMoreStuffResponseOfPayload response
 def getGetTestMoreStuffPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestInterface := do
   pendingCall.getPipelinedCap pointerPath
@@ -5309,11 +5254,6 @@ def awaitQuxTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO QuxRespon
   quxResponseOfPayload response
 def QuxPromise.awaitTyped (promise : QuxPromise) : IO QuxResponse := do
   awaitQuxTyped promise.pendingCall
-def QuxPromise.awaitAndRelease (promise : QuxPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def QuxPromise.awaitTypedAndRelease (promise : QuxPromise) : IO QuxResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  quxResponseOfPayload response
 def getQuxPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
   pendingCall.getPipelinedCap pointerPath
@@ -5387,11 +5327,6 @@ def awaitCorgeTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CorgeRe
   corgeResponseOfPayload response
 def CorgePromise.awaitTyped (promise : CorgePromise) : IO CorgeResponse := do
   awaitCorgeTyped promise.pendingCall
-def CorgePromise.awaitAndRelease (promise : CorgePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CorgePromise.awaitTypedAndRelease (promise : CorgePromise) : IO CorgeResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  corgeResponseOfPayload response
 def getCorgePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
   pendingCall.getPipelinedCap pointerPath
@@ -5465,11 +5400,6 @@ def awaitGraultTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Grault
   graultResponseOfPayload response
 def GraultPromise.awaitTyped (promise : GraultPromise) : IO GraultResponse := do
   awaitGraultTyped promise.pendingCall
-def GraultPromise.awaitAndRelease (promise : GraultPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GraultPromise.awaitTypedAndRelease (promise : GraultPromise) : IO GraultResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  graultResponseOfPayload response
 def getGraultPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestExtends := do
   pendingCall.getPipelinedCap pointerPath
@@ -5774,11 +5704,6 @@ def awaitGetCapTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO GetCap
   getCapResponseOfPayload response
 def GetCapPromise.awaitTyped (promise : GetCapPromise) : IO GetCapResponse := do
   awaitGetCapTyped promise.pendingCall
-def GetCapPromise.awaitAndRelease (promise : GetCapPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetCapPromise.awaitTypedAndRelease (promise : GetCapPromise) : IO GetCapResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getCapResponseOfPayload response
 def getGetCapPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
   pendingCall.getPipelinedCap pointerPath
@@ -5852,11 +5777,6 @@ def awaitTestPointersTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO 
   testPointersResponseOfPayload response
 def TestPointersPromise.awaitTyped (promise : TestPointersPromise) : IO TestPointersResponse := do
   awaitTestPointersTyped promise.pendingCall
-def TestPointersPromise.awaitAndRelease (promise : TestPointersPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def TestPointersPromise.awaitTypedAndRelease (promise : TestPointersPromise) : IO TestPointersResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  testPointersResponseOfPayload response
 def getTestPointersPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
   pendingCall.getPipelinedCap pointerPath
@@ -5930,11 +5850,6 @@ def awaitGetAnyCapTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Get
   getAnyCapResponseOfPayload response
 def GetAnyCapPromise.awaitTyped (promise : GetAnyCapPromise) : IO GetAnyCapResponse := do
   awaitGetAnyCapTyped promise.pendingCall
-def GetAnyCapPromise.awaitAndRelease (promise : GetAnyCapPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetAnyCapPromise.awaitTypedAndRelease (promise : GetAnyCapPromise) : IO GetAnyCapResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getAnyCapResponseOfPayload response
 def getGetAnyCapPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
   pendingCall.getPipelinedCap pointerPath
@@ -6008,11 +5923,6 @@ def awaitGetCapPipelineOnlyTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
   getCapPipelineOnlyResponseOfPayload response
 def GetCapPipelineOnlyPromise.awaitTyped (promise : GetCapPipelineOnlyPromise) : IO GetCapPipelineOnlyResponse := do
   awaitGetCapPipelineOnlyTyped promise.pendingCall
-def GetCapPipelineOnlyPromise.awaitAndRelease (promise : GetCapPipelineOnlyPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetCapPipelineOnlyPromise.awaitTypedAndRelease (promise : GetCapPipelineOnlyPromise) : IO GetCapPipelineOnlyResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getCapPipelineOnlyResponseOfPayload response
 def getGetCapPipelineOnlyPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestPipeline := do
   pendingCall.getPipelinedCap pointerPath
@@ -6251,11 +6161,6 @@ def awaitGetCallSequenceTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : 
   getCallSequenceResponseOfPayload response
 def GetCallSequencePromise.awaitTyped (promise : GetCallSequencePromise) : IO GetCallSequenceResponse := do
   awaitGetCallSequenceTyped promise.pendingCall
-def GetCallSequencePromise.awaitAndRelease (promise : GetCallSequencePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetCallSequencePromise.awaitTypedAndRelease (promise : GetCallSequencePromise) : IO GetCallSequenceResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getCallSequenceResponseOfPayload response
 def getGetCallSequencePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestCallOrder := do
   pendingCall.getPipelinedCap pointerPath
@@ -6434,11 +6339,6 @@ def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooRespon
   fooResponseOfPayload response
 def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
-def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  fooResponseOfPayload response
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestTailCallee := do
   pendingCall.getPipelinedCap pointerPath
@@ -6614,11 +6514,6 @@ def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooRespon
   fooResponseOfPayload response
 def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
-def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  fooResponseOfPayload response
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestTailCaller := do
   pendingCall.getPipelinedCap pointerPath
@@ -6797,11 +6692,6 @@ def awaitDoStreamITyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO DoS
   doStreamIResponseOfPayload response
 def DoStreamIPromise.awaitTyped (promise : DoStreamIPromise) : IO DoStreamIResponse := do
   awaitDoStreamITyped promise.pendingCall
-def DoStreamIPromise.awaitAndRelease (promise : DoStreamIPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def DoStreamIPromise.awaitTypedAndRelease (promise : DoStreamIPromise) : IO DoStreamIResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  doStreamIResponseOfPayload response
 def getDoStreamIPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
   pendingCall.getPipelinedCap pointerPath
@@ -6875,11 +6765,6 @@ def awaitDoStreamJTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO DoS
   doStreamJResponseOfPayload response
 def DoStreamJPromise.awaitTyped (promise : DoStreamJPromise) : IO DoStreamJResponse := do
   awaitDoStreamJTyped promise.pendingCall
-def DoStreamJPromise.awaitAndRelease (promise : DoStreamJPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def DoStreamJPromise.awaitTypedAndRelease (promise : DoStreamJPromise) : IO DoStreamJResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  doStreamJResponseOfPayload response
 def getDoStreamJPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
   pendingCall.getPipelinedCap pointerPath
@@ -6953,11 +6838,6 @@ def awaitFinishStreamTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO 
   finishStreamResponseOfPayload response
 def FinishStreamPromise.awaitTyped (promise : FinishStreamPromise) : IO FinishStreamResponse := do
   awaitFinishStreamTyped promise.pendingCall
-def FinishStreamPromise.awaitAndRelease (promise : FinishStreamPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def FinishStreamPromise.awaitTypedAndRelease (promise : FinishStreamPromise) : IO FinishStreamResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  finishStreamResponseOfPayload response
 def getFinishStreamPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestStreaming := do
   pendingCall.getPipelinedCap pointerPath
@@ -7262,11 +7142,6 @@ def awaitCallFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO CallF
   callFooResponseOfPayload response
 def CallFooPromise.awaitTyped (promise : CallFooPromise) : IO CallFooResponse := do
   awaitCallFooTyped promise.pendingCall
-def CallFooPromise.awaitAndRelease (promise : CallFooPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallFooPromise.awaitTypedAndRelease (promise : CallFooPromise) : IO CallFooResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callFooResponseOfPayload response
 def getCallFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7340,11 +7215,6 @@ def awaitCallFooWhenResolvedTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef
   callFooWhenResolvedResponseOfPayload response
 def CallFooWhenResolvedPromise.awaitTyped (promise : CallFooWhenResolvedPromise) : IO CallFooWhenResolvedResponse := do
   awaitCallFooWhenResolvedTyped promise.pendingCall
-def CallFooWhenResolvedPromise.awaitAndRelease (promise : CallFooWhenResolvedPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallFooWhenResolvedPromise.awaitTypedAndRelease (promise : CallFooWhenResolvedPromise) : IO CallFooWhenResolvedResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callFooWhenResolvedResponseOfPayload response
 def getCallFooWhenResolvedPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7418,11 +7288,6 @@ def awaitNeverReturnTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO N
   neverReturnResponseOfPayload response
 def NeverReturnPromise.awaitTyped (promise : NeverReturnPromise) : IO NeverReturnResponse := do
   awaitNeverReturnTyped promise.pendingCall
-def NeverReturnPromise.awaitAndRelease (promise : NeverReturnPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def NeverReturnPromise.awaitTypedAndRelease (promise : NeverReturnPromise) : IO NeverReturnResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  neverReturnResponseOfPayload response
 def getNeverReturnPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7498,11 +7363,6 @@ def awaitHoldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO HoldResp
   holdResponseOfPayload response
 def HoldPromise.awaitTyped (promise : HoldPromise) : IO HoldResponse := do
   awaitHoldTyped promise.pendingCall
-def HoldPromise.awaitAndRelease (promise : HoldPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def HoldPromise.awaitTypedAndRelease (promise : HoldPromise) : IO HoldResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  holdResponseOfPayload response
 def getHoldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7576,11 +7436,6 @@ def awaitCallHeldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Call
   callHeldResponseOfPayload response
 def CallHeldPromise.awaitTyped (promise : CallHeldPromise) : IO CallHeldResponse := do
   awaitCallHeldTyped promise.pendingCall
-def CallHeldPromise.awaitAndRelease (promise : CallHeldPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallHeldPromise.awaitTypedAndRelease (promise : CallHeldPromise) : IO CallHeldResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callHeldResponseOfPayload response
 def getCallHeldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7654,11 +7509,6 @@ def awaitGetHeldTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO GetHe
   getHeldResponseOfPayload response
 def GetHeldPromise.awaitTyped (promise : GetHeldPromise) : IO GetHeldResponse := do
   awaitGetHeldTyped promise.pendingCall
-def GetHeldPromise.awaitAndRelease (promise : GetHeldPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetHeldPromise.awaitTypedAndRelease (promise : GetHeldPromise) : IO GetHeldResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getHeldResponseOfPayload response
 def getGetHeldPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7732,11 +7582,6 @@ def awaitEchoTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO EchoResp
   echoResponseOfPayload response
 def EchoPromise.awaitTyped (promise : EchoPromise) : IO EchoResponse := do
   awaitEchoTyped promise.pendingCall
-def EchoPromise.awaitAndRelease (promise : EchoPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def EchoPromise.awaitTypedAndRelease (promise : EchoPromise) : IO EchoResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  echoResponseOfPayload response
 def getEchoPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7810,11 +7655,6 @@ def awaitExpectCancelTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO 
   expectCancelResponseOfPayload response
 def ExpectCancelPromise.awaitTyped (promise : ExpectCancelPromise) : IO ExpectCancelResponse := do
   awaitExpectCancelTyped promise.pendingCall
-def ExpectCancelPromise.awaitAndRelease (promise : ExpectCancelPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def ExpectCancelPromise.awaitTypedAndRelease (promise : ExpectCancelPromise) : IO ExpectCancelResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  expectCancelResponseOfPayload response
 def getExpectCancelPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7890,11 +7730,6 @@ def awaitMethodWithDefaultsTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
   methodWithDefaultsResponseOfPayload response
 def MethodWithDefaultsPromise.awaitTyped (promise : MethodWithDefaultsPromise) : IO MethodWithDefaultsResponse := do
   awaitMethodWithDefaultsTyped promise.pendingCall
-def MethodWithDefaultsPromise.awaitAndRelease (promise : MethodWithDefaultsPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def MethodWithDefaultsPromise.awaitTypedAndRelease (promise : MethodWithDefaultsPromise) : IO MethodWithDefaultsResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  methodWithDefaultsResponseOfPayload response
 def getMethodWithDefaultsPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -7968,11 +7803,6 @@ def awaitGetHandleTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Get
   getHandleResponseOfPayload response
 def GetHandlePromise.awaitTyped (promise : GetHandlePromise) : IO GetHandleResponse := do
   awaitGetHandleTyped promise.pendingCall
-def GetHandlePromise.awaitAndRelease (promise : GetHandlePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetHandlePromise.awaitTypedAndRelease (promise : GetHandlePromise) : IO GetHandleResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getHandleResponseOfPayload response
 def getGetHandlePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8046,11 +7876,6 @@ def awaitGetNullTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO GetNu
   getNullResponseOfPayload response
 def GetNullPromise.awaitTyped (promise : GetNullPromise) : IO GetNullResponse := do
   awaitGetNullTyped promise.pendingCall
-def GetNullPromise.awaitAndRelease (promise : GetNullPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetNullPromise.awaitTypedAndRelease (promise : GetNullPromise) : IO GetNullResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getNullResponseOfPayload response
 def getGetNullPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8124,11 +7949,6 @@ def awaitGetEnormousStringTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) 
   getEnormousStringResponseOfPayload response
 def GetEnormousStringPromise.awaitTyped (promise : GetEnormousStringPromise) : IO GetEnormousStringResponse := do
   awaitGetEnormousStringTyped promise.pendingCall
-def GetEnormousStringPromise.awaitAndRelease (promise : GetEnormousStringPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetEnormousStringPromise.awaitTypedAndRelease (promise : GetEnormousStringPromise) : IO GetEnormousStringResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getEnormousStringResponseOfPayload response
 def getGetEnormousStringPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8202,11 +8022,6 @@ def awaitMethodWithNullDefaultTyped (pendingCall : Capnp.Rpc.RuntimePendingCallR
   methodWithNullDefaultResponseOfPayload response
 def MethodWithNullDefaultPromise.awaitTyped (promise : MethodWithNullDefaultPromise) : IO MethodWithNullDefaultResponse := do
   awaitMethodWithNullDefaultTyped promise.pendingCall
-def MethodWithNullDefaultPromise.awaitAndRelease (promise : MethodWithNullDefaultPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def MethodWithNullDefaultPromise.awaitTypedAndRelease (promise : MethodWithNullDefaultPromise) : IO MethodWithNullDefaultResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  methodWithNullDefaultResponseOfPayload response
 def getMethodWithNullDefaultPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8280,11 +8095,6 @@ def awaitWriteToFdTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Wri
   writeToFdResponseOfPayload response
 def WriteToFdPromise.awaitTyped (promise : WriteToFdPromise) : IO WriteToFdResponse := do
   awaitWriteToFdTyped promise.pendingCall
-def WriteToFdPromise.awaitAndRelease (promise : WriteToFdPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def WriteToFdPromise.awaitTypedAndRelease (promise : WriteToFdPromise) : IO WriteToFdResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  writeToFdResponseOfPayload response
 def getWriteToFdPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8358,11 +8168,6 @@ def awaitThrowExceptionTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : I
   throwExceptionResponseOfPayload response
 def ThrowExceptionPromise.awaitTyped (promise : ThrowExceptionPromise) : IO ThrowExceptionResponse := do
   awaitThrowExceptionTyped promise.pendingCall
-def ThrowExceptionPromise.awaitAndRelease (promise : ThrowExceptionPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def ThrowExceptionPromise.awaitTypedAndRelease (promise : ThrowExceptionPromise) : IO ThrowExceptionResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  throwExceptionResponseOfPayload response
 def getThrowExceptionPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8436,11 +8241,6 @@ def awaitThrowRemoteExceptionTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRe
   throwRemoteExceptionResponseOfPayload response
 def ThrowRemoteExceptionPromise.awaitTyped (promise : ThrowRemoteExceptionPromise) : IO ThrowRemoteExceptionResponse := do
   awaitThrowRemoteExceptionTyped promise.pendingCall
-def ThrowRemoteExceptionPromise.awaitAndRelease (promise : ThrowRemoteExceptionPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def ThrowRemoteExceptionPromise.awaitTypedAndRelease (promise : ThrowRemoteExceptionPromise) : IO ThrowRemoteExceptionResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  throwRemoteExceptionResponseOfPayload response
 def getThrowRemoteExceptionPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -8514,11 +8314,6 @@ def awaitThrowExceptionWithDetailTyped (pendingCall : Capnp.Rpc.RuntimePendingCa
   throwExceptionWithDetailResponseOfPayload response
 def ThrowExceptionWithDetailPromise.awaitTyped (promise : ThrowExceptionWithDetailPromise) : IO ThrowExceptionWithDetailResponse := do
   awaitThrowExceptionWithDetailTyped promise.pendingCall
-def ThrowExceptionWithDetailPromise.awaitAndRelease (promise : ThrowExceptionWithDetailPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def ThrowExceptionWithDetailPromise.awaitTypedAndRelease (promise : ThrowExceptionWithDetailPromise) : IO ThrowExceptionWithDetailResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  throwExceptionWithDetailResponseOfPayload response
 def getThrowExceptionWithDetailPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMoreStuff := do
   pendingCall.getPipelinedCap pointerPath
@@ -9030,11 +8825,6 @@ def awaitMakeThingTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Mak
   makeThingResponseOfPayload response
 def MakeThingPromise.awaitTyped (promise : MakeThingPromise) : IO MakeThingResponse := do
   awaitMakeThingTyped promise.pendingCall
-def MakeThingPromise.awaitAndRelease (promise : MakeThingPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def MakeThingPromise.awaitTypedAndRelease (promise : MakeThingPromise) : IO MakeThingResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  makeThingResponseOfPayload response
 def getMakeThingPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
   pendingCall.getPipelinedCap pointerPath
@@ -9108,11 +8898,6 @@ def awaitCallPassThroughTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : 
   callPassThroughResponseOfPayload response
 def CallPassThroughPromise.awaitTyped (promise : CallPassThroughPromise) : IO CallPassThroughResponse := do
   awaitCallPassThroughTyped promise.pendingCall
-def CallPassThroughPromise.awaitAndRelease (promise : CallPassThroughPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallPassThroughPromise.awaitTypedAndRelease (promise : CallPassThroughPromise) : IO CallPassThroughResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callPassThroughResponseOfPayload response
 def getCallPassThroughPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
   pendingCall.getPipelinedCap pointerPath
@@ -9186,11 +8971,6 @@ def awaitCallInterceptTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO
   callInterceptResponseOfPayload response
 def CallInterceptPromise.awaitTyped (promise : CallInterceptPromise) : IO CallInterceptResponse := do
   awaitCallInterceptTyped promise.pendingCall
-def CallInterceptPromise.awaitAndRelease (promise : CallInterceptPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def CallInterceptPromise.awaitTypedAndRelease (promise : CallInterceptPromise) : IO CallInterceptResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  callInterceptResponseOfPayload response
 def getCallInterceptPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
   pendingCall.getPipelinedCap pointerPath
@@ -9264,11 +9044,6 @@ def awaitLoopbackTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Loop
   loopbackResponseOfPayload response
 def LoopbackPromise.awaitTyped (promise : LoopbackPromise) : IO LoopbackResponse := do
   awaitLoopbackTyped promise.pendingCall
-def LoopbackPromise.awaitAndRelease (promise : LoopbackPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def LoopbackPromise.awaitTypedAndRelease (promise : LoopbackPromise) : IO LoopbackResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  loopbackResponseOfPayload response
 def getLoopbackPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
   pendingCall.getPipelinedCap pointerPath
@@ -9342,11 +9117,6 @@ def awaitWaitForeverTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO W
   waitForeverResponseOfPayload response
 def WaitForeverPromise.awaitTyped (promise : WaitForeverPromise) : IO WaitForeverResponse := do
   awaitWaitForeverTyped promise.pendingCall
-def WaitForeverPromise.awaitAndRelease (promise : WaitForeverPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def WaitForeverPromise.awaitTypedAndRelease (promise : WaitForeverPromise) : IO WaitForeverResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  waitForeverResponseOfPayload response
 def getWaitForeverPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane := do
   pendingCall.getPipelinedCap pointerPath
@@ -9608,11 +9378,6 @@ def awaitPassThroughTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO P
   passThroughResponseOfPayload response
 def PassThroughPromise.awaitTyped (promise : PassThroughPromise) : IO PassThroughResponse := do
   awaitPassThroughTyped promise.pendingCall
-def PassThroughPromise.awaitAndRelease (promise : PassThroughPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def PassThroughPromise.awaitTypedAndRelease (promise : PassThroughPromise) : IO PassThroughResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  passThroughResponseOfPayload response
 def getPassThroughPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane.Thing := do
   pendingCall.getPipelinedCap pointerPath
@@ -9686,11 +9451,6 @@ def awaitInterceptTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Int
   interceptResponseOfPayload response
 def InterceptPromise.awaitTyped (promise : InterceptPromise) : IO InterceptResponse := do
   awaitInterceptTyped promise.pendingCall
-def InterceptPromise.awaitAndRelease (promise : InterceptPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def InterceptPromise.awaitTypedAndRelease (promise : InterceptPromise) : IO InterceptResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  interceptResponseOfPayload response
 def getInterceptPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestMembrane.Thing := do
   pendingCall.getPipelinedCap pointerPath
@@ -9887,11 +9647,6 @@ def awaitDeleteTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO Delete
   deleteResponseOfPayload response
 def DeletePromise.awaitTyped (promise : DeletePromise) : IO DeleteResponse := do
   awaitDeleteTyped promise.pendingCall
-def DeletePromise.awaitAndRelease (promise : DeletePromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def DeletePromise.awaitTypedAndRelease (promise : DeletePromise) : IO DeleteResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  deleteResponseOfPayload response
 def getDeletePipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
   pendingCall.getPipelinedCap pointerPath
@@ -9965,11 +9720,6 @@ def await_classTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO _class
   _classResponseOfPayload response
 def _classPromise.awaitTyped (promise : _classPromise) : IO _classResponse := do
   await_classTyped promise.pendingCall
-def _classPromise.awaitAndRelease (promise : _classPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def _classPromise.awaitTypedAndRelease (promise : _classPromise) : IO _classResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  _classResponseOfPayload response
 def get_classPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
   pendingCall.getPipelinedCap pointerPath
@@ -10043,11 +9793,6 @@ def awaitVoidTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO VoidResp
   voidResponseOfPayload response
 def VoidPromise.awaitTyped (promise : VoidPromise) : IO VoidResponse := do
   awaitVoidTyped promise.pendingCall
-def VoidPromise.awaitAndRelease (promise : VoidPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def VoidPromise.awaitTypedAndRelease (promise : VoidPromise) : IO VoidResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  voidResponseOfPayload response
 def getVoidPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
   pendingCall.getPipelinedCap pointerPath
@@ -10121,11 +9866,6 @@ def await_returnTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO _retu
   _returnResponseOfPayload response
 def _returnPromise.awaitTyped (promise : _returnPromise) : IO _returnResponse := do
   await_returnTyped promise.pendingCall
-def _returnPromise.awaitAndRelease (promise : _returnPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def _returnPromise.awaitTypedAndRelease (promise : _returnPromise) : IO _returnResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  _returnResponseOfPayload response
 def get_returnPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestKeywordMethods := do
   pendingCall.getPipelinedCap pointerPath
@@ -10364,11 +10104,6 @@ def awaitGetCallerIdTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO G
   getCallerIdResponseOfPayload response
 def GetCallerIdPromise.awaitTyped (promise : GetCallerIdPromise) : IO GetCallerIdResponse := do
   awaitGetCallerIdTyped promise.pendingCall
-def GetCallerIdPromise.awaitAndRelease (promise : GetCallerIdPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def GetCallerIdPromise.awaitTypedAndRelease (promise : GetCallerIdPromise) : IO GetCallerIdResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  getCallerIdResponseOfPayload response
 def getGetCallerIdPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestAuthenticatedBootstrap := do
   pendingCall.getPipelinedCap pointerPath
@@ -10595,11 +10330,6 @@ def awaitBadlyNamedMethodTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) :
   badlyNamedMethodResponseOfPayload response
 def BadlyNamedMethodPromise.awaitTyped (promise : BadlyNamedMethodPromise) : IO BadlyNamedMethodResponse := do
   awaitBadlyNamedMethodTyped promise.pendingCall
-def BadlyNamedMethodPromise.awaitAndRelease (promise : BadlyNamedMethodPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def BadlyNamedMethodPromise.awaitTypedAndRelease (promise : BadlyNamedMethodPromise) : IO BadlyNamedMethodResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  badlyNamedMethodResponseOfPayload response
 def getBadlyNamedMethodPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO TestNameAnnotationInterface := do
   pendingCall.getPipelinedCap pointerPath

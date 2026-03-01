@@ -3992,32 +3992,6 @@ private:
       out += " promise.pendingCall\n";
 
       out += "def ";
-      out += promiseTypeName;
-      out += ".awaitAndRelease (promise : ";
-      out += promiseTypeName;
-      out += ") : IO Capnp.Rpc.Payload := do\n";
-      out += "  promise.pendingCall.awaitAndRelease\n";
-
-      out += "def ";
-      out += promiseTypeName;
-      out += ".awaitPayloadRefAndRelease (promise : ";
-      out += promiseTypeName;
-      out += ") : IO Capnp.Rpc.RuntimePayloadRef := do\n";
-      out += "  promise.pendingCall.awaitPayloadRefAndRelease\n";
-
-      out += "def ";
-      out += promiseTypeName;
-      out += ".awaitTypedAndRelease (promise : ";
-      out += promiseTypeName;
-      out += ") : IO ";
-      out += responseTypeName;
-      out += " := do\n";
-      out += "  let response ← promise.pendingCall.awaitAndRelease\n";
-      out += "  ";
-      out += decodeResponseName;
-      out += " response\n";
-
-      out += "def ";
       out += pipelinedCapName;
       out += " (pendingCall : Capnp.Rpc.RuntimePendingCallRef)\n";
       out += "    (pointerPath : Array UInt16 := #[]) : IO ";
@@ -4102,8 +4076,6 @@ private:
     auto restoreSturdyRefStartName = uniqueName("restoreSturdyRefStart", usedNames);
     auto restoreSturdyRefStartMName = uniqueName("restoreSturdyRefStartM", usedNames);
     auto awaitRestoreSturdyRefName = uniqueName("awaitRestoreSturdyRef", usedNames);
-    auto awaitRestoreSturdyRefAndReleaseName =
-        uniqueName("awaitRestoreSturdyRefAndRelease", usedNames);
     auto restoreSturdyRefAsTaskName = uniqueName("restoreSturdyRefAsTask", usedNames);
     auto restoreSturdyRefAsTaskMName = uniqueName("restoreSturdyRefAsTaskM", usedNames);
     auto restoreSturdyRefAsPromiseName = uniqueName("restoreSturdyRefAsPromise", usedNames);
@@ -4148,13 +4120,6 @@ private:
     out += name.cStr();
     out += " := do\n";
     out += "  promise.awaitTarget\n";
-
-    out += "def ";
-    out += awaitRestoreSturdyRefAndReleaseName;
-    out += " (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO ";
-    out += name.cStr();
-    out += " := do\n";
-    out += "  promise.awaitTargetAndRelease\n";
 
     out += "def ";
     out += restoreSturdyRefAsTaskName;

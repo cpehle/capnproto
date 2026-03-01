@@ -151,13 +151,6 @@ def awaitFooTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO FooRespon
   fooResponseOfPayload response
 def FooPromise.awaitTyped (promise : FooPromise) : IO FooResponse := do
   awaitFooTyped promise.pendingCall
-def FooPromise.awaitAndRelease (promise : FooPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def FooPromise.awaitPayloadRefAndRelease (promise : FooPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
-  promise.pendingCall.awaitPayloadRefAndRelease
-def FooPromise.awaitTypedAndRelease (promise : FooPromise) : IO FooResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  fooResponseOfPayload response
 def getFooPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath
@@ -243,13 +236,6 @@ def awaitBarTyped (pendingCall : Capnp.Rpc.RuntimePendingCallRef) : IO BarRespon
   barResponseOfPayload response
 def BarPromise.awaitTyped (promise : BarPromise) : IO BarResponse := do
   awaitBarTyped promise.pendingCall
-def BarPromise.awaitAndRelease (promise : BarPromise) : IO Capnp.Rpc.Payload := do
-  promise.pendingCall.awaitAndRelease
-def BarPromise.awaitPayloadRefAndRelease (promise : BarPromise) : IO Capnp.Rpc.RuntimePayloadRef := do
-  promise.pendingCall.awaitPayloadRefAndRelease
-def BarPromise.awaitTypedAndRelease (promise : BarPromise) : IO BarResponse := do
-  let response ← promise.pendingCall.awaitAndRelease
-  barResponseOfPayload response
 def getBarPipelinedCap (pendingCall : Capnp.Rpc.RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Echo := do
   pendingCall.getPipelinedCap pointerPath
@@ -285,8 +271,6 @@ def restoreSturdyRefStartM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Cap
   Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefStart peer sturdyRef
 def awaitRestoreSturdyRef (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO Echo := do
   promise.awaitTarget
-def awaitRestoreSturdyRefAndRelease (promise : Capnp.Rpc.RuntimeRegisterPromiseRef) : IO Echo := do
-  promise.awaitTargetAndRelease
 def restoreSturdyRefAsTask (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : IO (Task (Except IO.Error Echo)) := do
   peer.restoreSturdyRefAsTask sturdyRef
 def restoreSturdyRefAsTaskM (peer : Capnp.Rpc.RuntimeVatPeerRef) (sturdyRef : Capnp.Rpc.SturdyRef) : Capnp.Rpc.RuntimeM (Task (Except IO.Error Echo)) := do

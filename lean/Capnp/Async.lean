@@ -28,13 +28,6 @@ class Releasable (promise : Type u) where
   finally
     release ref
 
-@[inline] def awaitAndRelease {ρ : Type u} {α : Type} [Awaitable ρ α] [Releasable ρ]
-    (ref : ρ) : IO α := do
-  try
-    await ref
-  finally
-    release ref
-
 @[inline] def cancelAndRelease {ρ : Type u} [Cancelable ρ] [Releasable ρ] (ref : ρ) : IO Unit := do
   try
     cancel ref

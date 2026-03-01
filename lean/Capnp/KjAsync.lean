@@ -1,4 +1,5 @@
 import Capnp.Async
+import Capnp.Ffi
 import Init
 import Init.System.Promise
 
@@ -9,36 +10,24 @@ structure Runtime where
   handle : UInt64
   deriving Inhabited, BEq, Repr
 
-structure PromiseRef (α : Type := Unit) where
-  runtime : Runtime
-  handle : UInt32
+structure PromiseRef (α : Type := Unit) extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure Listener where
-  runtime : Runtime
-  handle : UInt32
+structure Listener extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure NetworkAddress where
-  runtime : Runtime
-  handle : UInt32
+structure NetworkAddress extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure Connection where
-  runtime : Runtime
-  handle : UInt32
+structure Connection extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
 opaque BytesRef : Type
 
-structure TaskSetRef where
-  runtime : Runtime
-  handle : UInt32
+structure TaskSetRef extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure DatagramPort where
-  runtime : Runtime
-  handle : UInt32
+structure DatagramPort extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
 structure DatagramPeer where
@@ -107,24 +96,16 @@ structure HttpResponseEncodedRef where
   encodedHeaders : ByteArray
   body : BytesRef
 
-structure HttpRequestBody where
-  runtime : Runtime
-  handle : UInt32
+structure HttpRequestBody extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure HttpResponseBody where
-  runtime : Runtime
-  handle : UInt32
+structure HttpResponseBody extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure HttpServerRequestBody where
-  runtime : Runtime
-  handle : UInt32
+structure HttpServerRequestBody extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
-structure HttpServerResponseBody where
-  runtime : Runtime
-  handle : UInt32
+structure HttpServerResponseBody extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
 structure HttpResponseStreamingEncoded where
@@ -141,9 +122,7 @@ structure HttpResponseStreaming where
   body : HttpResponseBody
   deriving Inhabited, BEq, Repr
 
-structure HttpServer where
-  runtime : Runtime
-  handle : UInt32
+structure HttpServer extends Capnp.FfiRuntimeHandle Runtime where
   boundPort : UInt32
   deriving Inhabited, BEq, Repr
 
@@ -161,9 +140,7 @@ structure HttpServerConfig where
   webSocketCompressionMode : HttpWebSocketCompressionMode := .none
   deriving Inhabited, BEq, Repr
 
-structure WebSocket where
-  runtime : Runtime
-  handle : UInt32
+structure WebSocket extends Capnp.FfiRuntimeHandle Runtime
   deriving Inhabited, BEq, Repr
 
 inductive WebSocketMessage where

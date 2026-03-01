@@ -5,3 +5,4 @@
 - `ownership-lifecycle.md`
 - `end-to-end-flow.md`
 - `feature-placement.md`
+- `gateway-design-openclaw.md`

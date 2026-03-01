@@ -42,8 +42,8 @@ package capnp_lean4_test where
 require LeanTest from "LeanTest"
 
 target rpc_bridge.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "rpc_bridge.cpp"
-  let oFile := pkg.buildDir / "c" / "rpc_bridge.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "rpc_bridge.cpp"
+  let oFile := pkg.buildDir / "ffi" / "rpc_bridge.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
@@ -54,8 +54,8 @@ target rpc_bridge.o pkg : FilePath := do
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target rpc_bridge_runtime.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "rpc_bridge_runtime.cpp"
-  let oFile := pkg.buildDir / "c" / "rpc_bridge_runtime.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "rpc_bridge_runtime.cpp"
+  let oFile := pkg.buildDir / "ffi" / "rpc_bridge_runtime.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
@@ -66,8 +66,8 @@ target rpc_bridge_runtime.o pkg : FilePath := do
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target rpc_bridge_common.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "rpc_bridge_common.cpp"
-  let oFile := pkg.buildDir / "c" / "rpc_bridge_common.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "rpc_bridge_common.cpp"
+  let oFile := pkg.buildDir / "ffi" / "rpc_bridge_common.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
@@ -78,8 +78,8 @@ target rpc_bridge_common.o pkg : FilePath := do
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target rpc_bridge_payload_ref.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "rpc_bridge_payload_ref.cpp"
-  let oFile := pkg.buildDir / "c" / "rpc_bridge_payload_ref.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "rpc_bridge_payload_ref.cpp"
+  let oFile := pkg.buildDir / "ffi" / "rpc_bridge_payload_ref.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
@@ -90,8 +90,8 @@ target rpc_bridge_payload_ref.o pkg : FilePath := do
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target rpc_bridge_generic_vat.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "rpc_bridge_generic_vat.cpp"
-  let oFile := pkg.buildDir / "c" / "rpc_bridge_generic_vat.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "rpc_bridge_generic_vat.cpp"
+  let oFile := pkg.buildDir / "ffi" / "rpc_bridge_generic_vat.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,
@@ -102,8 +102,8 @@ target rpc_bridge_generic_vat.o pkg : FilePath := do
   buildO oFile srcJob weakArgs capnpBridgeCompileArgs "c++" getLeanTrace
 
 target kj_async_bridge.o pkg : FilePath := do
-  let srcJob ← inputTextFile <| pkg.dir / "c" / "kj_async_bridge.cpp"
-  let oFile := pkg.buildDir / "c" / "kj_async_bridge.o"
+  let srcJob ← inputTextFile <| pkg.dir / ".." / ".." / "ffi" / "kj_async_bridge.cpp"
+  let oFile := pkg.buildDir / "ffi" / "kj_async_bridge.o"
   let weakArgs := #[
     "-I", (← getLeanIncludeDir).toString,
     "-I", (pkg.dir / ".." / ".." / "c++" / "src").toString,

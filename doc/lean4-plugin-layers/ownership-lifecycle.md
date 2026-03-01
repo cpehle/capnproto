@@ -9,7 +9,7 @@
 
 - Resource lifecycle is gradually becoming ergonomic:
   - many APIs expose explicit `release`;
-  - common scoped helpers (`withRelease`, `awaitAndRelease`, `cancelAndRelease`) are centralized in `Capnp.Async`.
+  - common scoped helpers (`withRelease`, `cancelAndRelease`) are centralized in `Capnp.Async`.
 
 ## Cross-Runtime Safety
 

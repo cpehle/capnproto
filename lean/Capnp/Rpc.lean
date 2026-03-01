@@ -1,5 +1,6 @@
 import Capnp.Async
 import Capnp.Runtime
+import Capnp.Ffi
 
 namespace Capnp
 namespace Rpc
@@ -13,30 +14,22 @@ structure Method where
 
 abbrev Client := Capnp.Capability
 
-structure Listener where
-  runtimeHandle : UInt64
-  raw : UInt32
+structure Listener extends Capnp.FfiRuntimeHandle UInt64
   deriving Inhabited, BEq, Repr
 
-structure RuntimeClient where
-  raw : UInt32
+structure RuntimeClient extends Capnp.FfiHandle
   deriving Inhabited, BEq, Repr
 
-structure RuntimeServer where
-  raw : UInt32
+structure RuntimeServer extends Capnp.FfiHandle
   deriving Inhabited, BEq, Repr
 
-structure RuntimePendingCall where
-  raw : UInt32
+structure RuntimePendingCall extends Capnp.FfiHandle
   deriving Inhabited, BEq, Repr
 
-structure RuntimeTransport where
-  runtimeHandle : UInt64
-  raw : UInt32
+structure RuntimeTransport extends Capnp.FfiRuntimeHandle UInt64
   deriving Inhabited, BEq, Repr
 
-structure RuntimeVatPeer where
-  raw : UInt32
+structure RuntimeVatPeer extends Capnp.FfiHandle
   deriving Inhabited, BEq, Repr
 
 structure VatId where
@@ -1312,36 +1305,36 @@ namespace Runtime
 @[inline] def newTransportPipe (runtime : Runtime) : IO (RuntimeTransport × RuntimeTransport) := do
   let (first, second) ← ffiRuntimeNewTransportPipeImpl runtime.handle
   return (
-    { runtimeHandle := runtime.handle, raw := first },
-    { runtimeHandle := runtime.handle, raw := second }
+    { runtime := runtime.handle, handle := first },
+    { runtime := runtime.handle, handle := second }
   )
 
 @[inline] def newTransportFromFd (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
-  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
+  return { runtime := runtime.handle, handle := (← ffiRuntimeNewTransportFromFdImpl runtime.handle fd) }
 
 /-- Create a transport from `fd` and take ownership of it on the runtime side.
 
 This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def newTransportFromFdTake (runtime : Runtime) (fd : UInt32) : IO RuntimeTransport :=
-  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeNewTransportFromFdTakeImpl runtime.handle fd) }
+  return { runtime := runtime.handle, handle := (← ffiRuntimeNewTransportFromFdTakeImpl runtime.handle fd) }
 
 @[inline] def releaseTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Unit := do
-  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
-  ffiRuntimeReleaseTransportImpl runtime.handle transport.raw
+  ensureSameRuntimeHandle runtime transport.runtime "RuntimeTransport"
+  ffiRuntimeReleaseTransportImpl runtime.handle transport.handle
 
 @[inline] def transportGetFd? (runtime : Runtime) (transport : RuntimeTransport) :
     IO (Option UInt32) := do
-  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
+  ensureSameRuntimeHandle runtime transport.runtime "RuntimeTransport"
   let noneSentinel : UInt32 := 0xFFFFFFFF
-  let fd ← ffiRuntimeTransportGetFdImpl runtime.handle transport.raw
+  let fd ← ffiRuntimeTransportGetFdImpl runtime.handle transport.handle
   if fd == noneSentinel then
     return none
   else
     return some fd
 
 @[inline] def connectTransport (runtime : Runtime) (transport : RuntimeTransport) : IO Client := do
-  ensureSameRuntimeHandle runtime transport.runtimeHandle "RuntimeTransport"
-  ffiRuntimeConnectTransportImpl runtime.handle transport.raw
+  ensureSameRuntimeHandle runtime transport.runtime "RuntimeTransport"
+  ffiRuntimeConnectTransportImpl runtime.handle transport.handle
 
 @[inline] def connectTransportFd (runtime : Runtime) (fd : UInt32) : IO Client := do
   let transport ← runtime.newTransportFromFd fd
@@ -1349,21 +1342,21 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 
 @[inline] def listenEcho (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
-  return { runtimeHandle := runtime.handle, raw := (← ffiRuntimeListenEchoImpl runtime.handle address portHint) }
+  return { runtime := runtime.handle, handle := (← ffiRuntimeListenEchoImpl runtime.handle address portHint) }
 
 @[inline] def acceptEcho (runtime : Runtime) (listener : Listener) : IO Unit := do
-  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
-  ffiRuntimeAcceptEchoImpl runtime.handle listener.raw
+  ensureSameRuntimeHandle runtime listener.runtime "Listener"
+  ffiRuntimeAcceptEchoImpl runtime.handle listener.handle
 
 @[inline] def releaseListener (runtime : Runtime) (listener : Listener) : IO Unit := do
-  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
-  ffiRuntimeReleaseListenerImpl runtime.handle listener.raw
+  ensureSameRuntimeHandle runtime listener.runtime "Listener"
+  ffiRuntimeReleaseListenerImpl runtime.handle listener.handle
 
 @[inline] def newClient (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
     IO RuntimeClientRef := do
   return {
     runtime := runtime
-    handle := { raw := (← ffiRuntimeNewClientImpl runtime.handle address portHint) }
+    handle := { handle := (← ffiRuntimeNewClientImpl runtime.handle address portHint) }
   }
 
 @[inline] def newClientStart (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
@@ -1379,7 +1372,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   IO.asTask do
     return {
       runtime := runtime
-      handle := { raw := (← ffiRuntimeRegisterPromiseAwaitImpl runtime.handle pending.handle) }
+      handle := { handle := (← ffiRuntimeRegisterPromiseAwaitImpl runtime.handle pending.handle) }
     }
 
 @[inline] def newClientAsPromise (runtime : Runtime) (address : String) (portHint : UInt32 := 0) :
@@ -1387,7 +1380,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   pure (Capnp.Async.Promise.ofTask (← runtime.newClientAsTask address portHint))
 
 @[inline] def newServer (runtime : Runtime) (bootstrap : Client) : IO RuntimeServerRef := do
-  return { runtime := runtime, handle := { raw := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
+  return { runtime := runtime, handle := { handle := (← ffiRuntimeNewServerImpl runtime.handle bootstrap) } }
 
 @[inline] def newServerWithBootstrapFactory (runtime : Runtime)
     (bootstrapFactory : TwoPartyVatSide -> IO Client) : IO RuntimeServerRef := do
@@ -1396,7 +1389,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle rawFactory)
+      handle := (← ffiRuntimeNewServerWithBootstrapFactoryImpl runtime.handle rawFactory)
     }
   }
 
@@ -1406,14 +1399,14 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 @[inline] def newMultiVatClient (runtime : Runtime) (name : String) : IO RuntimeVatPeerRef := do
   return {
     runtime := runtime
-    handle := { raw := (← ffiRuntimeMultiVatNewClientImpl runtime.handle name) }
+    handle := { handle := (← ffiRuntimeMultiVatNewClientImpl runtime.handle name) }
   }
 
 @[inline] def newMultiVatServer (runtime : Runtime) (name : String) (bootstrap : Client) :
     IO RuntimeVatPeerRef := do
   return {
     runtime := runtime
-    handle := { raw := (← ffiRuntimeMultiVatNewServerImpl runtime.handle name bootstrap) }
+    handle := { handle := (← ffiRuntimeMultiVatNewServerImpl runtime.handle name bootstrap) }
   }
 
 @[inline] def newMultiVatServerWithBootstrapFactory (runtime : Runtime) (name : String)
@@ -1423,16 +1416,16 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeMultiVatNewServerWithBootstrapFactoryImpl
+      handle := (← ffiRuntimeMultiVatNewServerWithBootstrapFactoryImpl
         runtime.handle name rawFactory)
     }
   }
 
 @[inline] def releaseMultiVatPeer (peer : RuntimeVatPeerRef) : IO Unit :=
-  ffiRuntimeMultiVatReleasePeerImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatReleasePeerImpl peer.runtime.handle peer.handle.handle
 
 @[inline] def multiVatBootstrap (peer : RuntimeVatPeerRef) (vatId : VatId) : IO Client :=
-  ffiRuntimeMultiVatBootstrapImpl peer.runtime.handle peer.handle.raw vatId.host
+  ffiRuntimeMultiVatBootstrapImpl peer.runtime.handle peer.handle.handle vatId.host
     (boolToUInt8 vatId.unique)
 
 @[inline] def multiVatBootstrapPeer (runtime : Runtime)
@@ -1440,7 +1433,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     (unique : Bool := false) : IO Client := do
   ensureSameRuntime runtime sourcePeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime targetPeer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatBootstrapPeerImpl runtime.handle sourcePeer.handle.raw targetPeer.handle.raw
+  ffiRuntimeMultiVatBootstrapPeerImpl runtime.handle sourcePeer.handle.handle targetPeer.handle.handle
     (boolToUInt8 unique)
 
 @[inline] def multiVatSetForwardingEnabled (runtime : Runtime) (enabled : Bool) : IO Unit :=
@@ -1462,31 +1455,31 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Bool := do
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatHasConnectionImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+  ffiRuntimeMultiVatHasConnectionImpl runtime.handle fromPeer.handle.handle toPeer.handle.handle
 
 @[inline] def multiVatGetDiagnostics (runtime : Runtime)
     (peer : RuntimeVatPeerRef) (targetVatId : VatId) : IO RpcDiagnostics := do
   ensureSameRuntime runtime peer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatGetDiagnosticsImpl runtime.handle peer.handle.raw targetVatId
+  ffiRuntimeMultiVatGetDiagnosticsImpl runtime.handle peer.handle.handle targetVatId
 
 @[inline] def multiVatConnectionBlock (runtime : Runtime)
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatConnectionBlockImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+  ffiRuntimeMultiVatConnectionBlockImpl runtime.handle fromPeer.handle.handle toPeer.handle.handle
 
 @[inline] def multiVatConnectionUnblock (runtime : Runtime)
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) : IO Unit := do
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatConnectionUnblockImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+  ffiRuntimeMultiVatConnectionUnblockImpl runtime.handle fromPeer.handle.handle toPeer.handle.handle
 
 @[inline] def multiVatConnectionDisconnect (runtime : Runtime)
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef)
     (type : RemoteExceptionType) (message : String) (detail : ByteArray := ByteArray.empty) : IO Unit := do
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
-  ffiRuntimeMultiVatConnectionDisconnectImpl runtime.handle fromPeer.handle.raw toPeer.handle.raw
+  ffiRuntimeMultiVatConnectionDisconnectImpl runtime.handle fromPeer.handle.handle toPeer.handle.handle
     type.toUInt8 message detail
 
 @[inline] def multiVatConnectionResolveDisembargoCounts (runtime : Runtime)
@@ -1494,7 +1487,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
   ffiRuntimeMultiVatConnectionResolveDisembargoCountsImpl
-    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+    runtime.handle fromPeer.handle.handle toPeer.handle.handle
 
 @[inline] def multiVatConnectionResolveDisembargoTrace (runtime : Runtime)
     (fromPeer : RuntimeVatPeerRef) (toPeer : RuntimeVatPeerRef) :
@@ -1502,7 +1495,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
   let bytes ← ffiRuntimeMultiVatConnectionResolveDisembargoTraceImpl
-    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+    runtime.handle fromPeer.handle.handle toPeer.handle.handle
   return (PipelinePath.ofBytes bytes).map ProtocolMessageTraceTag.ofUInt16
 
 @[inline] def multiVatConnectionResetResolveDisembargoTrace (runtime : Runtime)
@@ -1510,27 +1503,27 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   ensureSameRuntime runtime fromPeer.runtime "RuntimeVatPeerRef"
   ensureSameRuntime runtime toPeer.runtime "RuntimeVatPeerRef"
   ffiRuntimeMultiVatConnectionResetResolveDisembargoTraceImpl
-    runtime.handle fromPeer.handle.raw toPeer.handle.raw
+    runtime.handle fromPeer.handle.handle toPeer.handle.handle
 
 @[inline] def multiVatSetRestorer (peer : RuntimeVatPeerRef)
     (restorer : VatId -> ByteArray -> IO Client) : IO Unit :=
-  ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatSetRestorerImpl peer.runtime.handle peer.handle.handle
     (fun host unique objectId =>
       restorer { host := host, unique := unique } objectId)
 
 @[inline] def multiVatClearRestorer (peer : RuntimeVatPeerRef) : IO Unit :=
-  ffiRuntimeMultiVatClearRestorerImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatClearRestorerImpl peer.runtime.handle peer.handle.handle
 
 @[inline] def multiVatPublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : IO Unit :=
-  ffiRuntimeMultiVatPublishSturdyRefImpl peer.runtime.handle peer.handle.raw objectId target
+  ffiRuntimeMultiVatPublishSturdyRefImpl peer.runtime.handle peer.handle.handle objectId target
 
 @[inline] def multiVatPublishSturdyRefStart (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) (target : Client) : IO RuntimeUnitPromiseRef := do
   return {
     runtime := peer.runtime
     handle := (← ffiRuntimeMultiVatPublishSturdyRefStartImpl
-      peer.runtime.handle peer.handle.raw objectId target)
+      peer.runtime.handle peer.handle.handle objectId target)
   }
 
 @[inline] def multiVatPublishSturdyRefAsTask (peer : RuntimeVatPeerRef)
@@ -1544,14 +1537,14 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 
 @[inline] def multiVatUnpublishSturdyRef (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) : IO Unit :=
-  ffiRuntimeMultiVatUnpublishSturdyRefImpl peer.runtime.handle peer.handle.raw objectId
+  ffiRuntimeMultiVatUnpublishSturdyRefImpl peer.runtime.handle peer.handle.handle objectId
 
 @[inline] def multiVatUnpublishSturdyRefStart (peer : RuntimeVatPeerRef)
     (objectId : ByteArray) : IO RuntimeUnitPromiseRef := do
   return {
     runtime := peer.runtime
     handle := (← ffiRuntimeMultiVatUnpublishSturdyRefStartImpl
-      peer.runtime.handle peer.handle.raw objectId)
+      peer.runtime.handle peer.handle.handle objectId)
   }
 
 @[inline] def multiVatUnpublishSturdyRefAsTask (peer : RuntimeVatPeerRef)
@@ -1564,14 +1557,14 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   pure (Capnp.Async.Promise.ofTask (← multiVatUnpublishSturdyRefAsTask peer objectId))
 
 @[inline] def multiVatClearPublishedSturdyRefs (peer : RuntimeVatPeerRef) : IO Unit :=
-  ffiRuntimeMultiVatClearPublishedSturdyRefsImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatClearPublishedSturdyRefsImpl peer.runtime.handle peer.handle.handle
 
 @[inline] def multiVatClearPublishedSturdyRefsStart (peer : RuntimeVatPeerRef) :
     IO RuntimeUnitPromiseRef := do
   return {
     runtime := peer.runtime
     handle := (← ffiRuntimeMultiVatClearPublishedSturdyRefsStartImpl
-      peer.runtime.handle peer.handle.raw)
+      peer.runtime.handle peer.handle.handle)
   }
 
 @[inline] def multiVatClearPublishedSturdyRefsAsTask (peer : RuntimeVatPeerRef) :
@@ -1584,18 +1577,18 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   pure (Capnp.Async.Promise.ofTask (← multiVatClearPublishedSturdyRefsAsTask peer))
 
 @[inline] def multiVatPublishedSturdyRefCount (peer : RuntimeVatPeerRef) : IO UInt64 :=
-  ffiRuntimeMultiVatPublishedSturdyRefCountImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatPublishedSturdyRefCountImpl peer.runtime.handle peer.handle.handle
 
 @[inline] def multiVatRestoreSturdyRef (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO Client :=
-  ffiRuntimeMultiVatRestoreSturdyRefImpl peer.runtime.handle peer.handle.raw
+  ffiRuntimeMultiVatRestoreSturdyRefImpl peer.runtime.handle peer.handle.handle
     sturdyRef.vat.host (boolToUInt8 sturdyRef.vat.unique) sturdyRef.objectId
 
 @[inline] def multiVatRestoreSturdyRefStart (peer : RuntimeVatPeerRef)
     (sturdyRef : SturdyRef) : IO RuntimeRegisterPromiseRef := do
   return {
     runtime := peer.runtime
-    handle := (← ffiRuntimeMultiVatRestoreSturdyRefStartImpl peer.runtime.handle peer.handle.raw
+    handle := (← ffiRuntimeMultiVatRestoreSturdyRefStartImpl peer.runtime.handle peer.handle.handle
       sturdyRef.vat.host (boolToUInt8 sturdyRef.vat.unique) sturdyRef.objectId)
   }
 
@@ -1624,18 +1617,18 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   try
     action client
   finally
-    ffiRuntimeReleaseClientImpl runtime.handle client.handle.raw
+    ffiRuntimeReleaseClientImpl runtime.handle client.handle.handle
 
 @[inline] def newBootstrapTarget (runtime : Runtime) (address : String)
     (portHint : UInt32 := 0) : IO (RuntimeClientRef × Client) := do
   let client ← runtime.newClient address portHint
-  let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
+  let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.handle
   pure (client, target)
 
 @[inline] def withBootstrapClientTarget (runtime : Runtime) (address : String)
     (action : RuntimeClientRef -> Client -> IO α) (portHint : UInt32 := 0) : IO α := do
   runtime.withClient address (fun client => do
-    let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.raw
+    let target ← ffiRuntimeClientBootstrapImpl runtime.handle client.handle.handle
     runtime.withTarget target (fun scopedTarget => action client scopedTarget)
   ) portHint
 
@@ -1649,7 +1642,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   try
     action server
   finally
-    ffiRuntimeReleaseServerImpl runtime.handle server.handle.raw
+    ffiRuntimeReleaseServerImpl runtime.handle server.handle.handle
 
 @[inline] def withServerWithBootstrapFactory (runtime : Runtime)
     (bootstrapFactory : TwoPartyVatSide -> IO Client)
@@ -1658,7 +1651,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   try
     action server
   finally
-    ffiRuntimeReleaseServerImpl runtime.handle server.handle.raw
+    ffiRuntimeReleaseServerImpl runtime.handle server.handle.handle
 
 @[inline] def rawCall (runtime : Runtime) : RawCall :=
   fun target method request =>
@@ -1769,7 +1762,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeStartCallWithCapsImpl runtime.handle target method.interfaceId
+      handle := (← ffiRuntimeStartCallWithCapsImpl runtime.handle target method.interfaceId
         method.methodId requestBytes requestCaps)
     }
   }
@@ -1784,7 +1777,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeStartCallWithPayloadRefImpl runtime.handle target
+      handle := (← ffiRuntimeStartCallWithPayloadRefImpl runtime.handle target
         method.interfaceId method.methodId payloadRef.handle)
     }
   }
@@ -1796,7 +1789,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeStartStreamingCallWithCapsImpl runtime.handle target method.interfaceId
+      handle := (← ffiRuntimeStartStreamingCallWithCapsImpl runtime.handle target method.interfaceId
         method.methodId requestBytes requestCaps)
     }
   }
@@ -1812,7 +1805,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := runtime
     handle := {
-      raw := (← ffiRuntimeStartStreamingCallWithPayloadRefImpl runtime.handle target
+      handle := (← ffiRuntimeStartStreamingCallWithPayloadRefImpl runtime.handle target
         method.interfaceId method.methodId payloadRef.handle)
     }
   }
@@ -1822,7 +1815,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   let pending ← runtime.startCall target method payload
   IO.asTask do
     let (responseBytes, responseCaps) ←
-      ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.raw
+      ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.handle
     decodePayloadChecked responseBytes responseCaps
 
 @[inline] def startCallAsPromise (runtime : Runtime) (target : Client) (method : Method)
@@ -1835,7 +1828,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   IO.asTask do
     return {
       runtime := runtime
-      handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.raw)
+      handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.handle)
     }
 
 @[inline] def startCallWithPayloadRefAsPromise
@@ -1850,13 +1843,13 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   try
     action pending
   finally
-    ffiRuntimePendingCallReleaseImpl runtime.handle pending.handle.raw
+    ffiRuntimePendingCallReleaseImpl runtime.handle pending.handle.handle
 
 @[inline] def startCallAwait (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO Payload := do
   let pending ← runtime.startCall target method payload
   let (responseBytes, responseCaps) ←
-    ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.raw
+    ffiRuntimePendingCallAwaitImpl runtime.handle pending.handle.handle
   decodePayloadChecked responseBytes responseCaps
 
 @[inline] def startCallAwaitPayloadRef (runtime : Runtime) (target : Client) (method : Method)
@@ -1864,13 +1857,13 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   let pending ← runtime.startCallWithPayloadRef target method payloadRef
   return {
     runtime := runtime
-    handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.raw)
+    handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl runtime.handle pending.handle.handle)
   }
 
 @[inline] def startCallAwaitOutcome (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO RawCallOutcome := do
   let pending ← runtime.startCall target method payload
-  ffiRuntimePendingCallAwaitOutcomeImpl runtime.handle pending.handle.raw
+  ffiRuntimePendingCallAwaitOutcomeImpl runtime.handle pending.handle.handle
 
 @[inline] def startCallAwaitResult (runtime : Runtime) (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : IO (Except RemoteException Payload) := do
@@ -1882,7 +1875,7 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
 
 @[inline] def pendingCallAwait (pendingCall : RuntimePendingCallRef) : IO Payload := do
   let (responseBytes, responseCaps) ←
-    ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.raw
+    ffiRuntimePendingCallAwaitImpl pendingCall.runtime.handle pendingCall.handle.handle
   decodePayloadChecked responseBytes responseCaps
 
 @[inline] def pendingCallAwaitPayloadRef (pendingCall : RuntimePendingCallRef) :
@@ -1890,11 +1883,11 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
   return {
     runtime := pendingCall.runtime
     handle := (← ffiRuntimePendingCallAwaitPayloadRefImpl
-      pendingCall.runtime.handle pendingCall.handle.raw)
+      pendingCall.runtime.handle pendingCall.handle.handle)
   }
 
 @[inline] def pendingCallAwaitOutcome (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome :=
-  ffiRuntimePendingCallAwaitOutcomeImpl pendingCall.runtime.handle pendingCall.handle.raw
+  ffiRuntimePendingCallAwaitOutcomeImpl pendingCall.runtime.handle pendingCall.handle.handle
 
 @[inline] def pendingCallAwaitResult (pendingCall : RuntimePendingCallRef) :
     IO (Except RemoteException Payload) := do
@@ -1905,14 +1898,14 @@ This differs from `newTransportFromFd`, which duplicates the fd. -/
       return .error ex
 
 @[inline] def pendingCallRelease (pendingCall : RuntimePendingCallRef) : IO Unit :=
-  ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle.raw
+  ffiRuntimePendingCallReleaseImpl pendingCall.runtime.handle pendingCall.handle.handle
 
 @[inline] def pendingCallReleaseDeferred (pendingCall : RuntimePendingCallRef) : IO Unit :=
-  ffiRuntimePendingCallReleaseDeferredImpl pendingCall.runtime.handle pendingCall.handle.raw
+  ffiRuntimePendingCallReleaseDeferredImpl pendingCall.runtime.handle pendingCall.handle.handle
 
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client := do
-  ffiRuntimePendingCallGetPipelinedCapImpl pendingCall.runtime.handle pendingCall.handle.raw
+  ffiRuntimePendingCallGetPipelinedCapImpl pendingCall.runtime.handle pendingCall.handle.handle
     (PipelinePath.toBytes pointerPath)
 
 @[inline] def registerPromiseAwait (promise : RuntimeRegisterPromiseRef) : IO UInt32 :=
@@ -2031,7 +2024,7 @@ end Runtime
 namespace RuntimeClientRef
 
 @[inline] def release (client : RuntimeClientRef) : IO Unit :=
-  ffiRuntimeReleaseClientImpl client.runtime.handle client.handle.raw
+  ffiRuntimeReleaseClientImpl client.runtime.handle client.handle.handle
 
 @[inline] def withRelease (client : RuntimeClientRef) (action : RuntimeClientRef -> IO α) : IO α := do
   try
@@ -2040,15 +2033,15 @@ namespace RuntimeClientRef
     client.release
 
 @[inline] def bootstrap (client : RuntimeClientRef) : IO Client :=
-  ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle.raw
+  ffiRuntimeClientBootstrapImpl client.runtime.handle client.handle.handle
 
 @[inline] def onDisconnect (client : RuntimeClientRef) : IO Unit :=
-  ffiRuntimeClientOnDisconnectImpl client.runtime.handle client.handle.raw
+  ffiRuntimeClientOnDisconnectImpl client.runtime.handle client.handle.handle
 
 @[inline] def onDisconnectStart (client : RuntimeClientRef) : IO RuntimeUnitPromiseRef := do
   return {
     runtime := client.runtime
-    handle := (← ffiRuntimeClientOnDisconnectStartImpl client.runtime.handle client.handle.raw)
+    handle := (← ffiRuntimeClientOnDisconnectStartImpl client.runtime.handle client.handle.handle)
   }
 
 @[inline] def onDisconnectAsTask (client : RuntimeClientRef) :
@@ -2061,16 +2054,16 @@ namespace RuntimeClientRef
   pure (Capnp.Async.Promise.ofTask (← client.onDisconnectAsTask))
 
 @[inline] def setFlowLimit (client : RuntimeClientRef) (words : UInt64) : IO Unit :=
-  ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle.raw words
+  ffiRuntimeClientSetFlowLimitImpl client.runtime.handle client.handle.handle words
 
 @[inline] def queueSize (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientQueueSizeImpl client.runtime.handle client.handle.raw
+  ffiRuntimeClientQueueSizeImpl client.runtime.handle client.handle.handle
 
 @[inline] def queueCount (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientQueueCountImpl client.runtime.handle client.handle.raw
+  ffiRuntimeClientQueueCountImpl client.runtime.handle client.handle.handle
 
 @[inline] def outgoingWaitNanos (client : RuntimeClientRef) : IO UInt64 :=
-  ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle.raw
+  ffiRuntimeClientOutgoingWaitNanosImpl client.runtime.handle client.handle.handle
 
 instance : Capnp.Async.Releasable RuntimeClientRef where
   release := RuntimeClientRef.release
@@ -2080,7 +2073,7 @@ end RuntimeClientRef
 namespace RuntimeServerRef
 
 @[inline] def release (server : RuntimeServerRef) : IO Unit :=
-  ffiRuntimeReleaseServerImpl server.runtime.handle server.handle.raw
+  ffiRuntimeReleaseServerImpl server.runtime.handle server.handle.handle
 
 @[inline] def withRelease (server : RuntimeServerRef) (action : RuntimeServerRef -> IO α) : IO α := do
   try
@@ -2091,21 +2084,21 @@ namespace RuntimeServerRef
 @[inline] def listen (server : RuntimeServerRef) (address : String) (portHint : UInt32 := 0) :
     IO Listener :=
   return {
-    runtimeHandle := server.runtime.handle
-    raw := (← ffiRuntimeServerListenImpl server.runtime.handle server.handle.raw address portHint)
+    runtime := server.runtime.handle
+    handle := (← ffiRuntimeServerListenImpl server.runtime.handle server.handle.handle address portHint)
   }
 
 @[inline] def accept (server : RuntimeServerRef) (listener : Listener) : IO Unit := do
-  ensureSameRuntimeHandle server.runtime listener.runtimeHandle "Listener"
-  ffiRuntimeServerAcceptImpl server.runtime.handle server.handle.raw listener.raw
+  ensureSameRuntimeHandle server.runtime listener.runtime "Listener"
+  ffiRuntimeServerAcceptImpl server.runtime.handle server.handle.handle listener.handle
 
 @[inline] def acceptStart (server : RuntimeServerRef) (listener : Listener) :
     IO RuntimeUnitPromiseRef := do
-  ensureSameRuntimeHandle server.runtime listener.runtimeHandle "Listener"
+  ensureSameRuntimeHandle server.runtime listener.runtime "Listener"
   return {
     runtime := server.runtime
     handle := (← ffiRuntimeServerAcceptStartImpl
-      server.runtime.handle server.handle.raw listener.raw)
+      server.runtime.handle server.handle.handle listener.handle)
   }
 
 @[inline] def acceptAsTask (server : RuntimeServerRef) (listener : Listener) :
@@ -2118,23 +2111,23 @@ namespace RuntimeServerRef
   pure (Capnp.Async.Promise.ofTask (← server.acceptAsTask listener))
 
 @[inline] def acceptFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit :=
-  ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.raw fd
+  ffiRuntimeServerAcceptFdImpl server.runtime.handle server.handle.handle fd
 
 @[inline] def acceptTransport (server : RuntimeServerRef) (transport : RuntimeTransport) : IO Unit := do
-  ensureSameRuntimeHandle server.runtime transport.runtimeHandle "RuntimeTransport"
-  ffiRuntimeServerAcceptTransportImpl server.runtime.handle server.handle.raw transport.raw
+  ensureSameRuntimeHandle server.runtime transport.runtime "RuntimeTransport"
+  ffiRuntimeServerAcceptTransportImpl server.runtime.handle server.handle.handle transport.handle
 
 @[inline] def acceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : IO Unit := do
   let transport ← Runtime.newTransportFromFd server.runtime fd
   server.acceptTransport transport
 
 @[inline] def drain (server : RuntimeServerRef) : IO Unit :=
-  ffiRuntimeServerDrainImpl server.runtime.handle server.handle.raw
+  ffiRuntimeServerDrainImpl server.runtime.handle server.handle.handle
 
 @[inline] def drainStart (server : RuntimeServerRef) : IO RuntimeUnitPromiseRef := do
   return {
     runtime := server.runtime
-    handle := (← ffiRuntimeServerDrainStartImpl server.runtime.handle server.handle.raw)
+    handle := (← ffiRuntimeServerDrainStartImpl server.runtime.handle server.handle.handle)
   }
 
 @[inline] def drainAsTask (server : RuntimeServerRef) :
@@ -2602,24 +2595,6 @@ namespace RuntimePendingCallRef
   finally
     pendingCall.release
 
-@[inline] def awaitAndRelease (pendingCall : RuntimePendingCallRef) : IO Payload := do
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  pendingCall.await
-
-@[inline] def awaitPayloadRefAndRelease (pendingCall : RuntimePendingCallRef) :
-    IO RuntimePayloadRef := do
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  pendingCall.awaitPayloadRef
-
-@[inline] def awaitOutcomeAndRelease (pendingCall : RuntimePendingCallRef) : IO RawCallOutcome := do
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  pendingCall.awaitOutcome
-
-@[inline] def awaitResultAndRelease (pendingCall : RuntimePendingCallRef) :
-    IO (Except RemoteException Payload) := do
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  pendingCall.awaitResult
-
 @[inline] def getPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : IO Client :=
   Runtime.pendingCallGetPipelinedCap pendingCall pointerPath
@@ -2689,44 +2664,22 @@ namespace RuntimeRegisterPromiseRef
   finally
     promise.release
 
-@[inline] def awaitAndRelease (promise : RuntimeRegisterPromiseRef) : IO UInt32 := do
-  -- Awaiting a register promise consumes it in the runtime; no explicit release is needed.
-  promise.await
-
 @[inline] def awaitTarget (promise : RuntimeRegisterPromiseRef) : IO Client :=
   promise.await
-
-@[inline] def awaitTargetAndRelease (promise : RuntimeRegisterPromiseRef) : IO Client :=
-  promise.awaitAndRelease
 
 @[inline] def awaitClient (promise : RuntimeRegisterPromiseRef) : IO RuntimeClientRef := do
   return {
     runtime := promise.runtime
-    handle := { raw := (← promise.await) }
-  }
-
-@[inline] def awaitClientAndRelease (promise : RuntimeRegisterPromiseRef) : IO RuntimeClientRef := do
-  return {
-    runtime := promise.runtime
-    handle := { raw := (← promise.awaitAndRelease) }
+    handle := { handle := (← promise.await) }
   }
 
 @[inline] def awaitListener (promise : RuntimeRegisterPromiseRef) : IO Listener := do
-  return { runtimeHandle := promise.runtime.handle, raw := (← promise.await) }
-
-@[inline] def awaitListenerAndRelease (promise : RuntimeRegisterPromiseRef) : IO Listener := do
-  return { runtimeHandle := promise.runtime.handle, raw := (← promise.awaitAndRelease) }
+  return { runtime := promise.runtime.handle, handle := (← promise.await) }
 
 @[inline] def awaitServer (promise : RuntimeRegisterPromiseRef) : IO RuntimeServerRef := do
   return {
     runtime := promise.runtime
-    handle := { raw := (← promise.await) }
-  }
-
-@[inline] def awaitServerAndRelease (promise : RuntimeRegisterPromiseRef) : IO RuntimeServerRef := do
-  return {
-    runtime := promise.runtime
-    handle := { raw := (← promise.awaitAndRelease) }
+    handle := { handle := (← promise.await) }
   }
 
 instance : Capnp.Async.Awaitable RuntimeRegisterPromiseRef UInt32 where
@@ -2769,10 +2722,6 @@ namespace RuntimeUnitPromiseRef
     action promise
   finally
     promise.release
-
-@[inline] def awaitAndRelease (promise : RuntimeUnitPromiseRef) : IO Unit := do
-  -- Awaiting a unit promise consumes it in the runtime; no explicit release is needed.
-  promise.await
 
 instance : Capnp.Async.Awaitable RuntimeUnitPromiseRef Unit where
   await := RuntimeUnitPromiseRef.await
@@ -3270,13 +3219,13 @@ namespace RuntimeM
 
 @[inline] def serverAccept (server : RuntimeServerRef) (listener : Listener) : RuntimeM Unit := do
   ensureCurrentRuntime server.runtime "RuntimeServerRef"
-  ensureCurrentRuntimeHandle listener.runtimeHandle "Listener"
+  ensureCurrentRuntimeHandle listener.runtime "Listener"
   server.accept listener
 
 @[inline] def serverAcceptStart (server : RuntimeServerRef) (listener : Listener) :
     RuntimeM RuntimeUnitPromiseRef := do
   ensureCurrentRuntime server.runtime "RuntimeServerRef"
-  ensureCurrentRuntimeHandle listener.runtimeHandle "Listener"
+  ensureCurrentRuntimeHandle listener.runtime "Listener"
   server.acceptStart listener
 
 @[inline] def serverAcceptAsTask (server : RuntimeServerRef) (listener : Listener) :
@@ -3296,7 +3245,7 @@ namespace RuntimeM
 @[inline] def serverAcceptTransport (server : RuntimeServerRef)
     (transport : RuntimeTransport) : RuntimeM Unit := do
   ensureCurrentRuntime server.runtime "RuntimeServerRef"
-  ensureCurrentRuntimeHandle transport.runtimeHandle "RuntimeTransport"
+  ensureCurrentRuntimeHandle transport.runtime "RuntimeTransport"
   server.acceptTransport transport
 
 @[inline] def serverAcceptTransportFd (server : RuntimeServerRef) (fd : UInt32) : RuntimeM Unit := do
@@ -3585,29 +3534,6 @@ namespace RuntimeM
   finally
     Runtime.pendingCallRelease pendingCall
 
-@[inline] def pendingCallAwaitAndRelease (pendingCall : RuntimePendingCallRef) : RuntimeM Payload := do
-  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  Runtime.pendingCallAwait pendingCall
-
-@[inline] def pendingCallAwaitPayloadRefAndRelease
-    (pendingCall : RuntimePendingCallRef) : RuntimeM RuntimePayloadRef := do
-  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  Runtime.pendingCallAwaitPayloadRef pendingCall
-
-@[inline] def pendingCallAwaitOutcomeAndRelease
-    (pendingCall : RuntimePendingCallRef) : RuntimeM RawCallOutcome := do
-  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  Runtime.pendingCallAwaitOutcome pendingCall
-
-@[inline] def pendingCallAwaitResultAndRelease
-    (pendingCall : RuntimePendingCallRef) : RuntimeM (Except RemoteException Payload) := do
-  ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
-  -- Awaiting a pending call consumes it in the runtime; no explicit release is needed.
-  Runtime.pendingCallAwaitResult pendingCall
-
 @[inline] def pendingCallGetPipelinedCap (pendingCall : RuntimePendingCallRef)
     (pointerPath : Array UInt16 := #[]) : RuntimeM Client := do
   ensureCurrentRuntime pendingCall.runtime "RuntimePendingCallRef"
@@ -3633,12 +3559,6 @@ namespace RuntimeM
   finally
     Runtime.registerPromiseRelease promise
 
-@[inline] def registerPromiseAwaitAndRelease (promise : RuntimeRegisterPromiseRef) :
-    RuntimeM UInt32 := do
-  ensureCurrentRuntime promise.runtime "RuntimeRegisterPromiseRef"
-  -- Awaiting a register promise consumes it in the runtime; no explicit release is needed.
-  Runtime.registerPromiseAwait promise
-
 @[inline] def unitPromiseAwait (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
   ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
   Runtime.unitPromiseAwait promise
@@ -3658,11 +3578,6 @@ namespace RuntimeM
     action promise
   finally
     Runtime.unitPromiseRelease promise
-
-@[inline] def unitPromiseAwaitAndRelease (promise : RuntimeUnitPromiseRef) : RuntimeM Unit := do
-  ensureCurrentRuntime promise.runtime "RuntimeUnitPromiseRef"
-  -- Awaiting a unit promise consumes it in the runtime; no explicit release is needed.
-  Runtime.unitPromiseAwait promise
 
 @[inline] def streamingCall (target : Client) (method : Method)
     (payload : Payload := Capnp.emptyRpcEnvelope) : RuntimeM Unit := do
@@ -3795,11 +3710,11 @@ namespace Interop
     (payload : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
     IO RuntimePayloadRef := do
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
-  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
+  ensureSameRuntimeHandle runtime listener.runtime "Listener"
   let requestBytes := payload.toBytes
   let requestCaps := payload.capTableBytes
   let (responseBytes, responseCaps) ←
-    ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle.raw listener.raw
+    ffiRuntimeCppCallWithAcceptImpl runtime.handle server.handle.handle listener.handle
       address portHint method.interfaceId method.methodId requestBytes requestCaps
   runtime.payloadRefFromBytes responseBytes responseCaps
 
@@ -3815,13 +3730,13 @@ namespace Interop
     (pipelinedRequest : Payload := Capnp.emptyRpcEnvelope) (portHint : UInt32 := 0) :
     IO RuntimePayloadRef := do
   ensureSameRuntime runtime server.runtime "RuntimeServerRef"
-  ensureSameRuntimeHandle runtime listener.runtimeHandle "Listener"
+  ensureSameRuntimeHandle runtime listener.runtime "Listener"
   let requestBytes := request.toBytes
   let requestCaps := request.capTableBytes
   let pipelinedRequestBytes := pipelinedRequest.toBytes
   let pipelinedRequestCaps := pipelinedRequest.capTableBytes
   let (responseBytes, responseCaps) ← ffiRuntimeCppCallPipelinedWithAcceptImpl
-    runtime.handle server.handle.raw listener.raw address portHint method.interfaceId method.methodId
+    runtime.handle server.handle.handle listener.handle address portHint method.interfaceId method.methodId
     requestBytes requestCaps pipelinedRequestBytes pipelinedRequestCaps
   runtime.payloadRefFromBytes responseBytes responseCaps
 

@@ -373,12 +373,12 @@ def testGeneratedPromiseHelpers : IO Unit := do
       promise.callPipelinedM #[] payload
     assertEqual pipelinedResponse.capTable.caps.size 0
 
-    let response ← promise.awaitAndRelease
+    let response ← promise.await
     assertEqual response.capTable.caps.size 1
     runtime.releaseCapTable response.capTable
 
     let promiseTyped ← Echo.startFooPromise runtime target typedPayload
-    let typedResponse ← promiseTyped.awaitTypedAndRelease
+    let typedResponse ← promiseTyped.awaitTyped
     assertEqual typedResponse.capTable.caps.size 0
     runtime.releaseCapTable typedResponse.capTable
 
@@ -413,7 +413,7 @@ def testGeneratedPayloadRefHelpers : IO Unit := do
     assertEqual decodedC.capTable.caps.size 0
 
     let promiseD ← Echo.startFooPromise runtime target payload
-    let responseD ← promiseD.awaitPayloadRefAndRelease
+    let responseD ← promiseD.awaitPayloadRef
     let decodedD ← responseD.decodeAndRelease
     assertEqual decodedD.capTable.caps.size 0
 
@@ -434,7 +434,7 @@ def testGeneratedPayloadRefHelpers : IO Unit := do
 
     let requestG ← runtime.payloadRefFromPayload payload
     let pendingG ← Echo.startFooWithPayloadRef runtime target requestG
-    let responseG ← pendingG.awaitPayloadRefAndRelease
+    let responseG ← pendingG.awaitPayloadRef
     let decodedG ← responseG.decodeAndRelease
     assertEqual decodedG.capTable.caps.size 0
     requestG.release
@@ -443,7 +443,7 @@ def testGeneratedPayloadRefHelpers : IO Unit := do
     let pendingH ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.startFooWithPayloadRefM target requestH
     let responseH ← Capnp.Rpc.RuntimeM.run runtime do
-      Capnp.Rpc.RuntimeM.pendingCallAwaitPayloadRefAndRelease pendingH
+      Capnp.Rpc.RuntimeM.pendingCallAwaitPayloadRef pendingH
     let decodedH ← responseH.decodeAndRelease
     assertEqual decodedH.capTable.caps.size 0
     requestH.release
@@ -474,7 +474,7 @@ def testGeneratedSturdyRefAsyncHelpers : IO Unit := do
       runtime.releaseTarget target
 
     let pending ← Echo.restoreSturdyRefStart alice sturdyRef
-    checkTarget (← Echo.awaitRestoreSturdyRefAndRelease pending)
+    checkTarget (← Echo.awaitRestoreSturdyRef pending)
 
     let task ← Echo.restoreSturdyRefAsTask alice sturdyRef
     match (← IO.wait task) with
@@ -1451,9 +1451,9 @@ def testRuntimeAsyncConnectAndWhenResolvedStart : IO Unit := do
     let listener ← server.listen address
     let connectPromise ← runtime.connectStart address
     server.accept listener
-    let target ← connectPromise.awaitTargetAndRelease
+    let target ← connectPromise.awaitTarget
     let whenResolvedPromise ← runtime.targetWhenResolvedStart target
-    whenResolvedPromise.awaitAndRelease
+    whenResolvedPromise.await
 
     let response ← Capnp.Rpc.RuntimeM.run runtime do
       Echo.callFooM target payload
@@ -1485,7 +1485,7 @@ def testRuntimeRegisterPromiseAwaitAndReleaseConsumes : IO Unit := do
     let listener ← server.listen address
     let connectPromise ← runtime.connectStart address
     server.accept listener
-    let target ← connectPromise.awaitTargetAndRelease
+    let target ← connectPromise.awaitTarget
 
     let releaseFailed ←
       try
@@ -1522,7 +1522,7 @@ def testRuntimeMRegisterPromiseAwaitAndReleaseConsumes : IO Unit := do
     let connectPromise ← runtime.connectStart address
     server.accept listener
     let target ← Capnp.Rpc.RuntimeM.run runtime do
-      Capnp.Rpc.RuntimeM.registerPromiseAwaitAndRelease connectPromise
+      Capnp.Rpc.RuntimeM.registerPromiseAwait connectPromise
 
     let releaseFailed ←
       try
@@ -1550,7 +1550,7 @@ def testRuntimeUnitPromiseAwaitAndReleaseConsumes : IO Unit := do
   try
     let target ← runtime.registerEchoTarget
     let promise ← runtime.targetWhenResolvedStart target
-    promise.awaitAndRelease
+    promise.await
     let releaseFailed ←
       try
         promise.release
@@ -1569,7 +1569,7 @@ def testRuntimeMUnitPromiseAwaitAndReleaseConsumes : IO Unit := do
     let target ← runtime.registerEchoTarget
     let promise ← runtime.targetWhenResolvedStart target
     Capnp.Rpc.RuntimeM.run runtime do
-      Capnp.Rpc.RuntimeM.unitPromiseAwaitAndRelease promise
+      Capnp.Rpc.RuntimeM.unitPromiseAwait promise
     let releaseFailed ←
       try
         Capnp.Rpc.RuntimeM.run runtime do
@@ -1598,8 +1598,8 @@ def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
     let listener ← server.listen address
     let clientPromise ← runtime.newClientStart address
     let acceptPromise ← server.acceptStart listener
-    let client ← clientPromise.awaitClientAndRelease
-    acceptPromise.awaitAndRelease
+    let client ← clientPromise.awaitClient
+    acceptPromise.await
 
     let target ← client.bootstrap
     let response ← Capnp.Rpc.RuntimeM.run runtime do
@@ -1609,9 +1609,9 @@ def testRuntimeAsyncClientLifecyclePrimitives : IO Unit := do
     runtime.releaseTarget target
     let disconnectPromise ← client.onDisconnectStart
     client.release
-    disconnectPromise.awaitAndRelease
+    disconnectPromise.await
     let drainPromise ← server.drainStart
-    drainPromise.awaitAndRelease
+    drainPromise.await
 
     server.release
     runtime.releaseListener listener
@@ -4295,7 +4295,7 @@ def testRuntimePendingCallAwaitAndReleaseConsumes : IO Unit := do
     let target ← runtime.registerEchoTarget
     let capPayload := mkCapabilityPayload target
     let pending ← runtime.startCall target Echo.fooMethod capPayload
-    let response ← pending.awaitAndRelease
+    let response ← pending.await
     assertEqual response.capTable.caps.size 1
     runtime.releaseCapTable response.capTable
 
@@ -4373,7 +4373,7 @@ def testRuntimeMPendingCallAwaitAndReleaseConsumes : IO Unit := do
     let capPayload := mkCapabilityPayload target
     let pending ← runtime.startCall target Echo.fooMethod capPayload
     let response ← Capnp.Rpc.RuntimeM.run runtime do
-      Capnp.Rpc.RuntimeM.pendingCallAwaitAndRelease pending
+      Capnp.Rpc.RuntimeM.pendingCallAwait pending
     assertEqual response.capTable.caps.size 1
     runtime.releaseCapTable response.capTable
 
@@ -6774,7 +6774,7 @@ def testRuntimeMultiVatSturdyRefErgonomicHelpers : IO Unit := do
     bob.withPublishedSturdyRef objectIdPeer bootstrap (fun _ => do
       checkTarget (← alice.restoreSturdyRefAt host objectIdPeer)
       let pending ← alice.restoreSturdyRefStartAt host objectIdPeer
-      checkTarget (← pending.awaitTargetAndRelease)
+      checkTarget (← pending.awaitTarget)
 
       let task ← alice.restoreSturdyRefAsTaskAt host objectIdPeer
       match (← IO.wait task) with
@@ -6802,7 +6802,7 @@ def testRuntimeMultiVatSturdyRefErgonomicHelpers : IO Unit := do
       Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAt alice host objectIdRuntimeM)
     let pendingM ← Capnp.Rpc.RuntimeM.run runtime do
       Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefStartAt alice host objectIdRuntimeM
-    checkTarget (← pendingM.awaitTargetAndRelease)
+    checkTarget (← pendingM.awaitTarget)
     let taskM ← Capnp.Rpc.RuntimeM.run runtime do
       Capnp.Rpc.RuntimeM.multiVatRestoreSturdyRefAsTaskAt alice host objectIdRuntimeM
     match (← IO.wait taskM) with
@@ -6834,7 +6834,7 @@ def testRuntimeMultiVatSturdyRefErgonomicHelpers : IO Unit := do
     network.withPublishedSturdyRef bob objectIdNetwork bootstrap (fun _ => do
       checkTarget (← network.restoreSturdyRefAt alice host objectIdNetwork)
       let pending ← network.restoreSturdyRefStartAt alice host objectIdNetwork
-      checkTarget (← pending.awaitTargetAndRelease)
+      checkTarget (← pending.awaitTarget)
 
       let task ← network.restoreSturdyRefAsTaskAt alice host objectIdNetwork
       match (← IO.wait task) with
